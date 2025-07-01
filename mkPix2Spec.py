@@ -161,8 +161,7 @@ def reproduce_pix2spec():
     # --- 9. 波長校正済みスペクトルの出力 (comp.txt) ---
     indx = np.arange(ixm)
     if not np.isnan(aa0):
-        # 589を引いていたのを元に戻す
-        wl = (aa0 + aa1 * indx) + 589.0
+        wl = (aa0 + aa1 * indx)
         data_to_save = np.vstack((wl, comp2)).T
         comp_path = file_f3 / 'comp_python.txt'
         np.savetxt(comp_path, data_to_save, fmt='%.6f %f', header='Wavelength(nm) Intensity')

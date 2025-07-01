@@ -5,16 +5,16 @@ from pathlib import Path
 
 # --- ここを編集してください -------------------------------------------------
 # 1. IDLが出力したFITSファイルのフルパスを指定
-IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_IDL.fits")
+#IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_IDL.fits")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\data\test\mc01_1_nhp.fits")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\debug_fibl3_IDL.fit")
-#IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_IDL.fit")
+IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_IDL.fit")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\sky_IDL.fit")
 # 2. Pythonが出力したFITSファイルのフルパスを指定
-PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_python.fits")
+#PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_python.fits")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\mc01_1_nhp_py.fits")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\debug_fibl3_python.fit")
-#PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_python.fit")
+PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_python.fit")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\sky_python_test.fit")
 # --------------------------------------------------------------------------
 
@@ -88,7 +88,7 @@ def compare_fits_results(idl_path, python_path):
     # 4c. 代表的なファイバーのスペクトル比較
     num_fibers = idl_data.shape[0]
     #fiber_to_plot = num_fibers // 2  # 真ん中のファイバーを選択
-    fiber_to_plot = 180
+    fiber_to_plot = 50
     fig3, (ax3a, ax3b) = plt.subplots(2, 1, figsize=(12, 8), sharex=True,
                                       gridspec_kw={'height_ratios': [3, 1]})
 
