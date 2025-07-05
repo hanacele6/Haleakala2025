@@ -2,14 +2,15 @@ import numpy as np
 from astropy.io import fits
 import os
 
-from numexpr.necompiler import double
 
+# numexprは必須ではないため、コメントアウトしても動作します
+# from numexpr.necompiler import double
 
 def pro_subsurfnew2():
     """
     IDLコード 'pro subsurfnew2' のPython翻訳版。
     水星のスペクトルデータから太陽光成分を除去する。
-    *** 配列スライスの不整合を修正し、根本的なエラー解決を行ったバージョン ***
+    *** 線形補間をIDLのforループで再現したバージョン ***
     """
     day = 'test'
 
@@ -20,10 +21,10 @@ def pro_subsurfnew2():
 
     is_loop = 10001
     ie_loop = 10004
-    # D2 = 209  # この固定値は使わず、ixm//2を基準にすることで不整合を解消
 
     # --- FITSファイルと基本情報の読み込み ---
     try:
+        # FITSファイルの読み込みはastropyが行いますが、データ自体はNumPy配列になります
         a = fits.getdata(os.path.join(fileF1, f'{is_loop}_sf22_python.fit'))
         iym, ixm = a.shape
     except FileNotFoundError:
@@ -49,15 +50,73 @@ def pro_subsurfnew2():
         print(f"Error: Input data files not found.")
         return
 
-    # --- 理論スペクトル(surf)の生成 ---
+    # --------------------------------------------------------------------------
+    # ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    # --- 理論スペクトル(surf)の生成 (IDLのforループを再現) ---
+    # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+    # 太陽光スペクトルデータを準備
     sol = np.zeros((sol_data.shape[0], 3))
     sol[:, 0] = sol_data[:, 0] - 589.0 - sft
     sol[:, 1] = sol_data[:, 2]
     sol[:, 2] = sol_data[:, 1]
     wlsurf = (sol[:, 0] + 589.0) * (1 + Vms / c) * (1 + Vme / c) - 589.0
-    surf = np.zeros((ixm, 2))
-    surf[:, 0] = np.interp(wl, sol[:, 0], sol[:, 1])
-    surf[:, 1] = np.interp(wl, wlsurf, sol[:, 2])
+
+    # sol配列の長さを取得
+    iwm2 = sol.shape[0]
+
+    # IDLコードと同様に、検索開始位置を初期化
+    iws1 = 0
+    iws2 = 0
+
+    # surf配列を明示的に作成
+    surf = np.zeros((ixm, 2), dtype=np.float64)
+
+    # 出力スペクトルの各ピクセル(ix)についてループ
+    for ix in range(ixm):
+
+        # --- 1列目 (surf[:, 0]) のための補間 ---
+        # 検索開始位置(iws1)から太陽光スペクトル(sol)を検索
+        for iw in range(iws1, iwm2 - 1):
+            # wl[ix]が、solのx軸であるsol[iw, 0]とsol[iw+1, 0]の間にあるか判定
+            if (wl[ix] - sol[iw, 0]) * (wl[ix] - sol[iw + 1, 0]) <= 0:
+                # 線形補間の公式
+                x1, x2 = sol[iw, 0], sol[iw + 1, 0]
+                y1, y2 = sol[iw, 1], sol[iw + 1, 1]
+                x = wl[ix]
+
+                # ゼロ除算を避ける
+                if (x2 - x1) != 0:
+                    surf[ix, 0] = (y1 * (x2 - x) + y2 * (x - x1)) / (x2 - x1)
+                else:
+                    surf[ix, 0] = y1
+
+                # 次のixループのために、見つかったインデックスを保存（効率化）
+                iws1 = iw
+                # 内側のiwループを抜ける (IDLのgotoの代わり)
+                break
+
+                # --- 2列目 (surf[:, 1]) のための補間 ---
+        # 検索開始位置(iws2)からドップラーシフト後の波長(wlsurf)を検索
+        for iw in range(iws2, iwm2 - 1):
+            # wl[ix]が、wlsurf[iw]とwlsurf[iw+1]の間にあるか判定
+            if (wl[ix] - wlsurf[iw]) * (wl[ix] - wlsurf[iw + 1]) <= 0:
+                # 線形補間の公式
+                x1, x2 = wlsurf[iw], wlsurf[iw + 1]
+                y1, y2 = sol[iw, 2], sol[iw + 1, 2]
+                x = wl[ix]
+
+                # ゼロ除算を避ける
+                if (x2 - x1) != 0:
+                    surf[ix, 1] = (y1 * (x2 - x) + y2 * (x - x1)) / (x2 - x1)
+                else:
+                    surf[ix, 1] = y1
+
+                # 次のixループのために、見つかったインデックスを保存
+                iws2 = iw
+                # 内側のiwループを抜ける
+                break
+    # --------------------------------------------------------------------------
 
     # --- メインループ ---
     for i in range(is_loop, ie_loop + 1):
@@ -90,14 +149,16 @@ def pro_subsurfnew2():
             sigma = FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
             # PSFと畳み込み
-
-            psf = np.exp(-((np.arange(ixm) - double(ixm) / 2)/sigma) ** 2/2.0)
+            psf = np.exp(-((np.arange(ixm, dtype=np.float64) - float(ixm) / 2.0) / sigma) ** 2 / 2.0)
             psf2 = psf / np.sum(psf)
             fft_surf0 = np.fft.fft(surf[:, 0])
             fft_surf1 = np.fft.fft(surf[:, 1])
             fft_psf2 = np.fft.fft(psf2)
-            conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
-            conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
+            shift_amount = -int(ixm / 2)
+            #conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
+            #conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
+            conv_surf0 = np.roll(np.real(np.fft.ifft(fft_surf0 * fft_psf2)), shift=shift_amount)
+            conv_surf1 = np.roll(np.real(np.fft.ifft(fft_surf1 * fft_psf2)), shift=shift_amount)
             surf1 = np.column_stack([conv_surf0, conv_surf1])
 
             for iairm in range(51):
@@ -110,22 +171,20 @@ def pro_subsurfnew2():
 
                 # これで全ての配列の長さが一致する
                 ratioa = Nat2 / surf3
-                aa0 = np.polyfit(pix_range, ratioa, 2)[::-1]
+                aa0 = np.polyfit(pix_range, ratioa, 2)[::-1]  # 係数の順序をIDLに合わせる
                 ratiof = aa0[0] + aa0[1] * pix_range + aa0[2] * pix_range ** 2
                 zansa = np.sum((Nat2 - surf3 * ratiof) ** 2)
 
                 if iFWHM == 30 and iairm == 10:
                     print(f"Python FWHM=3.0, airm=1.0")
-                    #print(f"psf2: {psf2}")
-                    print(f"  surf sum: {np.sum(surf[:,0])}")
-                    print(f"  surf sum: {np.sum(surf[:,1])}")
+                    print(f"  surf sum: {np.sum(surf[:, 0])}")
+                    print(f"  surf sum: {np.sum(surf[:, 1])}")
                     print(f"  surf2 sum: {np.sum(surf2)}")
                     print(f"  surf3 sum: {np.sum(surf3)}")
                     print(f"  ratioa[100]: {ratioa[100]}")
                     print(f"  aa0: {aa0}")
                     print(f"  zansa: {zansa}")
 
-                    # 最初のファイル(10001)の時だけ書き出す
                     if i == is_loop:
                         # 小数点以下20桁で出力フォーマットを指定
                         output_format = '%.20f'
@@ -133,14 +192,6 @@ def pro_subsurfnew2():
                         # surf1 の出力
                         np.savetxt(os.path.join(fileF1, 'python_surf1_output.txt'),
                                    surf1, fmt=output_format)
-
-                        # surf2 の出力
-                    #    np.savetxt(os.path.join(fileF1, 'python_surf2_output.txt'),
-                    #               surf2, fmt=output_format)
-
-                        # surf3 の出力
-                    #    np.savetxt(os.path.join(fileF1, 'python_surf3_output.txt'),
-                    #               surf3, fmt=output_format)
 
                 if zansa <= zansamin:
                     zansamin = zansa
@@ -157,8 +208,8 @@ def pro_subsurfnew2():
 
         # --- ループ後の最終計算 ---
         # ここでもループ内と全く同じ統一ルールで配列を生成する
-        Nat2_final = np.concatenate((Nat[0:slice_end1], Nat[slice_start2:ixm]))
-        surf3s_final = np.concatenate((best_params['surf2s'][0:slice_end1], best_params['surf2s'][slice_start2:ixm]))
+        Nat2_final = np.concatenate((Nat[0:slice_end2], Nat[slice_start2:ixm]))
+        surf3s_final = np.concatenate((best_params['surf2s'][0:slice_end1], best_params['surf2s'][slice_start1:ixm]))
 
         # IDLのロジックに合わせ、単純なスケーリングファクターで補正
         ratio2 = np.sum(Nat2_final * surf3s_final) / np.sum(surf3s_final * surf3s_final)

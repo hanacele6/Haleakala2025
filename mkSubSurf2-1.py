@@ -2,8 +2,6 @@ import numpy as np
 from astropy.io import fits
 import os
 
-from numexpr.necompiler import double
-
 
 def pro_subsurfnew2():
     """
@@ -34,7 +32,7 @@ def pro_subsurfnew2():
     Vme = -38.3179619
     Vms = -10.0384175
     Rmn = 7.362434
-    sft = 0.002
+    sft = 0.001
     Rmc = 4.879e+8
     Rca = Rmc / Rmn
     Shap = Rca ** 2 / 1e+4
@@ -72,14 +70,12 @@ def pro_subsurfnew2():
         # --- スライスルールの統一 ---
         # 観測データ(Nat)と理論モデル(surf)で、同じルールで中心部分を切り出す
         center_pix = ixm // 2
-        d2 = 209
-        slice_end1 = center_pix - 7
-        slice_start1 = center_pix + 6
-        slice_end2 = d2 - 7
-        slice_start2 = d2 + 6
+        #center_pix =
+        slice_end1 = center_pix - 7  # Pythonのスライス仕様に合わせて調整
+        slice_start2 = center_pix + 7
 
         # 統一されたルールでNat2を生成
-        Nat2 = np.concatenate((Nat[0:slice_end2], Nat[slice_start2:ixm]))
+        Nat2 = np.concatenate((Nat[0:slice_end1], Nat[slice_start2:ixm]))
 
         zansamin = 1.0e+32
         best_params = {}
@@ -90,8 +86,8 @@ def pro_subsurfnew2():
             sigma = FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
             # PSFと畳み込み
-
-            psf = np.exp(-((np.arange(ixm) - double(ixm) / 2)/sigma) ** 2/2.0)
+            psf_x = np.arange(ixm) - float(ixm) / 2
+            psf = np.exp(-psf_x ** 2 / (2.0 * sigma ** 2))
             psf2 = psf / np.sum(psf)
             fft_surf0 = np.fft.fft(surf[:, 0])
             fft_surf1 = np.fft.fft(surf[:, 1])
@@ -105,8 +101,8 @@ def pro_subsurfnew2():
                 surf2 = surf1[:, 0] ** airm * surf1[:, 1]
 
                 # 統一されたルールでsurf3とpix_rangeを生成
-                surf3 = np.concatenate((surf2[0:slice_end1], surf2[slice_start1:ixm]))
-                pix_range = np.concatenate((np.arange(slice_end1), np.arange(slice_start1, ixm)))
+                surf3 = np.concatenate((surf2[0:slice_end1], surf2[slice_start2:ixm]))
+                pix_range = np.concatenate((np.arange(slice_end1), np.arange(slice_start2, ixm)))
 
                 # これで全ての配列の長さが一致する
                 ratioa = Nat2 / surf3
@@ -116,31 +112,14 @@ def pro_subsurfnew2():
 
                 if iFWHM == 30 and iairm == 10:
                     print(f"Python FWHM=3.0, airm=1.0")
-                    #print(f"psf2: {psf2}")
-                    print(f"  surf sum: {np.sum(surf[:,0])}")
-                    print(f"  surf sum: {np.sum(surf[:,1])}")
                     print(f"  surf2 sum: {np.sum(surf2)}")
+                    #np.savetxt('python_surf2_output.txt', surf2, fmt='%.20f')  # 小数点以下20桁で出力
+                    print(f"Python Removed Part Sum: {np.sum(surf2[ixm // 2 - 6: ixm // 2 + 7])}")
                     print(f"  surf3 sum: {np.sum(surf3)}")
                     print(f"  ratioa[100]: {ratioa[100]}")
-                    print(f"  aa0: {aa0}")
+                    # NumPyの係数は高次からなので、表示前に逆順にしてIDLと比較しやすくする
+                    print(f"  aa0: {aa0[::-1]}")
                     print(f"  zansa: {zansa}")
-
-                    # 最初のファイル(10001)の時だけ書き出す
-                    if i == is_loop:
-                        # 小数点以下20桁で出力フォーマットを指定
-                        output_format = '%.20f'
-
-                        # surf1 の出力
-                        np.savetxt(os.path.join(fileF1, 'python_surf1_output.txt'),
-                                   surf1, fmt=output_format)
-
-                        # surf2 の出力
-                    #    np.savetxt(os.path.join(fileF1, 'python_surf2_output.txt'),
-                    #               surf2, fmt=output_format)
-
-                        # surf3 の出力
-                    #    np.savetxt(os.path.join(fileF1, 'python_surf3_output.txt'),
-                    #               surf3, fmt=output_format)
 
                 if zansa <= zansamin:
                     zansamin = zansa
@@ -168,12 +147,12 @@ def pro_subsurfnew2():
         # test2.txtには多項式フィットの結果を出力
         output_data1 = np.column_stack(
             [wl, Nat / np.mean(Nat2_final), best_params['surf2s'] * best_params['ratiof_full'] / np.mean(Nat2_final)])
-        np.savetxt(os.path.join(fileF1, f'{i}test2_python.txt'), output_data1, fmt='%f')
-        np.savetxt(os.path.join(fileF1, f'{i}test2_python.dat'), output_data1, fmt='%f')
+        np.savetxt(os.path.join(fileF1, f'{i}test2_python-1.txt'), output_data1, fmt='%f')
+        np.savetxt(os.path.join(fileF1, f'{i}test2_python-1.dat'), output_data1, fmt='%f')
 
         # ratio2.txtの保存
         err = np.sqrt(np.mean((Nat2_final - ratio2 * surf3s_final) ** 2)) / np.sqrt(len(Nat2_final))
-        with open(os.path.join(fileF1, f'{i}ratio2_python.txt'), 'w') as f:
+        with open(os.path.join(fileF1, f'{i}ratio2_python-1.txt'), 'w') as f:
             f.write(f'{ratio2} {err}\n')
 
         # Hapkeモデルを使ったフラックス変換
@@ -188,8 +167,8 @@ def pro_subsurfnew2():
 
             # exos.txt / exos.datの保存
             exos_data = np.column_stack([wl, Natb * cts2MR])
-            np.savetxt(os.path.join(fileF1, f'{i}exos_python.txt'), exos_data, fmt='%f')
-            np.savetxt(os.path.join(fileF1, f'{i}exos_python.dat'), exos_data, fmt='%f')
+            np.savetxt(os.path.join(fileF1, f'{i}exos_python-1.txt'), exos_data, fmt='%f')
+            np.savetxt(os.path.join(fileF1, f'{i}exos_python-1.dat'), exos_data, fmt='%f')
 
         except FileNotFoundError:
             print(f"Warning: Hapke file not found at {hap_path}. Skipping final conversion.")
