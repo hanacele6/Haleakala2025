@@ -23,8 +23,8 @@ def pro_gamma_convolution_custom_path():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. 初期化 (Initialization) ---
-    day = '20250501'
-    Vms = -6.110979064  # 視線速度 (km/s)
+    day = '20241119'
+    Vms = -10.022037 # 視線速度 (km/s)
     im = 5757  # データ点数
 
     # 波長関連のパラメータ (nm)
