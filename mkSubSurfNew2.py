@@ -12,12 +12,12 @@ def pro_subsurfnew2():
     水星のスペクトルデータから太陽光成分を除去する。
     *** 線形補間をIDLのforループで再現したバージョン ***
     """
-    day = 'test'
+    day = '20241119'
 
     # --- 基本設定 ---
     fileF = 'C:/Users/hanac/University/Senior/Mercury/Haleakala2025/'
-    fileF1 = os.path.join(fileF, 'output', 'test')
-    fileF2 = os.path.join(fileF, 'output', 'test')
+    fileF1 = os.path.join(fileF, 'output', day)
+    fileF2 = os.path.join(fileF, 'output', day)
 
     is_loop = 10001
     ie_loop = 10004
@@ -32,9 +32,9 @@ def pro_subsurfnew2():
         return
 
     # --- 物理定数とパラメータ ---
-    Vme = -38.3179619
-    Vms = -10.0384175
-    Rmn = 7.362434
+    Vme = -37.5003
+    Vms = -10.0220
+    Rmn = 7.022690
     sft = 0.002
     Rmc = 4.879e+8
     Rca = Rmc / Rmn

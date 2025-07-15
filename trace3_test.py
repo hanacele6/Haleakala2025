@@ -8,13 +8,13 @@ from pathlib import Path
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_IDL.fits")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\data\test\mc01_1_nhp.fits")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\debug_fibl3_IDL.fit")
-IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_IDL.fit")
+IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\20241107\10001_tr_IDL.fit")
 #IDL_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\sky_IDL.fit")
 # 2. Pythonが出力したFITSファイルのフルパスを指定
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\Hapketest_python.fits")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\mc01_1_nhp_py.fits")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\debug_fibl3_python.fit")
-PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\test\10001_sf22_python.fit")
+PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\output\20241107\10001_tr_python.fit")
 #PYTHON_FITS_PATH = Path(r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\sky_python_test.fit")
 # --------------------------------------------------------------------------
 

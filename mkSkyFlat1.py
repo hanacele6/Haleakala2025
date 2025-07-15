@@ -26,9 +26,9 @@ def perform_skyflat_correction():
         base_path = Path.cwd()
         #base_path = Path('C:/Users/hanac/University/Senior/Mercury/Haleakala2025/')
         # 入力と出力のディレクトリを同じ場所に設定
-        # 元のIDLコードでは fileF1 と fileF2 が同じパスでした
-        in_dir = base_path / 'output' / 'test'
-        out_dir = base_path / 'output' / 'test'
+        date = "20241119"
+        in_dir = base_path / 'output' / date
+        out_dir = base_path / 'output' / date
         in_dir.mkdir(parents=True, exist_ok=True)
         print(f"入力ディレクトリ: {in_dir.resolve()}")
         print(f"出力ディレクトリ: {out_dir.resolve()}")

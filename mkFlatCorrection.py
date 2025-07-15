@@ -4,14 +4,14 @@ from pathlib import Path
 import os
 
 # --- パス設定 ---
-# ご自身の環境に合わせて修正してください
+date = "20241119"
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-fileF1 = base_dir / "output/test"
-fileF2 = base_dir / "output/test/"
+fileF1 = base_dir / f"output/{date}"
+fileF2 = base_dir / f"output/{date}"
 
 # --- 処理する科学データのファイル番号 ---
 is_num = 10001
-ie_num = 10016
+ie_num = 10020
 
 # --- 出力ディレクトリの作成 ---
 # exist_ok=True は、ディレクトリが既に存在してもエラーにしないオプション
@@ -32,7 +32,7 @@ except FileNotFoundError:
 master_flat = np.zeros(template_shape, dtype=np.float64)
 
 # 複数のフラット画像を読み込み、足し合わせる (コンポジット)
-for i in range(10013, 10017):   #10013~10016まで
+for i in range(10017, 10021):   #左はそのまま右は＋1
     flat_path = fileF1 / f"{i}_tr_python.fit"
     print(f"  Adding flat frame: {flat_path.name}")
     try:

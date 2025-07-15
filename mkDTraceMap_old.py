@@ -111,11 +111,11 @@ if __name__ == "__main__":
     # --- ユーザー設定 (旧データ形式用) ---
     # ===================================================================
     # 1. ファイルパスを直接指定
-    date = 'test'
+    date = '20241119'
     base_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/data/{date}")
     output_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/{date}")
-    input_raw_data_path = output_dir / "flat1.fits"
-    input_trace_map_path = output_dir / "pp1_py_corrected.fits"
+    input_raw_data_path = output_dir / "flat1_py.fits"
+    input_trace_map_path = output_dir / "pp1_py.fits"
 
 
     # 2. 解析パラメータを指定

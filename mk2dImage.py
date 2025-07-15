@@ -19,7 +19,8 @@ def process_image():
     # --- ファイルパスとパラメータの設定 ---
     try:
         base_path = Path.cwd()
-        data_dir = base_path / 'output' / 'test'
+        date = "20241107"
+        data_dir = base_path / 'output' / date
         data_dir.mkdir(parents=True, exist_ok=True)
         print(f"データディレクトリ: {data_dir.resolve()}")
     except Exception as e:
@@ -27,7 +28,7 @@ def process_image():
         return
 
     is_frame = 10001
-    ie_frame = 10004
+    ie_frame = 10003
 
     # 出力画像のサイズ
     X, Y = 10, 12

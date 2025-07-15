@@ -7,7 +7,7 @@ import os
 import time
 
 # --- 設定値 (IDLコードの変数に対応) ---
-date = '20241116'
+date = '20241119'
 fileF = Path("C:/Users/hanac/University/Senior/Mercury/")
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 fileF1 = base_dir / f"output/{date}"

@@ -20,7 +20,7 @@ def ptn2atm_new():
     # --- 基本設定 ---
     day = 'test'
     fileF = 'C:/Users/hanac/University/Senior/Mercury/Haleakala2025/'
-    file_dir = os.path.join(fileF, 'output', 'test')
+    file_dir = os.path.join(fileF, 'output', day)
 
     is_loop = 10001
     ie_loop = 10004
@@ -44,7 +44,7 @@ def ptn2atm_new():
         return
 
     # --- 出力ファイルの準備 ---
-    output_filename = os.path.join(file_dir, 'Na_atoms2_python.dat')
+    output_filename = os.path.join(file_dir, 'Na_atoms2_python_orig.dat')
     with open(output_filename, 'w') as f_out:
 
         # --- メインループ ---
@@ -59,9 +59,9 @@ def ptn2atm_new():
             # --- スペクトルファイルの読み込み ---
             try:
                 # 3つの異なるファイルを読み込むように修正
-                wl_main, cts_main = np.loadtxt(os.path.join(file_dir, f'{i}exos_python.txt'), unpack=True)
-                _, cts_plus = np.loadtxt(os.path.join(file_dir, f'{i}exos_python+1.txt'), unpack=True)
-                _, cts_minus = np.loadtxt(os.path.join(file_dir, f'{i}exos_python-1.txt'), unpack=True)
+                wl_main, cts_main = np.loadtxt(os.path.join(file_dir, f'{i}exos.txt'), unpack=True)
+                _, cts_plus = np.loadtxt(os.path.join(file_dir, f'{i}exos+1.txt'), unpack=True)
+                _, cts_minus = np.loadtxt(os.path.join(file_dir, f'{i}exos-1.txt'), unpack=True)
 
                 wl = wl_main  # 波長は共通と仮定
                 spectra_to_fit = {'main': cts_main, 'plus': cts_plus, 'minus': cts_minus}

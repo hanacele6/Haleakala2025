@@ -25,9 +25,9 @@ def reproduce_pix2spec():
     # ご自身の環境に合わせてこのパスを変更してください。
     # 例: file_f = Path('C:/Users/hanac/University/Senior/Mercury/Haleakala2025/')
     try:
-        # このスクリプトが置かれているディレクトリを基準にします
+        date = "20241119"
         base_path = file_f = Path('C:/Users/hanac/University/Senior/Mercury/Haleakala2025/')
-        file_f3 = base_path / 'output' / 'test'
+        file_f3 = base_path / 'output' / date
         # 出力ディレクトリが存在しない場合は作成
         file_f3.mkdir(parents=True, exist_ok=True)
         print(f"入力・出力ディレクトリ: {file_f3.resolve()}")
@@ -38,7 +38,7 @@ def reproduce_pix2spec():
     # --- 2. FITSファイルの読み込みと合成 ---
     comp = None
     # ループで 10009.fit から 10012.fit までを読み込む
-    for i in range(10009, 10013):
+    for i in range(10013, 10017): #左そのまま右＋1
         file_path = file_f3 / f'{i}_Na_python.fit'
         try:
             # fits.getdataはデータを直接NumPy配列として返します

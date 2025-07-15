@@ -14,7 +14,8 @@ def total_fibers():
     # --- ファイルパスとパラメータの設定 ---
     try:
         base_path = Path.cwd()
-        data_dir = base_path / 'output' / 'test'
+        date = "20241119"
+        data_dir = base_path / 'output' / date
         data_dir.mkdir(parents=True, exist_ok=True)
         print(f"データディレクトリ: {data_dir.resolve()}")
     except Exception as e:

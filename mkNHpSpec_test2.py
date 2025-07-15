@@ -106,8 +106,8 @@ def main():
     SIGMA_THRESHOLD = 10000.0  # 自動除去はほぼ無効
 
     MANUAL_ROI_LIST = [
-        [374, 459, 388, 470], [509, 555, 513, 559], [50, 888, 54, 891], [284, 895, 287, 898], [326, 887, 328, 891],
-        [341, 889, 343, 892], [369, 860, 372, 863], [370, 861, 372, 863],
+    #    [374, 459, 388, 470], [509, 555, 513, 559], [50, 888, 54, 891], [284, 895, 287, 898], [326, 887, 328, 891],
+    #    [341, 889, 343, 892], [369, 860, 372, 863], [370, 861, 372, 863],
     ]
     # ===================================================================
 
@@ -139,8 +139,11 @@ def main():
         data_to_process = image_data.T if DATA_FORMAT_FOR_THIS_RUN == 'old' else image_data
 
         # --- ステップ1: 自動ホットピクセル除去 (このバージョンではスキップ) ---
-        corrected_auto = data_to_process
-
+        corrected_auto = find_and_correct_hotpixels_auto(
+            data_to_process,
+            kernel_size=MEDIAN_FILTER_KERNEL_SIZE,
+            sigma_threshold=SIGMA_THRESHOLD # 適切な値に調整
+        )
         # --- ステップ2: 手動ピクセル補正 ---
         final_corrected = correct_pixels_manual(
             corrected_auto,

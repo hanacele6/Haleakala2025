@@ -15,14 +15,14 @@ def gaussian_with_linear(x, amplitude, mean, stddev, const, slope):
 
 
 # --- パスと定数の設定 ---
-# ご自身の環境に合わせて修正してください
+date = "20241119"
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-fileF1 = base_dir / "output/test"  # 補正前データがあるディレクトリ
-fileF2 = base_dir / "output/test"  # 補正後データの保存先
+fileF1 = base_dir / f"output/{date}"  # 補正前データがあるディレクトリ
+fileF2 = base_dir / f"output/{date}"  # 補正後データの保存先
 
 # 処理する科学データのファイル番号
 is_num = 10001
-ie_num = 10012
+ie_num = 10016
 
 # --- 1. 比較用コンポジットスペクトルを作成 ---
 print("Step 1: Creating comparison (sky) spectrum...")
@@ -38,7 +38,7 @@ ixm, iym = template_shape[1], template_shape[0]  # NumPyの形状は (行, 列)
 comp_spec = np.zeros((iym, ixm), dtype=np.float64)
 
 # 複数のnaを読み込み、足し合わせる
-for i in range(10009, 10013):  # 10009から10012まで
+for i in range(10013, 10017):  # 左はそのまま右は+1
     sky_path = fileF1 / f"{i}_f_python.fit"
     print(f"  Adding sky frame: {sky_path.name}")
     try:

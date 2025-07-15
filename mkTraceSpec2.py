@@ -58,7 +58,7 @@ print(file_list)
 NX = 2048  # 波長方向のピクセル数 (Number of pixels in wavelength direction)
 NY = 1024  # 空間方向のピクセル数 (Number of pixels in spatial direction)
 ifibm = fibp.shape[0] if fibp.ndim > 1 else 1  # ファイバー数 (fiber number)
-hwid = 2  # ガウスフィットの半幅 (half-width for Gaussian fit)
+hwid = 3  # ガウスフィットの半幅 (half-width for Gaussian fit)
 
 print(f"DEBUG: NX={NX}, NY={NY}, ifibm={ifibm}")
 
@@ -130,7 +130,7 @@ with open(poserr_path, 'w') as lunw2:
             initial_guess = [np.max(fibl2) - np.min(fibl2), float(hwid), 1.0, np.min(fibl2)]
 
             try:
-                params, covariance = curve_fit(gaussian, x_fit, fibl2, p0=initial_guess, method='lm', maxfev=10000)
+                params, covariance = curve_fit(gaussian, x_fit, fibl2, p0=initial_guess, maxfev=10000)
                 arr = params
             except RuntimeError as e:
                 print(
@@ -161,15 +161,37 @@ with open(poserr_path, 'w') as lunw2:
 
 
 
-            fibl4 = np.sum(fibl3[hwid - 1: hwid + 2, :], axis=0) - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0 * 3.0
+            #fibl4 = np.sum(fibl3[hwid - 1: hwid + 2, :], axis=0) - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0 * 3.0
+            fibl4 = fibl3[hwid, :] - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0
+
+            # ======================= ここからデバッグコードを追加 =======================
+            # 最初のファイル(ifile=0)の、特定のファイバー(ifib=45)の時だけ実行
+            if ifib == 45 and ifile == 0:
+                print("\n\n--- DEBUG START ---")
+                # 波長方向の適当なピクセル（画像の真ん中あたり）
+                debug_ix = 1024
+
+                # 背景として計算されている値
+                background_estimate = (fibl3[0, debug_ix] + fibl3[hwid * 2, debug_ix]) / 2.0
+                # 単純に合計されている光量
+                signal_sum = np.sum(fibl3[hwid - 1: hwid + 2, debug_ix])
+
+                print(f"ファイバー45, 波長{debug_ix}での断面プロファイル (fibl3):")
+                print(fibl3[:, debug_ix])
+                print(f"  -> 背景の推定値: {background_estimate:.2f}")
+                print(f"  -> 中心の合計値: {signal_sum:.2f}")
+                print(f"  -> 計算された最終値 (fibl4): {fibl4[debug_ix]:.2f}")
+                print("--- DEBUG END ---\n\n")
+            # ======================= ここまでデバッグコード =======================
+
 
             fiblall2[ifib, :] = fibl4
 
-            if ifib == 45 and ifile == 0:
-                save_path = output_dir / 'debug_fibl3_python_fib45.fit'
-                print(f'  DEBUG: Saving fibl3 for fiber 45 to {save_path}')
-                hdu = fits.PrimaryHDU(fibl3.T)
-                hdu.writeto(save_path, overwrite=True)
+            #if ifib == 45 and ifile == 0:
+            #    save_path = output_dir / 'debug_fibl3_python_fib45.fit'
+            #    print(f'  DEBUG: Saving fibl3 for fiber 45 to {save_path}')
+            #    hdu = fits.PrimaryHDU(fibl3.T)
+            #    hdu.writeto(save_path, overwrite=True)
 
         # --- FITSファイルへの書き出し ---
         output_file_name = f'{10000 + ifile + 1:05d}_tr_python.fit'

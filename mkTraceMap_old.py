@@ -31,7 +31,7 @@ def create_peak_map_from_idl_logic(config):
     print(f"  > 画像サイズ: Y={ny}, X={nx}")
 
     # --- 3. オリジナルデータのコピーを保存 (flat1.fits) ---
-    flat1_path = output_dir / 'flat1.fits'
+    flat1_path = output_dir / 'flat1_py.fits'
     fits.writeto(flat1_path, image_data, header, overwrite=True)
     print(f"  > オリジナルデータのコピーを {flat1_path.name} に保存しました。")
 
@@ -122,7 +122,7 @@ if __name__ == "__main__":
     # ===================================================================
     # --- ユーザー設定 ---
     # 環境に合わせてパスを修正してください
-    date = 'test'
+    date = '20241119'
     base_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/data/{date}")
     input_file_path = base_dir / 'wlflat01-001_nhp.fits'
     output_dir_path = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/{date}")
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     config = {
         'input_file': input_file_path,
         'output_dir': output_dir_path,
-        'output_file': output_dir_path / 'pp1_py_corrected.fits',
+        'output_file': output_dir_path / 'pp1_py.fits',
 
         # 解析領域 (Y座標, 0-based, inclusive)
         'analysis_range_y': (0, 1410),

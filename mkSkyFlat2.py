@@ -19,8 +19,8 @@ def process_skyflat2():
     # ご自身の環境に合わせてパスを変更してください
     try:
         base_path = Path.cwd()
-        # 入力と出力のディレクトリを同じ場所に設定
-        data_dir = base_path / 'output' / 'test'
+        date = "20241119"
+        data_dir = base_path / 'output' / date
         data_dir.mkdir(parents=True, exist_ok=True)
         print(f"データディレクトリ: {data_dir.resolve()}")
     except Exception as e:
