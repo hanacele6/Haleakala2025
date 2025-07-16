@@ -54,7 +54,7 @@ print(f"'{csv_file_path.name}' から {ifilem} 個のファイルを処理対象
 NX = 2048
 NY = 1024
 ifibm = fibp.shape[0]
-hwid = 3
+hwid = 2
 
 
 # --- Gauss関数定義 (Gaussian function for curve_fit) ---
@@ -109,10 +109,22 @@ with open(poserr_path, 'w') as lunw2:
 
             fibl2 = np.sum(fibl, axis=1)
             x_fit = np.arange(hwid * 2 + 1)
-            initial_guess = [np.max(fibl2) - np.min(fibl2), float(hwid), 1.0, np.min(fibl2)]
+            #initial_guess = [np.max(fibl2) - np.min(fibl2), float(hwid), 1.0, np.min(fibl2)]
+
+            initial_center_guess = float(np.argmax(fibl2))
+
+            initial_guess = [
+                np.max(fibl2) - np.min(fibl2),  # 振幅 (Amplitude)
+                initial_center_guess,  # 中心 (Mean)
+                1.0,  # 幅 (Stddev)
+                np.min(fibl2)  # オフセット (Offset)
+            ]
+
+            lower_bounds = [0, 0, 0.1, -np.inf]  # 中心μは0以上
+            upper_bounds = [np.inf, hwid * 2, hwid, np.inf]  # 中心μは4以下、幅σは2以下
 
             try:
-                params, _ = curve_fit(gaussian, x_fit, fibl2, p0=initial_guess, maxfev=10000)
+                params, _ = curve_fit(gaussian, x_fit, fibl2, p0=initial_guess, bounds=(lower_bounds, upper_bounds),  maxfev=10000)
                 arr = params
             except RuntimeError:
                 arr = initial_guess
@@ -130,10 +142,40 @@ with open(poserr_path, 'w') as lunw2:
                 )
                 fibl3[:, ix] = interp_func_fibl3(arr[1] + np.arange(-hwid, hwid + 1))
 
-            fibl4 = fibl3[hwid, :] - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0
+            #fibl4 = fibl3[hwid, :] - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0
+            #fibl4 = np.sum(fibl3[hwid - 1:hwid + 2, :]) - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0 * 3.0
+            fibl4 = np.sum(fibl3[hwid - 1:hwid + 2, :], axis=0) - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0 * 3.0
+            #background = np.min(fibl3, axis=0)
+            # 中心の値から、その背景値を引く
+            #fibl4 = fibl3[hwid, :] - background
+            
             fiblall2[ifib, :] = fibl4
 
-        # ▼▼▼【変更点】ここからファイル名生成ロジックを変更▼▼▼
+            # ▼▼▼【デバッグ用】ここから追加 ▼▼▼
+            THRESHOLD = 0  # 情報を表示する閾値。-10000などに調整してください。
+
+            # 計算結果(fibl4)の中に、閾値より小さい値があるかチェック
+            bad_indices = np.where(fibl4 < THRESHOLD)[0]
+
+            # 異常値が1つでも見つかった場合
+            if len(bad_indices) > 0:
+                # 最初の異常値について情報を表示（たくさんあっても全部表示しないように）
+                ix_problem = bad_indices[0]
+
+                print(f"\n--- 異常値検出 [ファイル:{ifile}, ファイバー:{ifib}] ---")
+                print(f"  波長ピクセル(ix) = {ix_problem} で 値 = {fibl4[ix_problem]:.1f} を検出しました。")
+                print(f"  このファイバーのガウスフィット結果 (振幅A, 中心μ, 幅σ, オフセットC) は以下の通りです:")
+                print(f"  A={arr[0]:.2f}, μ={arr[1]:.2f}, σ={arr[2]:.2f}, C={arr[3]:.2f}")
+
+                # さらに詳細な情報として、その波長における5ピクセルの値を表示
+                print(f"\n  問題の波長(ix={ix_problem})での5ピクセルの値(fibl3)は以下の通りです:")
+                print(
+                    f"  [ 上から順: {fibl3[0, ix_problem]:.1f}, {fibl3[1, ix_problem]:.1f}, {fibl3[2, ix_problem]:.1f}, {fibl3[3, ix_problem]:.1f}, {fibl3[4, ix_problem]:.1f} ]")
+                print(f"--------------------------------------------------")
+            # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+
+
         # CSVの2列目から説明を取得
         description = df.iloc[ifile][desc_col]
 
@@ -148,7 +190,7 @@ with open(poserr_path, 'w') as lunw2:
 
         # 新しいファイル名を組み立てる
         output_file_name = f"{description}{file_num}_tr.fits"
-        # ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
 
         output_path = output_dir / output_file_name
         hdu = fits.PrimaryHDU(fiblall2)

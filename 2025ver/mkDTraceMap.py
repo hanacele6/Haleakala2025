@@ -65,16 +65,27 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
                 AARR[j, i, :] = np.nan
                 continue
             ydat1 = data[ypix1, j]
-            Aini = [np.max(ydat1), m2, ypixFibWid / 5.0]
+
+            #Aini = [np.max(ydat1), m2, ypixFibWid / 5.0]
+            Aini = [np.max(ydat1), ypixFibWid / 2, ypixFibWid / 5.0]
+
             try:
-                param_bounds = ([1, m2 - ypixFibWid, 0.1], [np.inf, m2 + ypixFibWid, 3])
+                #param_bounds = ([1, m2 - ypixFibWid, 0.1], [np.inf, m2 + ypixFibWid, 3])
+                param_bounds = ([1, 0, 0.1], [np.inf, ypixFibWid, 3])
+
                 par, cov = curve_fit(gaussian, np.arange(len(ypix1)), ydat1, p0=Aini, bounds=param_bounds,
                                      max_nfev=2000)
-                m2 = par[1]
-                AARR[j, i, :] = par
+                #m2 = par[1]
+                #AARR[j, i, :] = par
+
+                absolute_center = ypix1[0] + par[1]  # 切り出し窓の開始位置 + フィットした相対位置
+                m2 = absolute_center
+                AARR[j, i, :] = [par[0], absolute_center, par[2]]
+
             except RuntimeError:
                 AARR[j, i, :] = np.nan
                 continue
+
 
         valid_points = np.isfinite(AARR[xpixF, i, 1])
         if np.count_nonzero(valid_points) > poly_order:

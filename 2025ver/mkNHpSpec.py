@@ -145,7 +145,8 @@ def main():
             MANUAL_ROI_LIST
         )
 
-        output_image = final_corrected
+        #output_image = final_corrected
+        output_image = np.fliplr(final_corrected)
 
         # 補正後のデータを新しいFITSファイルに保存
         try:
