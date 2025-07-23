@@ -2,21 +2,25 @@ import numpy as np
 from astropy.io import fits
 from pathlib import Path
 import warnings
+import pandas as pd
+from datetime import datetime, timedelta  # 日付計算のために追加
 
 
 def run_hapke_model_corrected():
     """
     IDLの 'pro hapke' コードをPythonで再現・高速化します。
-    (mu0e0_false の未定義エラーを修正)
+    mcparams202505.csvから観測パラメータを読み込むように修正。
+    DATE-OBSの日付誤差(±1日)に対応します。
     """
-    # --- 1. 定数と物理パラメータの設定 ---
-    # ... (この部分は変更ありません) ...
+    # --- 1. パスの設定と日付の定義 ---
     pi = np.pi
     d2r = np.deg2rad(1.0)
     r2d = np.rad2deg(1.0)
 
     try:
-        base_path = Path.cwd()
+        #base_path = Path.cwd()
+        base_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
+        # パラメータを読み込む基準の日付を指定
         date = "20250501"
         out_dir = base_path / 'output' / date
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -25,29 +29,77 @@ def run_hapke_model_corrected():
         print(f"パスの設定中にエラーが発生しました: {e}")
         return
 
-    g_deg = 83.33189
-    AU = 0.377447
-    R_pix = 7.022690 / 2 * 100
+    # --- 2. CSVファイルから観測パラメータを読み込む (日付誤差対応) ---
+    try:
+        csv_path = Path("mcparams202505.csv")
+        params_df = pd.read_csv(csv_path)
+
+        # --- 日付の誤差に対応 ---
+        # 指定された日付(date)とその前後1日を検索対象とする
+        target_dt = datetime.strptime(date, '%Y%m%d')
+        search_dates = [
+            (target_dt - timedelta(days=1)).strftime('%Y-%m-%d'),  # 前日
+            target_dt.strftime('%Y-%m-%d'),  # 当日
+            (target_dt + timedelta(days=1)).strftime('%Y-%m-%d')  # 翌日
+        ]
+
+        # 'DATE-OBS'列の先頭10文字(YYYY-MM-DD)が検索日付リストに含まれる行を探す
+        date_part = params_df['DATE-OBS'].astype(str).str[:10]
+        rows = params_df[date_part.isin(search_dates)]
+
+        if rows.empty:
+            print(
+                f"エラー: {csv_path.name} に日付 '{target_dt.strftime('%Y-%m-%d')}' (およびその前後1日) のデータが見つかりません。")
+            return
+
+        # 該当する最初の行を使用
+        params = rows.iloc[0]
+
+        # CSVから読み込んだ値で変数を設定
+        g_deg = params['phase_angle_deg']
+        AU = params['mercury_sun_distance_au']
+        apparent_diameter = params['apparent_diameter_arcsec']
+        R_pix = apparent_diameter / 2.0 * 100.0
+
+        print("\n--- CSVから読み込んだパラメータ ---")
+        print(f"検索日付(中心): {target_dt.strftime('%Y-%m-%d')}")
+        print(f"使用した観測時刻 (DATE-OBS): {params['DATE-OBS']}")
+        print(f"位相角 (g_deg): {g_deg:.4f}°")
+        print(f"太陽距離 (AU): {AU:.6f}")
+        print(f"視直径 (arcsec): {apparent_diameter:.6f}")
+        print(f"惑星半径 (R_pix): {R_pix:.4f} pix")
+        print("---------------------------------\n")
+
+    except FileNotFoundError:
+        print(f"エラー: パラメータファイル {csv_path.resolve()} が見つかりません。")
+        return
+    except KeyError as e:
+        print(f"エラー: CSVファイルに列 '{e}' が見つかりません。列名を確認してください。")
+        return
+    except Exception as e:
+        print(f"パラメータの読み込み中にエラーが発生しました: {e}")
+        return
+
+    # --- 3. 物理・モデル定数の設定 ---
+    # (ここから下の部分は変更ありません)
     JL = 5.18e+14
     theta = np.deg2rad(16.0)
-
     w = 0.2
     h = 0.065
     B0 = 2.4
     b = 0.20
     c = 0.18
 
-    print(f"シミュレーション開始: 位相角={g_deg:.2f}°, 水星半径={R_pix} pix")
+    print(f"シミュレーション開始: 位相角={g_deg:.2f}°, 水星半径={R_pix:.2f} pix")
 
-    # --- 2. 計算グリッドとマスクの準備 ---
+    # --- 4. 計算グリッドとマスクの準備 ---
     dim = int(R_pix * 2)
     x_coords = np.arange(dim, dtype=np.float64) - R_pix + 0.5
     y_coords = np.arange(dim, dtype=np.float64) - R_pix + 0.5
     x, y = np.meshgrid(x_coords, y_coords)
-    #x, y = x.T, y.T
     disk_mask = (x ** 2 + y ** 2) < R_pix ** 2
 
-    # --- 3. 幾何学的な角度の計算 (ベクトル化) ---
+    # --- 5. 幾何学的な角度の計算 (ベクトル化) ---
     with np.errstate(divide='ignore', invalid='ignore'):
         g = np.deg2rad(g_deg)
         LL = np.arcsin(y / R_pix)
@@ -68,8 +120,7 @@ def run_hapke_model_corrected():
         cospsi = np.clip(cospsi, -1, 1)
         psi = np.arccos(cospsi)
 
-
-    # --- 4. ハプケモデルの計算 (ベクトル化) ---
+    # --- 6. ハプケモデルの計算 (ベクトル化) ---
     tantheta = np.tan(theta)
     tani = np.tan(i)
     tane = np.tan(e)
@@ -81,29 +132,23 @@ def run_hapke_model_corrected():
     E1e = np.exp(-2.0 / pi / tantheta / tane)
     E2e = np.exp(-1.0 / pi / tantheta ** 2 / tane ** 2)
 
-    # shikigamachigai らしい
-    mu0e0 = kai * (cosi + sini * tantheta * E2i / (2.0 - E1i))  # (12.49)
+    mu0e0 = kai * (cosi + sini * tantheta * E2i / (2.0 - E1i))
 
     cond = (i <= e)
 
-    # i <= e の場合の式
     mu0e_true = kai * (cosi + sini * tantheta * (cospsi * E2e + sinpsihalf ** 2 * E2i) / (2 - E1e - (psi / pi) * E1i))
     mue_true = kai * (cose + sine * tantheta * (E2e - sinpsihalf ** 2 * E2i) / (2 - E1e - (psi / pi) * E1i))
     mue0_true = kai * (cose + sine * tantheta * E2e / (2 - E1e))
     fpsi_true = np.exp(-2.0 * np.tan(psi / 2.0))
-    # 修正: mu0e0_true の代わりに共通の mu0e0 を使う
     Siepsi_true = (mue_true / mue0_true) * (cosi / mu0e0) * kai / (1 - fpsi_true + fpsi_true * kai * cosi / mu0e0)
 
-    # i > e の場合の式
     mu0e_false = kai * (cosi + sini * tantheta * (E2i - sinpsihalf ** 2 * E2e) / (2 - E1i - (psi / pi) * E1e))
     mue_false = kai * (cose + sine * tantheta * (cospsi * E2i + sinpsihalf ** 2 * E2e) / (2 - E1i - (psi / pi) * E1e))
     mue0_false = kai * (cose + sine * tantheta * E2e / (2 - E1e))
     fpsi_false = np.exp(-2.0 * np.tan(psi / 2.0))
-    # 修正: 未定義だった mu0e0_false の代わりに共通の mu0e0 を使う
     Siepsi_false = (mue_false / mue0_false) * (cosi / mu0e0) * kai / (
-                1 - fpsi_false + fpsi_false * kai * cose / mue0_false)
+            1 - fpsi_false + fpsi_false * kai * cose / mue0_false)
 
-    # np.whereで結合
     mu0e = np.where(cond, mu0e_true, mu0e_false)
     mue = np.where(cond, mue_true, mue_false)
     Siepsi = np.where(cond, Siepsi_true, Siepsi_false)
@@ -123,6 +168,7 @@ def run_hapke_model_corrected():
     SR2 = np.fliplr(SR)
     RR2 = np.fliplr(RR)
 
+    # --- 7. 結果の保存 ---
     SSR = SR.sum()
     ic = valid_mask.sum()
     avg_brightness = SSR / ic if ic > 0 else 0
@@ -136,11 +182,12 @@ def run_hapke_model_corrected():
     fits_path_sr = out_dir / f'Hapke{date}.fits'
     fits_path_rr = out_dir / 'test_python.fit'
 
-    fits.writeto(fits_path_sr, np.rot90(SR2, k=2), overwrite=True)
-    print(f"輝度画像 (MR/nm) を保存しました: {fits_path_sr}")
-
-    fits.writeto(fits_path_rr, np.rot90(RR2, k=2), overwrite=True)
-    print(f"反射輝度画像 (reflectivity/sr) を保存しました: {fits_path_rr}")
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', fits.verify.VerifyWarning)
+        fits.writeto(fits_path_sr, np.rot90(SR2, k=2), overwrite=True)
+        print(f"輝度画像 (MR/nm) を保存しました: {fits_path_sr}")
+        fits.writeto(fits_path_rr, np.rot90(RR2, k=2), overwrite=True)
+        print(f"反射輝度画像 (reflectivity/sr) を保存しました: {fits_path_rr}")
 
     print("\nend")
     print("処理が完了しました。")

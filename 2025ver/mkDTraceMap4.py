@@ -269,7 +269,7 @@ if __name__ == "__main__":
         'nFibX': 10, 'nFibY': 12,
         'iFibInact': [6, 49, 69, 89, 94, 109, 117],  # 使ってないファイバー
         'yFib0': 195, 'yFib1': 5.95, 'ypixFibWid': 6.0,
-        'trace_interval_x': 4,  # fitを行う間隔
+        'trace_interval_x': 1,  # fitを行う間隔
         'poly_fit_order': 6,
     }
 

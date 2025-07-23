@@ -20,7 +20,7 @@ trace_filename = file_path / " led01r_clf590n_ga7000fsp220_1.fppoly.fits"
 #trace_filename = file_path / "master_led_trace.fppoly_test.fits"
 #trace_filename = file_path / "led01r_sp.fppoly_test.fits"
 # 3. 問題が起きているファイバーの番号 (整数)
-FIBER_TO_INSPECT = 104
+FIBER_TO_INSPECT = 103
 
 # 4. 周辺のファイバーも表示するか (True/False)
 PLOT_NEIGHBORS = True

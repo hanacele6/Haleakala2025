@@ -3,12 +3,15 @@ from datetime import datetime, timedelta, timezone
 
 # JSTタイムゾーンオブジェクト
 JST = timezone(timedelta(hours=9))
+# UTCタイムゾーンオブジェクトを追加
+UTC = timezone.utc
 
 
 def post_process_to_segments(visible_minutes_map, step_minutes=1):
     """
     日付ごとに記録された観測可能な時刻のリストから、
     連続する時間帯の文字列リストを生成する。
+    出力にはJSTとUTCの両方を含む。
     """
     segments_by_date = {}
     for date_str, times_jst in visible_minutes_map.items():
@@ -16,28 +19,39 @@ def post_process_to_segments(visible_minutes_map, step_minutes=1):
             segments_by_date[date_str] = []
             continue
 
-        times_jst.sort()  # 念のためソート
+        times_jst.sort()
 
         date_segments = []
         current_segment_start = times_jst[0]
         current_segment_end = times_jst[0]
 
         for i in range(1, len(times_jst)):
-            # timedeltaの比較で連続性を判断 (step_minutesに応じて)
-            # times_jst[i] と current_segment_end の差が step_minutes以内であれば連続とみなす
-            # 正確には、(times_jst[i] - current_segment_end) が step_minutes に等しい場合に連続
             if (times_jst[i] - current_segment_end) == timedelta(minutes=step_minutes):
-                current_segment_end = times_jst[i]  # 区間を延長
+                current_segment_end = times_jst[i]
             else:
-                # 区間が途切れたので、前の区間を記録
-                date_segments.append(
-                    f"{current_segment_start.strftime('%H:%M')} - {current_segment_end.strftime('%H:%M')}")
-                # 新しい区間を開始
+                # --- ▼▼▼ ここから表示形式の変更 ▼▼▼ ---
+                # JSTの時刻をUTCに変換
+                start_utc = current_segment_start.astimezone(UTC)
+                end_utc = current_segment_end.astimezone(UTC)
+
+                # JSTとUTCを併記した文字列を作成
+                segment_str = (
+                    f"{current_segment_start.strftime('%H:%M')} - {current_segment_end.strftime('%H:%M')} (JST)  |  "
+                    f"{start_utc.strftime('%H:%M')} - {end_utc.strftime('%H:%M')} (UTC)")
+                date_segments.append(segment_str)
+                # --- ▲▲▲ ここまで表示形式の変更 ▲▲▲ ---
+
                 current_segment_start = times_jst[i]
                 current_segment_end = times_jst[i]
 
-        # 最後の区間を記録
-        date_segments.append(f"{current_segment_start.strftime('%H:%M')} - {current_segment_end.strftime('%H:%M')}")
+        # --- ▼▼▼ 最後の区間も同様に変更 ▼▼▼ ---
+        start_utc = current_segment_start.astimezone(UTC)
+        end_utc = current_segment_end.astimezone(UTC)
+        segment_str = (f"{current_segment_start.strftime('%H:%M')} - {current_segment_end.strftime('%H:%M')} (JST)  |  "
+                       f"{start_utc.strftime('%H:%M')} - {end_utc.strftime('%H:%M')} (UTC)")
+        date_segments.append(segment_str)
+        # --- ▲▲▲ 最後の区間も同様に変更 ▲▲▲ ---
+
         segments_by_date[date_str] = date_segments
 
     return segments_by_date
@@ -47,21 +61,7 @@ def calculate_mercury_visibility_detailed(start_date_str, end_date_str, observer
     """
     指定された期間において、特定の条件下で水星が観測可能な具体的な時間帯を計算する。
     天体暦ファイル 'de442.bsp' をスクリプトと同じディレクトリから読み込むことを想定。
-
-    条件:
-    1. 太陽の高度が-1.5度以下
-    2. 太陽と水星の離角 (SOT) が15度以上
-    3. 水星の高度が10度以上
-
-    Args:
-        start_date_str (str): 開始日 (YYYY-MM-DD)
-        end_date_str (str): 終了日 (YYYY-MM-DD)
-        observer_location (Topos): 観測者の位置
-        step_minutes (int): 計算する時間間隔（分）
-
-    Returns:
-        dict: キーが日付 (YYYY-MM-DD)、値がその日の観測可能時間帯 ("HH:MM - HH:MM") のリスト
-              エラーが発生した場合はエラーメッセージ (str)
+    (この関数のロジックは変更ありません)
     """
     try:
         start_dt = datetime.strptime(start_date_str, "%Y-%m-%d")
@@ -72,7 +72,6 @@ def calculate_mercury_visibility_detailed(start_date_str, end_date_str, observer
         return "日付の形式が正しくありません。YYYY-MM-DD形式で入力してください。"
 
     try:
-        # 'de442.bsp' をスクリプトと同じディレクトリから読み込むことを期待
         eph = load('de442.bsp')
     except Exception as e:
         return (f"天体暦ファイル 'de442.bsp' のロードに失敗しました: {e}\n"
@@ -86,12 +85,12 @@ def calculate_mercury_visibility_detailed(start_date_str, end_date_str, observer
 
     all_visible_minutes_by_date_jst = {}
 
-    # UTCで日付範囲を設定
-    current_loop_time_utc = datetime(start_dt.year, start_dt.month, start_dt.day, 0, 0, 0, tzinfo=timezone.utc)
-    end_loop_time_utc = datetime(end_dt.year, end_dt.month, end_dt.day, 23, 59, 59, tzinfo=timezone.utc)
+    current_loop_time_utc = datetime(start_dt.year, start_dt.month, start_dt.day, 0, 0, 0, tzinfo=UTC)
+    end_loop_time_utc = datetime(end_dt.year, end_dt.month, end_dt.day, 23, 59, 59, tzinfo=UTC)
 
     observer = earth + observer_location
 
+    # __name__ チェックはテスト用だったので、ここでは print をそのまま表示します
     print("計算中 (詳細)... (期間が長い場合、数分～数十分かかることがあります)")
     processed_steps = 0
     total_steps = (end_loop_time_utc - current_loop_time_utc).total_seconds() / (step_minutes * 60)
@@ -118,7 +117,7 @@ def calculate_mercury_visibility_detailed(start_date_str, end_date_str, observer
             all_visible_minutes_by_date_jst[date_str].append(current_time_jst)
 
         processed_steps += 1
-        if processed_steps % 1440 == 0:  # 約1日分処理するごとに出力 (1440 = 24*60)
+        if processed_steps % 1440 == 0:
             print(
                 f"  進捗: 約 {processed_steps / total_steps * 100:.1f}% 完了 ({current_loop_time_utc.strftime('%Y-%m-%d %H:%M')} UTCまで処理)")
 
@@ -151,7 +150,7 @@ if __name__ == '__main__':
     while True:
         start_input = input("観測開始日 (YYYY-MM-DD形式, 例: 2025-06-01): ")
         if not start_input:
-            start_input = "2025-08-11"  # デフォルト値の例
+            start_input = "2025-06-01"
             print(f"デフォルトの開始日 {start_input} を使用します。")
         try:
             datetime.strptime(start_input, "%Y-%m-%d")
@@ -162,12 +161,12 @@ if __name__ == '__main__':
     while True:
         end_input = input(f"観測終了日 (YYYY-MM-DD形式, {start_input} 以降, 例: 2025-06-10): ")
         if not end_input:
-            try:  # 開始日から数日後をデフォルトにする
+            try:
                 default_end_dt = datetime.strptime(start_input, "%Y-%m-%d") + timedelta(days=9)
                 end_input = default_end_dt.strftime("%Y-%m-%d")
                 print(f"デフォルトの終了日 {end_input} を使用します。")
-            except ValueError:  # start_input が不正な場合
-                end_input = "2025-08-29"  # 固定のフォールバック
+            except ValueError:
+                end_input = "2025-06-10"
                 print(f"デフォルトの終了日 {end_input} を使用します。")
         try:
             if datetime.strptime(end_input, "%Y-%m-%d") < datetime.strptime(start_input, "%Y-%m-%d"):
@@ -192,7 +191,8 @@ if __name__ == '__main__':
     elif not results:
         print("\n指定された期間と条件で水星が観測可能な時間帯は見つかりませんでした。")
     else:
-        print("\n--- 水星の観測可能な時間帯 (JST) ---")
+        # --- ▼▼▼ 表示ヘッダーを変更 ▼▼▼ ---
+        print("\n--- 水星の観測可能な時間帯 (日付はJST) ---")
         sorted_dates = sorted(results.keys())
         found_any_slot = False
         for date_str in sorted_dates:
@@ -201,6 +201,7 @@ if __name__ == '__main__':
                 found_any_slot = True
                 print(f"  {date_str}:")
                 for segment in segments:
+                    # segment文字列はすにJST/UTC併記になっているのでそのまま出力
                     print(f"    {segment}")
         if not found_any_slot:
             print("指定された期間と条件で水星が観測可能な時間帯は見つかりませんでした。")

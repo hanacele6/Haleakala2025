@@ -54,7 +54,7 @@ print(f"'{csv_file_path.name}' から {ifilem} 個のファイルを処理対象
 NX = 2048
 NY = 1024
 ifibm = fibp.shape[0]
-hwid = 2
+hwid = 3
 
 
 # --- Gauss関数定義 (Gaussian function for curve_fit) ---

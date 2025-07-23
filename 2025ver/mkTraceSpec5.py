@@ -111,26 +111,25 @@ for ifile, original_filepath_str in enumerate(file_list_original):
             main_signal_window = np.clip(center_y_main + np.arange(-hwid, hwid + 1), 0, NY - 1)
             spDat_ix = np.sum(b[main_signal_window, ix])
 
-            # --- 2. 背景 (spDk) の計算 ---
+            # --- 2. 背景 (spDk) の計算 (参考コードのnp.sum方式に合わせる) ---
             # a. 補間関数を使って谷の位置を計算
             left_valley_pos = interp_func(ifib - 0.5)
             right_valley_pos = interp_func(ifib + 0.5)
 
-            # b. 谷の周りのピクセル値から最小値を取得
+            # b. 谷の周りのピクセル値を「合計」する
             center_y_left = np.round(left_valley_pos).astype(int)
             left_valley_window = np.clip(center_y_left + np.arange(-bg_hwid, bg_hwid + 1), 0, NY - 1)
-            left_min = np.min(b[left_valley_window, ix])
+            # .min() から .sum() へ変更
+            left_sum = np.sum(b[left_valley_window, ix])
 
             center_y_right = np.round(right_valley_pos).astype(int)
             right_valley_window = np.clip(center_y_right + np.arange(-bg_hwid, bg_hwid + 1), 0, NY - 1)
-            right_min = np.min(b[right_valley_window, ix])
+            # .min() から .sum() へ変更
+            right_sum = np.sum(b[right_valley_window, ix])
 
-            # c. 1ピクセルあたりの背景レベルを決定
-            background_level_per_pixel = (left_min + right_min) / 2.0
-
-            # d. 背景レベルを主信号の積分幅でスケーリング
-            integration_width = hwid * 2 + 1
-            spDk_ix = background_level_per_pixel * integration_width
+            # c. 左右の谷の合計フラックスの平均を背景とする
+            spDk_ix = (left_sum + right_sum) / 2.0
+            # ▲▲▲ 修正箇所はここまで ▲▲▲
 
             # --- 3. 背景を引いた最終的な値を格納 ---
             fiblall2[ifib, ix] = spDat_ix - spDk_ix
@@ -140,7 +139,7 @@ for ifile, original_filepath_str in enumerate(file_list_original):
     stem = original_path.stem
     match = re.search(r'_(\d+)$', stem)
     file_num = match.group(1) if match else str(ifile + 1)
-    output_file_name = f"{description}{file_num}_tr.fits"
+    output_file_name = f"{description}{file_num}_tr2.fits"
     output_path = output_dir / output_file_name
 
     # 新しいデータ配列と元のヘッダーでHDUを作成

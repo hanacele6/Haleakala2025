@@ -88,7 +88,8 @@ print(f"-> {led_file_count}個のフラットフレームを合計して、マ�
 # 元のパイプラインのロジック（ファイバーごとに割り算→再スケール）を適用
 print("\nStep 2: Applying flat-field correction to science frames...")
 
-science_df = df[df[desc_col] != 'LED']
+#science_df = df[df[desc_col] != 'LED']
+science_df = df
 
 for index, row in science_df.iterrows():
     stem = Path(row[fits_col]).stem

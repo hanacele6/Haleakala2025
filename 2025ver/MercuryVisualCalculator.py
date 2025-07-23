@@ -19,7 +19,7 @@ import spiceypy as spice
 JST = timezone(timedelta(hours=9))
 
 # Absolute path to SPICE kernels, as per user's environment
-SPICE_KERNEL_BASE_PATH = r'C:\Users\hanac\University\Senior\PythonProject\merc2025a\kernels\generic_kernels'
+SPICE_KERNEL_BASE_PATH = r'C:\Users\hanac\University\Senior\Mercury\Haleakala2025\kernels'
 # SCRIPT_DIR definition (can be kept for reference, but not directly used for SPICE_KERNEL_BASE_PATH here)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
