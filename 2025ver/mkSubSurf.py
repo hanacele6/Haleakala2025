@@ -12,8 +12,11 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     d2固定だがデータ幅は可変。観測データを太陽光の波長範囲にクロップし、
     d2領域の除外をON/OFFできるバージョン。
     """
-    base_filename = input_dat_path.name.split('.')[0]
-    print(f"\n  -> Processing: {base_filename} (Original Logic, Flexible Crop/Exclude)")
+    sft_val = constants['sft']
+    sft_suffix = f"_sft{int(sft_val * 1000):03d}"  # 例: sft=0.001 -> _sft001
+    base_filename = f"{input_dat_path.stem}{sft_suffix}"
+
+    print(f"\n  -> Processing: {base_filename} (sft={sft_val})")
 
     # --- 1. 入力ファイルの読み込み ---
     try:
@@ -27,17 +30,35 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         print(f"    -> ERROR: Failed to read input files: {e}. Skipping.")
         return
 
-    # --- 2. 太陽光の波長変換と、それに合わせた観測データのクロップ ---
+
+
+    # --- 2. 物理定数と太陽光データの準備 ---
+    Vme, Vms, Rmn, sft, Rmc, c = (constants['Vme'], constants['Vms'], constants['Rmn'],
+                                  constants['sft'], constants['Rmc'], constants['c'])
+    Shap = (Rmc / Rmn) ** 2 / 1e+4
+
+    # 太陽光の波長を真空→大気に変換
     wavair_factor = 1.000276
     sol_data[:, 0] = sol_data[:, 0] / wavair_factor
 
-    sol_wl_min, sol_wl_max = sol_data[:, 0].min(), sol_data[:, 0].max()
-    print(f"    -> Solar spectrum range (air): {sol_wl_min:.4f} - {sol_wl_max:.4f} nm")
+    # モデル計算に必要な2種類の太陽光スペクトルの波長軸を計算
+    # 1. 直接光 (sftシフト適用)
+    direct_solar_wl = sol_data[:, 0] - sft
+    # 2. 水星反射光 (sftシフト + ドップラーシフト適用)
+    reflected_solar_wl = direct_solar_wl * (1 + Vms / c) * (1 + Vme / c)
 
+    # --- 3. 処理範囲の決定と観測データのクロップ (コード3の方式) ---
+    # 2つの波長軸が両方とも存在する「共通の有効範囲」を計算する
+    valid_wl_min = max(np.min(direct_solar_wl), np.min(reflected_solar_wl))
+    valid_wl_max = min(np.max(direct_solar_wl), np.max(reflected_solar_wl))
+    print(f"    -> Valid overlapping solar range: {valid_wl_min:.4f} - {valid_wl_max:.4f} nm")
+
+    # 計算した有効範囲を使って観測データを切り取る
     original_count = len(wl)
-    crop_mask = (wl >= sol_wl_min) & (wl <= sol_wl_max)
+    crop_mask = (wl >= valid_wl_min) & (wl <= valid_wl_max)
     wl, Nat = wl[crop_mask], Nat[crop_mask]
 
+    # 切り取り後のデータ点数を確認
     if len(wl) < 20:
         print("    -> ERROR: No/few overlapping wavelength points found after cropping.")
         return
@@ -46,17 +67,15 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     dwl = np.median(np.diff(wl))
     print(f"    -> Cropped observation data to solar range. Points: {original_count} -> {ixm}")
 
-    # --- 3. 物理定数とパラメータ ---
-    Vme, Vms, Rmn, sft, Rmc, c = (constants['Vme'], constants['Vms'], constants['Rmn'],
-                                  constants['sft'], constants['Rmc'], constants['c'])
-    Shap = (Rmc / Rmn) ** 2 / 1e+4
-
-    # --- 4. 太陽光モデルの準備 ---
+    # --- 4. 補間用の太陽光モデルの最終準備 ---
+    # 後の5番セクションで使う形式にデータを格納し直す
     sol = np.zeros((sol_data.shape[0], 3))
-    sol[:, 0] = sol_data[:, 0] - sft
-    sol[:, 1] = sol_data[:, 2]
-    sol[:, 2] = sol_data[:, 1]
-    wlsurf = (sol[:, 0]) * (1 + Vms / c) * (1 + Vme / c)
+    sol[:, 0] = direct_solar_wl
+    sol[:, 1] = sol_data[:, 2]  # フラックス成分1
+    sol[:, 2] = sol_data[:, 1]  # フラックス成分2
+    wlsurf = reflected_solar_wl
+
+
 
     # --- 5. 線形補間 ---
     iwm2, iws1, iws2 = sol.shape[0], 0, 0
@@ -76,6 +95,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
                 break
 
     # --- 6. 最適化ループの準備 (d2除外のON/OFF) ---
+    """
     if fit_config['exclude_d2_region']:
         center_pix = ixm // 2
         d2 = fit_config['d2_pixel_index']
@@ -87,13 +107,39 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         slice_end1, slice_start1 = center_pix - 7, center_pix + 6
         slice_end2, slice_start2 = d2 - 7, d2 + 6
 
+        #slice_end1, slice_start1 = center_pix - 4, center_pix + 3
+        #slice_end2, slice_start2 = d2 - 4, d2 + 3
+
         if not (0 <= slice_end2 < slice_start2 <= ixm and 0 <= slice_end1 < slice_start1 <= ixm):
             print(f"    -> ERROR: Slicing indices are out of bounds for data width {ixm}. Skipping.")
             return
 
         Nat2 = np.concatenate((Nat[0:slice_end2], Nat[slice_start2:ixm]))
-        pix_range_fit = np.concatenate((np.arange(slice_end1), np.arange(slice_start1, ixm)))
-        surf_slicer = lambda s: np.concatenate((s[0:slice_end1], s[slice_start1:ixm]))
+        pix_range_fit = np.concatenate((np.arange(slice_end2), np.arange(slice_start2, ixm)))
+        surf_slicer = lambda s: np.concatenate((s[0:slice_end2], s[slice_start2:ixm]))
+    """
+
+    if fit_config['exclude_d2_region']:
+        # 1. パラメータを取得
+        d2_wl = fit_config['d2_wavelength_nm']
+        half_width = fit_config['d2_exclusion_half_width_pix']
+
+        # 2. 波長(wl)配列から、指定したd2_wlに最も近いピクセルのインデックスを動的に見つける
+        d2_idx = np.argmin(np.abs(wl - d2_wl))
+        print(f"    -> D2 line ({d2_wl} nm) found near pixel index: {d2_idx}")
+
+        # 3. 除外するピクセル範囲を計算する
+        exclude_start = max(0, d2_idx - half_width)
+        exclude_end = min(ixm, d2_idx + half_width + 1)  # +1 はPythonのスライス仕様のため
+        print(f"    -> Excluding pixel range: {exclude_start} to {exclude_end - 1}")
+
+        # 4. 単一のブールマスクを作成し、観測データ、モデル、x軸のすべてに一貫して適用する
+        fit_mask = np.ones(ixm, dtype=bool)
+        fit_mask[exclude_start:exclude_end] = False
+
+        Nat2 = Nat[fit_mask]
+        pix_range_fit = np.arange(ixm)[fit_mask]
+        surf_slicer = lambda s: s[fit_mask]
     else:
         print("    -> Fitting will use full spectrum (d2 exclusion is OFF).")
         Nat2 = Nat
@@ -117,10 +163,10 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         fft_surf0, fft_surf1 = np.fft.fft(surf[:, 0]), np.fft.fft(surf[:, 1])
         fft_psf2 = np.fft.fft(psf2)
         shift_amount = -int(ixm / 2)
-        conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
-        conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
-        #conv_surf0 = np.roll(np.real(np.fft.ifft(fft_surf0 * fft_psf2)), shift=shift_amount)
-        #conv_surf1 = np.roll(np.real(np.fft.ifft(fft_surf1 * fft_psf2)), shift=shift_amount)
+        #conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
+        #conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
+        conv_surf0 = np.roll(np.real(np.fft.ifft(fft_surf0 * fft_psf2)), shift=shift_amount)
+        conv_surf1 = np.roll(np.real(np.fft.ifft(fft_surf1 * fft_psf2)), shift=shift_amount)
         surf1 = np.column_stack([conv_surf0, conv_surf1])
 
         for iairm in range(51):
@@ -133,6 +179,11 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
                 ratioa = Nat2 / surf3
 
             if not np.all(np.isfinite(ratioa)): continue
+
+            #denominator = surf3.copy()
+            #zero_mask = np.abs(denominator) < 1e-30
+            #denominator[zero_mask] = 1e-30  # ゼロに近い値を微小な値で置換
+            #ratioa = Nat2 / denominator
 
             aa0 = np.polyfit(pix_range_fit, ratioa, 2)[::-1]
             ratiof = aa0[0] + aa0[1] * pix_range_fit + aa0[2] * pix_range_fit ** 2
@@ -151,7 +202,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 
     print(f"    -> Best fit: airm={best_params['airms']:.2f}, FWHM={best_params['FWHMs']:.2f}, zansa={zansamin:.4e}")
 
-    # ★★★【ここからが省略されていた部分です】★★★
+
     # --- 8. 最終計算と保存 ---
     if fit_config['exclude_d2_region']:
         Nat2_final = Nat2
@@ -167,6 +218,11 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     ratio2 = np.sum(Nat2_final * surf3s_final) / np.sum(surf3s_final ** 2)
     Natb = Nat - ratio2 * best_params['surf2s']
 
+    #full_model = best_params['surf2s'] * best_params['ratiof_full']
+    # 完全なモデルを引き算する
+    #Natb = Nat - full_model
+
+    """
     # --- デバッグプロット機能 ---
     if fit_config.get('create_debug_plot', False):
         plt.figure(figsize=(12, 7))
@@ -186,6 +242,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         plt.savefig(debug_plot_path)
         print(f"    -> Saved debug plot to: {debug_plot_path.name}")
         plt.close()
+    """
 
     # --- ファイル保存処理 ---
     output_test_path = output_dir / f"{base_filename}.test.dat"
@@ -226,18 +283,17 @@ if __name__ == "__main__":
     # --- 2. フィッティング設定 ---
     FIT_CONFIG = {
         # d2ピクセル周辺のフィット除外を有効にするか (True: 除外する, False: 除外しない)
-        'exclude_d2_region': False,
+        'exclude_d2_region': True,
 
-        # 除外する場合の中心ピクセル番号 (データ幅が401点なら200, 201点なら100が中心)
-        # 元のIDLコードの値を維持
-        'd2_pixel_index': 114,
+        # 固定ピクセル番号の代わりに、波長と除外する半値幅（ピクセル数）を指定
+        'd2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
+        'd2_exclusion_half_width_pix': 7,  # 中心から左右に除外するピクセル数
 
-
-        'create_debug_plot': True
+        'create_debug_plot': False
     }
 
-    # --- 処理の開始 ---
-    print(f"--- 太陽光スペクトル除去処理を開始します (d2除外ON/OFF: {FIT_CONFIG['exclude_d2_region']}) ---")
+    # 試行するsft値のリスト
+    sft_values_to_test = [0.001, 0.002, 0.003]
 
     try:
         df = pd.read_csv(csv_file_path)
@@ -245,45 +301,50 @@ if __name__ == "__main__":
         print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
         sys.exit()
 
-    for process_type in TYPES_TO_PROCESS:
-        print("\n" + "=" * 25 + f" 処理タイプ: {process_type} " + "=" * 25)
-        target_df = df[df[type_col] == process_type].copy()
-        if target_df.empty:
-            print(f"-> CSV内に '{process_type}' のデータが見つかりませんでした。")
-            continue
+        # sft値のリストでループを追加
+    for sft_val in sft_values_to_test:
+        print("\n" + "#" * 30 + f" sft = {sft_val} の処理を開始 " + "#" * 30)
 
-        for idx, (row_index, row) in enumerate(target_df.iterrows(), start=1):
-            base_name = f"{process_type}{idx}_tr"
+        for process_type in TYPES_TO_PROCESS:
+            print("\n" + "=" * 25 + f" 処理タイプ: {process_type} " + "=" * 25)
+            target_df = df[df[type_col] == process_type].copy()
+            if target_df.empty:
+                print(f"-> CSV内に '{process_type}' のデータが見つかりませんでした。")
+                continue
 
-            # 処理パイプラインに合わせた入力ファイル名
-            input_file = data_dir / f"{base_name}.totfib_orig.dat"
-            if not input_file.exists():
+            for idx, (row_index, row) in enumerate(target_df.iterrows(), start=1):
+                base_name = f"{process_type}{idx}_tr"
+
                 input_file = data_dir / f"{base_name}.totfib.dat"
+                if not input_file.exists():
+                    input_file = data_dir / f"{base_name}.totfib_orig.dat"
 
-            if not input_file.exists():
-                print(f"  -> スキップ: 入力ファイル {input_file.name} が見つかりません。")
-                continue
+                if not input_file.exists():
+                    print(f"  -> スキップ: 入力ファイル {input_file.name} が見つかりません。")
+                    continue
 
-            try:
-                hapke_path = data_dir / f"Hapke{day}.fits"
-                constants_this_run = {
-                    'Vme': row['mercury_earth_radial_velocity_km_s'],
-                    'Vms': row['mercury_sun_radial_velocity_km_s'],
-                    'Rmn': row['apparent_diameter_arcsec'],
-                    'sft': 0.002, 'Rmc': 4.879e+8, 'c': 299792.458
-                }
-            except KeyError as e:
-                print(f"    -> エラー: CSVに列 '{e}' が見つかりません。")
-                continue
+                try:
+                    hapke_path = data_dir / f"Hapke{day}.fits"
+                    constants_this_run = {
+                        'Vme': row['mercury_earth_radial_velocity_km_s'],
+                        'Vms': row['mercury_sun_radial_velocity_km_s'],
+                        'Rmn': row['apparent_diameter_arcsec'],
+                        'sft': sft_val,
+                        'Rmc': 4.879e+8,
+                        'c': 299792.458
+                    }
+                except KeyError as e:
+                    print(f"    -> エラー: CSVに列 '{e}' が見つかりません。")
+                    continue
 
-            process_spectrum_original_logic(
-                input_dat_path=input_file,
-                solar_spec_path=solar_spec_path,
-                hapke_path=hapke_path,
-                output_dir=data_dir,
-                constants=constants_this_run,
-                fit_config=FIT_CONFIG  # ★設定を渡す
+                process_spectrum_original_logic(
+                    input_dat_path=input_file,
+                    solar_spec_path=solar_spec_path,
+                    hapke_path=hapke_path,
+                    output_dir=data_dir,
+                    constants=constants_this_run,
+                    fit_config=FIT_CONFIG  
 
-            )
+                )
 
     print("\n--- 全ての処理が完了しました ---")
