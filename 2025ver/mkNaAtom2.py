@@ -1,190 +1,245 @@
 import numpy as np
 from scipy.optimize import curve_fit
 import os
+import pandas as pd
+from pathlib import Path
 import matplotlib.pyplot as plt
 
 
 def gaussian_linear_baseline(x, height, center, sigma, const, linear):
     """
     curve_fitで使用する、ガウス関数 + 線形ベースラインのモデル。
-    IDLのgaussfit(nterms=5)に相当する。
+    IDLのgaussfit(nterms=5)に相当します。
     """
+    # sigmaが負の値にならないように絶対値をとる
     return height * np.exp(-(x - center) ** 2 / (2 * abs(sigma) ** 2)) + const + linear * x
 
 
-def ptn2atm_new():
+def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config):
     """
-    IDLコード 'pro ptn2atm_new' のPython翻訳版。
-    *** ガウスフィットの結果をプロットする機能を追加 ***
+    3つのスペクトルファイル（主、プラス誤差、マイナス誤差）を読み込み、
+    それぞれにガウスフィットを行い、積分強度と誤差を計算する関数。
     """
-    # --- 基本設定 ---
-    day = 'test'
-    fileF = 'C:/Users/hanac/University/Senior/Mercury/Haleakala2025/'
-    file_dir = os.path.join(fileF, 'output', day)
-
-    is_loop = 10001
-    ie_loop = 10004
-    num_files = ie_loop - is_loop + 1
-    iim = 401
-    dw = 14
-
-    AU = 0.3658675989
-    pi = np.pi
-
-    # --- 結果を格納する配列 ---
-    naatm = np.zeros(num_files)
-    naerr = np.zeros(num_files)
-
-    # --- ガンマ値の読み込み ---
     try:
-        gamma_path = os.path.join(fileF, 'output', 'gamma_factor', f'gamma_{day}.txt')
+        # 3つの異なるファイルを読み込む
+        wl, cts_main = np.loadtxt(file_paths['main'], unpack=True)
+        _, cts_plus = np.loadtxt(file_paths['plus'], unpack=True)
+        _, cts_minus = np.loadtxt(file_paths['minus'], unpack=True)
+
+        spectra_to_fit = {'main': cts_main, 'plus': cts_plus, 'minus': cts_minus}
+        iim = len(wl)  # データ点数を動的に取得
+
+    except FileNotFoundError as e:
+        print(f"    -> 警告: データファイルが見つかりません ({e})。このセットをスキップします。")
+        return None
+
+    # --- フィッティングとプロットの準備 ---
+    if plot_config['create_plots']:
+        plt.figure(figsize=(12, 8))
+        plot_colors = {'main': 'blue', 'plus': 'green', 'minus': 'red'}
+
+    fit_results = {}
+
+    # --- 3つのスペクトルそれぞれにフィットを実行 ---
+    for name, spectrum in spectra_to_fit.items():
+        # フィット範囲を決定
+        center_idx_abs = iim // 2
+        dw = fit_config['fit_half_width_pix']
+        start_idx_abs = center_idx_abs - dw
+        end_idx_abs = center_idx_abs + dw
+
+        y_data = spectrum[start_idx_abs: end_idx_abs + 1]
+        x_data = np.arange(len(y_data))
+
+        # フィットの初期値を設定
+        center_guess_rel = np.argmax(y_data)
+        initial_guess = [
+            np.max(y_data) - np.min(y_data),  # 高さ
+            center_guess_rel,  # 中心
+            5.0,  # 幅 (シグマ)
+            np.min(y_data),  # ベースライン切片
+            0  # ベースライン傾き
+        ]
+
+        try:
+            popt, _ = curve_fit(gaussian_linear_baseline, x_data, y_data, p0=initial_guess)
+
+            # --- 積分範囲を計算 ---
+            center_rel, sigma_fit = popt[1], popt[2]
+            center_abs_fit = center_rel + start_idx_abs
+            sigma_abs = abs(sigma_fit)
+
+            # 3シグマの範囲で積分
+            start_int = int(round(center_abs_fit - 3 * sigma_abs))
+            end_int = int(round(center_abs_fit + 3 * sigma_abs))
+            start_int = max(0, start_int)
+            end_int = min(iim - 1, end_int)
+
+            # ベースラインを引いてから積分
+            baseline_in_range = popt[3] + popt[4] * (np.arange(start_int, end_int + 1))
+            integrated_counts = np.sum(spectrum[start_int: end_int + 1] - baseline_in_range)
+            width = end_int - start_int + 1
+
+            fit_results[name] = {'counts': integrated_counts, 'width': width}
+            print(f"    -> フィット '{name}': 積分幅 = {width} ピクセル")
+
+            # --- プロット処理 ---
+            if plot_config['create_plots']:
+                plt.scatter(x_data + start_idx_abs, y_data, color=plot_colors[name], label=f'{name} data', s=10)
+                x_smooth = np.linspace(x_data.min(), x_data.max(), 200)
+                fit_curve = gaussian_linear_baseline(x_smooth, *popt)
+                baseline_curve = popt[3] + popt[4] * x_smooth
+                plt.plot(x_smooth + start_idx_abs, fit_curve, color=plot_colors[name], label=f'{name} fit')
+                plt.plot(x_smooth + start_idx_abs, baseline_curve, color=plot_colors[name], linestyle='--',
+                         label=f'{name} baseline')
+
+        except RuntimeError:
+            print(f"    -> 警告: '{name}' スペクトルのガウスフィットに失敗しました。")
+            fit_results[name] = {'counts': 0, 'width': 0}
+
+    # --- グラフの仕上げと保存 ---
+    if plot_config['create_plots']:
+        plt.title(f'Gaussian Fit for {plot_config["base_name"]}')
+        plt.xlabel('Pixel Index')
+        plt.ylabel('Intensity (MR-scaled)')
+        plt.legend()
+        plt.grid(True, linestyle=':')
+        plot_path = plot_config['output_dir'] / f'{plot_config["base_name"]}_fit.png'
+        plt.savefig(plot_path)
+        print(f"    -> フィット結果のプロットを保存: {plot_path.name}")
+        plt.close()
+
+    # --- 誤差を計算 ---
+    cts2 = fit_results.get('main', {}).get('counts', 0)
+    ctsp2 = fit_results.get('plus', {}).get('counts', 0)
+    ctsm2 = fit_results.get('minus', {}).get('counts', 0)
+
+    # ノイズレベルを計算 (フィット範囲外のウイング部分から)
+    wing_width = fit_config['noise_wing_width_pix']
+    wing1 = cts_main[0:wing_width]
+    wing2 = cts_main[-wing_width:]
+    wings_combined = np.concatenate((wing1, wing2))
+    sigma_noise = np.std(wings_combined, ddof=1)
+
+    width_main = fit_results.get('main', {}).get('width', 1)
+    err_stat = sigma_noise * np.sqrt(width_main)
+
+    errp = abs(ctsp2 - cts2)
+    errm = abs(ctsm2 - cts2)
+    err_fuse = max(errp, errm)
+
+    return {'counts': cts2, 'stat_error': err_stat, 'sys_error': err_fuse}
+
+
+# ==============================================================================
+# スクリプトの実行部
+# ==============================================================================
+if __name__ == '__main__':
+    # --- 基本設定 ---
+    day = "20250501"
+    base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
+    data_dir = base_dir / "output" / day
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day[:6]}.csv"
+
+    # sftの値（ファイル名から探すために使用）
+    sft_map = {
+        'main': '002',
+        'minus': '001',
+        'plus': '003'
+    }
+
+    # --- フィッティングとプロットに関する設定 ---
+    FIT_CONFIG = {
+        'fit_half_width_pix': 20,
+        'noise_wing_width_pix': 60
+    }
+    PLOT_CONFIG = {
+        'create_plots': True,
+        'output_dir': data_dir
+    }
+
+    # --- 物理定数 ---
+    PI = np.pi
+    #NaD1_nm = 589.7558
+    NaD1_nm = 589.594 #空気中
+    c_cms = 299792.458 * 1e5
+    me_g = 9.1093897e-28
+    e_esu = 4.80320425e-10
+    JL_nm = 5.18e+14
+    f1 = 0.327
+
+    # --- メイン処理 ---
+    print(f"--- 原子数密度計算を開始します (日付: {day}) ---")
+
+    # ガンマ値の読み込み
+    try:
+        gamma_path = base_dir / 'output' / 'gamma_factor' / f'gamma_{day}.txt'
         _, gamma = np.loadtxt(gamma_path)
     except FileNotFoundError:
-        print(f"Error: Gamma factor file not found at {gamma_path}")
-        return
+        print(f"エラー: ガンマ値ファイルが見つかりません: {gamma_path}")
+        sys.exit()
 
-    # --- 出力ファイルの準備 ---
-    output_filename = os.path.join(file_dir, 'Na_atoms2_python_orig.dat')
-    with open(output_filename, 'w') as f_out:
+    # g-factorのAUに依存しない部分を先に計算
+    F_lambda_cgs = JL_nm * 1e7
+    lambda_cm = NaD1_nm * 1e-7
+    JL_nu = F_lambda_cgs * (lambda_cm ** 2 / c_cms)
+    sigma_D1_nu = PI * e_esu ** 2 / me_g / c_cms * f1
+    gfac_base = sigma_D1_nu * JL_nu * gamma
 
-        # --- メインループ ---
-        for i in range(is_loop, ie_loop + 1):
-            print(f"Processing file index: {i}")
-            file_index = i - is_loop
+    # CSVファイルの読み込み
+    try:
+        df = pd.read_csv(csv_file_path)
+    except FileNotFoundError:
+        print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
+        sys.exit()
 
-            # --- ★★★ プロット用の準備 ★★★ ---
-            plt.figure(figsize=(12, 8))
-            plot_colors = {'main': 'blue', 'plus': 'green', 'minus': 'red'}
+    # 結果を保存するリスト
+    final_results = []
 
-            # --- スペクトルファイルの読み込み ---
-            try:
-                # 3つの異なるファイルを読み込むように修正
-                wl_main, cts_main = np.loadtxt(os.path.join(file_dir, f'{i}exos.txt'), unpack=True)
-                _, cts_plus = np.loadtxt(os.path.join(file_dir, f'{i}exos+1.txt'), unpack=True)
-                _, cts_minus = np.loadtxt(os.path.join(file_dir, f'{i}exos-1.txt'), unpack=True)
+    # CSVファイルの各行に対してループ
+    target_df = df[df['Type'] == 'MERCURY'].copy()
+    for idx, (row_index, row) in enumerate(target_df.iterrows(), start=1):
+        base_name = f"MERCURY{idx}_tr"
+        print(f"\n-> {base_name} の処理を開始...")
 
-                wl = wl_main  # 波長は共通と仮定
-                spectra_to_fit = {'main': cts_main, 'plus': cts_plus, 'minus': cts_minus}
+        # ★★★ 1. CSVからAUを読み込む ★★★
+        try:
+            # ↓↓↓ CSVのヘッダー名に合わせてこの行を修正してください ↓↓↓
+            AU = row['mercury_sun_distance_au']
+        except KeyError:
+            print(f"    -> エラー: CSVファイルに 'mercury_sun_distance_au' 列が見つかりません。スキップします。")
+            continue
 
-            except FileNotFoundError as e:
-                print(f"Warning: Data file not found for index {i} ({e}). Skipping.")
-                continue
+        # ★★★ 2. 観測ごとのg-factorを計算 ★★★
+        gfac1 = gfac_base / AU ** 2
 
-            # --- ガウスフィッティングと強度計算 ---
-            fit_results = {}
+        # 必要な3つのファイルパスを構築
+        try:
+            file_paths = {
+                'main': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['main']}.exos.dat")),
+                'plus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['plus']}.exos.dat")),
+                'minus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['minus']}.exos.dat"))
+            }
+        except StopIteration:
+            print(
+                f"    -> 警告: {base_name} に対応する3つのexos.datファイルセットが見つかりませんでした。スキップします。")
+            continue
 
-            for name, spectrum in spectra_to_fit.items():
-                center_idx_abs = iim // 2
-                start_idx_abs = center_idx_abs - dw
-                end_idx_abs = center_idx_abs + dw
+        PLOT_CONFIG['base_name'] = f"{base_name}_sft{sft_map['main']}"
 
-                y_data = spectrum[start_idx_abs: end_idx_abs + 1]
-                x_data = np.arange(len(y_data))
+        result = fit_spectrum_and_get_counts(file_paths, FIT_CONFIG, PLOT_CONFIG)
 
-                #initial_guess = [np.max(y_data) - np.min(y_data), dw, 2.0, np.min(y_data), 0]
-                center_guess_rel = np.argmax(y_data)
+        if result:
+            naatm = result['counts'] / gfac1
+            naerr = (result['stat_error'] + result['sys_error']) / gfac1
+            final_results.append([idx, naatm, naerr])
+            print(f"    -> 計算結果 (AU={AU:.4f}): 原子数密度 = {naatm:.4e}, 誤差 = {naerr:.4e}")
 
-                # その位置を、ピーク中心の初期値として与える
-                initial_guess = [
-                    np.max(y_data) - np.min(y_data),  # 高さ
-                    center_guess_rel,  # ★中心 (より賢い初期値)
-                    5.0,  # 幅 (少し広めに見積もる)
-                    np.min(y_data),  # ベースラインの切片
-                    0  # ベースラインの傾き
-                ]
-
-                try:
-                    popt, pcov = curve_fit(gaussian_linear_baseline, x_data, y_data, p0=initial_guess)
-
-                    # --- ★★★ プロット処理 ★★★ ---
-                    # 元のデータ点をプロット
-                    plt.scatter(x_data + start_idx_abs, y_data,
-                                color=plot_colors[name],
-                                label=f'{name} data', s=10, alpha=0.6)
-
-                    # フィット曲線を滑らかに描画するためのX軸
-                    x_smooth = np.linspace(x_data.min(), x_data.max(), 200)
-                    # フィット曲線とベースラインを計算
-                    fit_curve = gaussian_linear_baseline(x_smooth, *popt)
-                    baseline = popt[3] + popt[4] * x_smooth
-
-                    # フィット曲線とベースラインをプロット
-                    plt.plot(x_smooth + start_idx_abs, fit_curve,
-                             color=plot_colors[name],
-                             label=f'{name} fit')
-                    plt.plot(x_smooth + start_idx_abs, baseline,
-                             color=plot_colors[name], linestyle='--',
-                             label=f'{name} baseline')
-
-                    # --- 計算処理（変更なし） ---
-                    center_rel, sigma_fit = popt[1], popt[2]
-                    center_abs_fit = center_rel + start_idx_abs
-                    sigma_abs = abs(sigma_fit)
-
-                    start_int = int(round(center_abs_fit - 3 * sigma_abs))
-                    end_int = int(round(center_abs_fit + 3 * sigma_abs))
-                    start_int = max(0, start_int)
-                    end_int = min(iim - 1, end_int)
-
-                    integrated_counts = np.sum(spectrum[start_int: end_int + 1])
-                    width = end_int - start_int + 1
-
-                    fit_results[name] = {'counts': integrated_counts, 'width': width}
-                    print(f"  Fit '{name}': width = {width}")
-
-                except RuntimeError:
-                    print(f"Warning: Gaussian fit for '{name}' spectrum (index {i}) failed.")
-                    fit_results[name] = {'counts': 0, 'width': 0}
-
-            # --- ★★★ グラフの仕上げ ★★★ ---
-            plt.title(f'Gaussian Fit Comparison for Index {i}')
-            plt.xlabel('Pixel Index')
-            plt.ylabel('Counts')
-            plt.legend()
-            plt.grid(True, linestyle=':', alpha=0.6)
-            plt.show()
-
-            # --- 物理量の計算（変更なし） ---
-            cts2 = fit_results.get('main', {}).get('counts', 0)
-            ctsp2 = fit_results.get('plus', {}).get('counts', 0)
-            ctsm2 = fit_results.get('minus', {}).get('counts', 0)
-
-            wing1 = cts_main[0:60]
-            wing2 = cts_main[100:160]
-            wings_combined = np.concatenate((wing1, wing2))
-            sigma_noise = np.std(wings_combined, ddof=1)
-            width_main = fit_results.get('main', {}).get('width', 1)
-            err_stat = sigma_noise * np.sqrt(width_main)
-
-            errp = abs(ctsp2 - cts2)
-            errm = abs(ctsm2 - cts2)
-            err_fuse = max(errp, errm)
-
-            NaD1_nm = 589.7558
-            c_cms = 299792.458 * 1e5
-            me_g = 9.1093897e-28
-            e_esu = 4.80320425e-10
-            JL_nm = 5.18e+14
-            f1 = 0.327
-
-            F_lambda_cgs = JL_nm * 1e7
-            lambda_cm = NaD1_nm * 1e-7
-            JL_nu = F_lambda_cgs * (lambda_cm ** 2 / c_cms)
-
-            sigma_D1_nu = pi * e_esu ** 2 / me_g / c_cms * f1
-            gfac1 = sigma_D1_nu * JL_nu / AU ** 2 * gamma
-
-            naatm[file_index] = cts2 / gfac1
-            naerr[file_index] = (err_stat + err_fuse) / gfac1
-
-            f_out.write(f"{i - 10000} {naatm[file_index]} {naerr[file_index]}\n")
-
-        print(f"gfac1={gfac1}, err_stat={err_stat}, err_fuse={err_fuse}")
-
-    print(f"Processing finished. Results saved to {output_filename}")
-    print('end')
-
-
-# --- スクリプトの実行 ---
-if __name__ == '__main__':
-    ptn2atm_new()
+    # --- 最終結果をファイルに書き出し ---
+    if final_results:
+        output_filename = data_dir / 'Na_atoms_final.dat'
+        np.savetxt(output_filename, final_results, fmt='%d %.6e %.6e',
+                   header="Index Na_Atoms_cm-2 Error")
+        print(f"\n処理が完了しました。結果を {output_filename} に保存しました。")
+    else:
+        print("\n処理対象のファイルが見つからなかったため、結果ファイルは作成されませんでした。")

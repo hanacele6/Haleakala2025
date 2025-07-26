@@ -1,85 +1,99 @@
 import numpy as np
-import os
+import pandas as pd
+from pathlib import Path
+import sys
 
-# 基本的な変数の設定
-day = 'test'
-# Pythonでは、パスの区切り文字にバックスラッシュを使う場合、
-# エスケープシーケンスと解釈されるのを防ぐために 'r' を先頭に付けます。
-file_path = r'C:\Users\hanac\University\Senior\Mercury\Haleakala2025'
-file_dir = os.path.join(file_path, 'output', day)
+# ==============================================================================
+# スクリプトの実行部
+# ==============================================================================
+if __name__ == '__main__':
+    # --- 基本設定 ---
+    day = "20250501"
+    base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
+    data_dir = base_dir / "output" / day
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day[:6]}.csv"
 
-# IDLコードの N=4-1+1 に相当
-N = 4
+    # --- 入力ファイルと出力ファイル ---
+    # 前のスクリプトが生成したファイルを入力とする
+    input_filename = data_dir / 'Na_atoms_final.dat'
+    output_filename = data_dir / f'Final_Summary_{day}.txt'
 
-# 定数の設定
-AU = 0.365763  # Rms
-PA = 90.624233  # 位相角 (phase angle)
-Rp = 0.307502  # 近日点距離 (perihelion)
-Ra = 0.466697  # 遠日点距離 (aphelion)
+    print(f"--- 最終結果の集計を開始します ---")
+    print(f"入力ファイル: {input_filename.name}")
 
-# --- 計算 ---
+    # --- 1. 天文学的パラメータをCSVから読み込む ---
+    try:
+        df = pd.read_csv(csv_file_path)
+        # その日の最初の観測データ行を取得
+        first_obs_row = df[df['Type'] == 'MERCURY'].iloc[0]
 
-# 真近点角 (True Anomaly Angle) の計算
-# IDLの計算式: TAA = acos(-(AU*(Rp+Ra)-2*Rp*Ra)/(AU*(Ra-Rp)))*180/pi
-numerator = -(AU * (Rp + Ra) - 2 * Rp * Ra)
-denominator = AU * (Ra - Rp)
-# np.arccosはラジアンを返すため、度に変換
-TAA = np.arccos(numerator / denominator) * 180 / np.pi
+        # ↓↓↓ CSVのヘッダー名に合わせて、以下のキーを修正してください ↓↓↓
+        PA = first_obs_row['phase_angle_deg']  # 位相角 (Phase Angle)
+        AU = first_obs_row['mercury_sun_distance_au']  # 太陽心距離 (Heliocentric Distance)
+        Rp = 0.307502  # 近日点距離 (perihelion)
+        Ra = 0.466697  # 遠日点距離 (aphelion)
 
-# --- ファイル処理 ---
+        print(f"CSVからパラメータを読み込みました: PA={PA:.4f}, AU={AU:.4f}")
 
-# 計算用の変数を初期化
-b_sum = 0.0
-err0 = []  # IDLのerr0配列に相当
-err2_sum = 0.0
+    except FileNotFoundError:
+        print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
+        sys.exit()
+    except (KeyError, IndexError) as e:
+        print(f"エラー: CSVファイルからパラメータを読み込めませんでした。列名を確認してください: {e}")
+        sys.exit()
 
-# 入出力ファイル名の定義
-input_filename = os.path.join(file_dir, 'Na_atoms2_python.dat')
-output_filename = os.path.join(file_dir, f'{day}num2_python.txt')
+    # --- 2. 真近点角 (True Anomaly Angle) を計算 ---
+    try:
+        numerator = -(AU * (Rp + Ra) - 2 * Rp * Ra)
+        denominator = AU * (Ra - Rp)
+        # np.arccosはラジアンを返すため、度に変換
+        TAA = np.arccos(numerator / denominator) * 180 / np.pi
+        print(f"真近点角を計算しました: TAA={TAA:.4f}")
+    except ZeroDivisionError:
+        print("エラー: 真近点角の計算中にゼロ除算が発生しました。RpとRaの値を確認してください。")
+        sys.exit()
 
-try:
-    # ファイルを読み込み、データを処理
-    # 'with' を使うことで、ファイルが自動的に閉じられます
-    with open(input_filename, 'r') as f_in:
-        # N行だけ読み込む
-        for i in range(N):
-            line = f_in.readline()
-            if not line:
-                print(f"警告: ファイル '{input_filename}' には {N} 行未満しかありません。")
-                N = i  # 実際に読み込んだ行数にNを更新
-                break
+    # --- 3. 原子数密度の結果ファイルを読み込み、集計 ---
+    try:
+        # ファイルを読み込む (列: Index, Na_Atoms, Error)
+        data = np.loadtxt(input_filename)
 
-            # 行をスペースで分割し、浮動小数点数に変換
-            # t0, a0, a1 に相当する値を取得
-            parts = list(map(float, line.strip().split()))
+        # データが1行しかない場合も正しく扱えるようにする
+        if data.ndim == 1:
+            data = data.reshape(1, -1)
 
-            a0 = parts[1]
-            a1 = parts[2]
+        N = data.shape[0]  # 観測数を動的に取得
+        print(f"{N} 個の観測データを読み込みました。")
 
-            # IDLのループ内計算
-            b_sum += a0
-            err0.append(a1)
-            err2_sum += a1 ** 2
+        # 必要な列を抽出
+        na_atoms_col = data[:, 1]
+        error_col = data[:, 2]
 
-    # --- 最終計算 ---
+        # 合計値を計算
+        b_sum = np.sum(na_atoms_col)
+        err2_sum = np.sum(error_col ** 2)
 
-    # bの平均値を計算
-    b = b_sum / N
+        # 平均原子数密度と統合誤差を計算
+        b = b_sum / N
+        err = np.sqrt(err2_sum) / N
 
-    # エラーを計算
-    # IDLの計算式: err = sqrt(err2)/N
-    err = np.sqrt(err2_sum) / N
+        print(f"平均原子数密度: {b:.4e}")
+        print(f"統合誤差: {err:.4e}")
 
-    # --- ファイル書き込み ---
+    except FileNotFoundError:
+        print(f"エラー: 入力ファイルが見つかりません: {input_filename}")
+        sys.exit()
+    except Exception as e:
+        print(f"予期せぬエラーが発生しました: {e}")
+        sys.exit()
 
-    # 計算結果を指定されたファイルに書き込む
-    with open(output_filename, 'w') as f_out:
-        # 各変数をスペース区切りで書き込む
-        f_out.write(f"{PA} {TAA} {b} {err}\n")
+    # --- 4. 最終結果をファイルに書き込み ---
+    try:
+        with open(output_filename, 'w') as f_out:
+            # 各変数をスペース区切りで書き込む
+            f_out.write(f"{PA} {TAA} {b} {err}\n")
+        print(f"\n処理が完了しました。最終結果を {output_filename.name} に保存しました。")
 
-    print('end')
+    except Exception as e:
+        print(f"エラー: ファイルの書き込みに失敗しました: {e}")
 
-except FileNotFoundError:
-    print(f"エラー: 入力ファイル '{input_filename}' が見つかりません。")
-except Exception as e:
-    print(f"予期せぬエラーが発生しました: {e}")
