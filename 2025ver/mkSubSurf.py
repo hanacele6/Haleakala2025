@@ -38,7 +38,8 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     Shap = (Rmc / Rmn) ** 2 / 1e+4
 
     # 太陽光の波長を真空→大気に変換
-    wavair_factor = 1.000276
+    #wavair_factor = 1.000276
+    wavair_factor = 1.000
     sol_data[:, 0] = sol_data[:, 0] / wavair_factor
 
     # モデル計算に必要な2種類の太陽光スペクトルの波長軸を計算
@@ -286,7 +287,8 @@ if __name__ == "__main__":
         'exclude_d2_region': True,
 
         # 固定ピクセル番号の代わりに、波長と除外する半値幅（ピクセル数）を指定
-        'd2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
+        #'d2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
+        'd2_wavelength_nm':589.7558,
         'd2_exclusion_half_width_pix': 7,  # 中心から左右に除外するピクセル数
 
         'create_debug_plot': False

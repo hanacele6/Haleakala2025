@@ -40,6 +40,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     base_filename = os.path.basename(input_fsp_path).replace(".fits", "")
     output_dir = os.path.dirname(input_fsp_path)
     file_wc = os.path.join(output_dir, f"{base_filename}.wc.fits")
+    #file_wc = os.path.join(output_dir, f"{base_filename}.wc_test.fits")
     file_dcb = os.path.join(output_dir, f"{base_filename}.dcb.fits")
     file_img = os.path.join(output_dir, f"{base_filename}.img.fits")
     plot_output_dir = os.path.join(output_dir, "wcal_plots", base_filename)
@@ -47,6 +48,10 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     if save_plots:
         os.makedirs(plot_output_dir, exist_ok=True)
         print(f"  -> Diagnostic plots will be saved to '{plot_output_dir}'")
+
+    #PROCESS_WAV_MIN = 588.39
+    #PROCESS_WAV_MAX = 591.417
+    #print(f"  -> Processing with fixed wavelength range: {PROCESS_WAV_MIN:.2f} - {PROCESS_WAV_MAX:.2f} nm")
 
     # --- FITSファイルの読み込み ---
     try:
@@ -59,6 +64,9 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         print(f"  -> Reading wavelength map: {os.path.basename(wavmap_path)}")
         with fits.open(wavmap_path) as hdul:
             wmp = hdul[0].data.astype(np.float64)
+            wavair_factor = 1.000276
+            #wavair_factor = 1.000
+            wmp = wmp * wavair_factor
 
         spFlt = None
         if apply_wl_flat and wl_flat_path and os.path.exists(wl_flat_path):
@@ -102,11 +110,14 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     wav_min_end = np.nanmax(wmp_shifted[iFibAct, 0])
     wav_max_start = np.nanmin(wmp_shifted[iFibAct, nx - 1])
 
-    # 昇順か降順かを判定
+     #昇順か降順かを判定
     if wav_min_end < wav_max_start:
         rwmin, rwmax_orig = wav_min_end, wav_max_start
     else:
         rwmin, rwmax_orig = wav_max_start, wav_min_end
+
+    #rwmin = PROCESS_WAV_MIN
+    #rwmax_orig = PROCESS_WAV_MAX
 
     rwstep = np.abs((rwmax_orig - rwmin) / (nx - 1))
     rwmin_f = float(f"{rwmin:.8g}")
@@ -141,6 +152,20 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
             print(f"    -> WARNING: Fiber {j} has no valid wavelength data. Skipping.")
             continue  # このファイバーをスキップして次のループへ
 
+            # 1. 波長マップがNaNだけ、または無限大を含む場合はスキップ
+        if np.all(np.isnan(wmp_j)) or not np.all(np.isfinite(wmp_j)):
+            print(f"    -> WARNING: Fiber {j} has invalid (NaN/Inf) wavelength data. Skipping.")
+            continue
+
+            # 2. 波長が単調増加または単調減少するかをチェック
+        diffs = np.diff(wmp_j)
+        is_monotonic_increasing = np.all(diffs > 0)
+        is_monotonic_decreasing = np.all(diffs < 0)
+
+        if not (is_monotonic_increasing or is_monotonic_decreasing):
+            print(f"    -> WARNING: Fiber {j} is not monotonic. Skipping.")
+            continue  # 条件を満たさない場合、このファイバーの処理を中断し、次のループへ
+
         spDat_to_resample = spDat[j, :].copy()  # 元データをコピー
         spSky_to_resample = spSky[j, :].copy() if spSky is not None else None
 
@@ -166,6 +191,18 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
             # フラット補正をしない場合、プロット用の spDatFlt には元データを入れておく
             spDatFlt[j, :] = spDat_to_resample
 
+
+        # 波長軸に沿って再サンプリング
+        ifunct = interp1d(wmp_j, spDat_to_resample, kind=interp_kind, fill_value="extrapolate",
+                          bounds_error=False)
+        spDatWC[j, :] = ifunct(wavs)
+        if spSky is not None and spSky_to_resample is not None:
+            ifunct_sky = interp1d(wmp_j, spSky_to_resample, kind=interp_kind, fill_value="extrapolate",
+                                  bounds_error=False)
+            spSkyWC[j, :] = ifunct_sky(wavs)
+
+#debug
+        """
         diffs = np.diff(wmp_j)
         if np.any(diffs <= 0):
             print(f"!!! 問題発生: ファイバー {j} で波長が単調増加していません。")
@@ -185,6 +222,51 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
             ifunct_sky = interp1d(wmp_j, spSky_to_resample, kind=interp_kind, fill_value="extrapolate",
                                   bounds_error=False)
             spSkyWC[j, :] = ifunct_sky(wavs)
+        """
+
+#波長範囲制限
+        """
+        valid_indices_mask = (wmp_j >= PROCESS_WAV_MIN) & (wmp_j <= PROCESS_WAV_MAX)
+
+        if not np.any(valid_indices_mask):
+            print(f"    -> WARNING: Fiber {j} has no data in the specified range. Skipping.")
+            continue
+
+        # 2. 有効なデータ範囲を切り出す
+        valid_wmp = wmp_j[valid_indices_mask]
+        valid_spec = spDat_to_resample[valid_indices_mask]
+
+        if len(valid_wmp) < 10:
+            print(f"    -> WARNING: Fiber {j} has insufficient valid data after trimming. Skipping.")
+            continue
+
+        # 3. 値の重複を削除し、ユニークな値だけを取得する（最終防衛ライン）
+        #unique_wmp, unique_indices = np.unique(valid_wmp, return_index=True)
+        #unique_spec = valid_spec[unique_indices]
+
+        #if len(unique_wmp) < 10:
+        #    print(f"    -> WARNING: Fiber {j} has insufficient unique data. Skipping.")
+        #    continue
+
+        # 4. 安全なデータだけで補間関数を作成
+        #ifunct = interp1d(unique_wmp, unique_spec, kind=interp_kind,
+        #                  fill_value="extrapolate", bounds_error=False)
+        ifunct = interp1d(valid_wmp, valid_spec, kind=interp_kind,
+                          fill_value="extrapolate", bounds_error=False)
+        spDatWC[j, :] = ifunct(wavs)
+
+        # スカイデータも同様に処理
+        if spSky is not None and spSky_to_resample is not None:
+            # スカイデータも同じマスクで切り出す
+            valid_sky_spec = spSky_to_resample[valid_indices_mask]
+            #unique_sky_spec = valid_sky_spec[unique_indices]
+
+            #ifunct_sky = interp1d(unique_wmp, unique_sky_spec, kind=interp_kind,
+            #                      fill_value="extrapolate", bounds_error=False)
+            ifunct_sky = interp1d(valid_wmp, valid_sky_spec, kind=interp_kind,
+                                  fill_value="extrapolate", bounds_error=False)
+            spSkyWC[j, :] = ifunct_sky(wavs)
+        """
 
     # 2. スカイフラット補正（ファイバー間の感度補正）
     if spSky is not None:
@@ -361,8 +443,9 @@ if __name__ == "__main__":
     data_dir = base_dir / "output/20250501/"
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
-    #master_wl_flat_name = ("master_led")
-    master_sky_flat_name = "master_sky_f"
+    master_wl_flat_name = ("master_led")
+    master_sky_flat_name = "master_sky" #問題あり
+    #master_sky_flat_name = "master_sky_f" #問題なし
 
     # 4. 処理したいデータのタイプをリストで指定
     TYPES_TO_PROCESS = ['MERCURY']
@@ -395,7 +478,7 @@ if __name__ == "__main__":
     print("--- 波長校正・再サンプリング処理を開始します ---")
     print(f"読み込むCSV: {csv_file_path}")
 
-    APPLY_WL_FLAT = False
+    APPLY_WL_FLAT = True
 
     # --- CSVの読み込み ---
     try:

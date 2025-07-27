@@ -3,6 +3,7 @@ from scipy.optimize import curve_fit
 import os
 import pandas as pd
 from pathlib import Path
+import sys
 import matplotlib.pyplot as plt
 
 
@@ -43,7 +44,7 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config):
     # --- 3つのスペクトルそれぞれにフィットを実行 ---
     for name, spectrum in spectra_to_fit.items():
         # フィット範囲を決定
-        center_idx_abs = iim // 2
+        center_idx_abs = (iim // 2) + 10
         dw = fit_config['fit_half_width_pix']
         start_idx_abs = center_idx_abs - dw
         end_idx_abs = center_idx_abs + dw
@@ -160,8 +161,8 @@ if __name__ == '__main__':
 
     # --- 物理定数 ---
     PI = np.pi
-    #NaD1_nm = 589.7558
-    NaD1_nm = 589.594 #空気中
+    NaD1_nm = 589.7558
+    #NaD1_nm = 589.594  #空気中
     c_cms = 299792.458 * 1e5
     me_g = 9.1093897e-28
     e_esu = 4.80320425e-10

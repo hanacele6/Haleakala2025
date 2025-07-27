@@ -197,6 +197,22 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, flgPause=True, save
             print(f"  -> WARNING: Not enough valid points to fit for Fiber {j}. Skipping.")
             wmp[j, :] = np.nan
             continue
+
+        """
+        PROBLEM_FIBER_NUMBER = 103  # ← ここをエラーが出たファイバー番号に書き換える
+        if j == PROBLEM_FIBER_NUMBER:
+            plt.figure(figsize=(8, 6))
+            plt.plot(wpix_fit[valid_indices], wavs[valid_indices], 'o-', label=f"Fiber {j} Fit Points")
+            # どの点がどの波長か分かりやすくする
+            for i, txt in enumerate(wavs[valid_indices]):
+                plt.annotate(f"{txt:.3f}", (wpix_fit[valid_indices][i], wavs[valid_indices][i]))
+            plt.xlabel("Fitted Pixel Position")
+            plt.ylabel("Reference Wavelength (nm)")
+            plt.title(f"Wavelength vs. Pixel Fit for Fiber {j}")
+            plt.grid(True)
+            plt.legend()
+            plt.show()
+        """
         coef = np.polyfit(wpix_fit[valid_indices], wavs[valid_indices], ndeg)
         pfit = np.poly1d(coef)
         residuals_nm = wavs - pfit(wpix_fit)

@@ -125,10 +125,10 @@ if __name__ == "__main__":
     }
 
     # 4. ★★★ スペクトル切り出し設定 ★★★
-    CROP_SPECTRUM = False  # Trueにするとスペクトルを切り出す
+    CROP_SPECTRUM = True  # Trueにするとスペクトルを切り出す
     # 切り出す中心の波長(nm)を指定 (例: ナトリウムD線)
-    #CENTER_WAVELENGTH = 589.7558  #真空
-    CENTER_WAVELENGTH = 589.594   #空気中
+    CENTER_WAVELENGTH = 589.7558  #真空
+    #CENTER_WAVELENGTH = 589.594   #空気中
     # 中心から左右に切り出すデータ点数 (±200点 -> 合計401点)
     CROP_HALF_WIDTH = 100
 

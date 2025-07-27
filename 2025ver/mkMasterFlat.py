@@ -19,7 +19,7 @@ date = "20250501"
 # 観測ログのCSVファイル
 csv_file_path = Path("mcparams202505.csv")
 # 処理したいデータの種類 (CSVの2列目の値)
-TYPE_TO_PROCESS = 'SKY'  # 'HGNE' や 'STAR' など、結合したいタイプを指定
+TYPE_TO_PROCESS = 'LED'
 # --------------------------------------------------------------------------
 
 # --- ディレクトリ設定 ---
@@ -155,12 +155,14 @@ if __name__ == '__main__':
 
         # ここでも、動くコードと同様に row[type_col] をそのまま使う
         input_filename = f"{row[type_col]}{file_num}_tr.fits"
+        #input_filename = f"{row[type_col]}{file_num}_f.fits" #感度校正後はこっち
         file_path = input_data_dir / input_filename
         files_to_combine.append(file_path)
         print(f"  + {input_filename}")
 
     # --- FITS合成の実行 ---
     output_filepath = output_dir / f"master_{TYPE_TO_PROCESS.lower()}.fits"
+    #output_filepath = output_dir / f"master_{TYPE_TO_PROCESS.lower()}_f.fits" #感度校正後はこっち
 
     combine_fits_files(
         file_list=files_to_combine,
