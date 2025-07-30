@@ -8,10 +8,10 @@ import sys
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250501"
+    day = "20250613"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
-    csv_file_path = base_dir / "2025ver" / f"mcparams{day[:6]}.csv"
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # --- 入力ファイルと出力ファイル ---
     # 前のスクリプトが生成したファイルを入力とする
@@ -69,13 +69,33 @@ if __name__ == '__main__':
         na_atoms_col = data[:, 1]
         error_col = data[:, 2]
 
-        # 合計値を計算
-        b_sum = np.sum(na_atoms_col)
-        err2_sum = np.sum(error_col ** 2)
+        # na_atoms_col の値が0より大きいデータのみを対象とするためのマスクを作成
+        non_zero_mask = na_atoms_col > 0
 
-        # 平均原子数密度と統合誤差を計算
-        b = b_sum / N
-        err = np.sqrt(err2_sum) / N
+        # 0より大きいデータの数を取得
+        N_non_zero = np.count_nonzero(non_zero_mask)
+
+        # 0より大きいデータが1つ以上ある場合のみ計算を実行
+        if N_non_zero > 0:
+            print(f"有効なデータ数（0より大きい）: {N_non_zero}")
+
+            # 0より大きいデータとその誤差のみを抽出
+            na_atoms_non_zero = na_atoms_col[non_zero_mask]
+            error_non_zero = error_col[non_zero_mask]
+
+            # 合計値を計算
+            b_sum = np.sum(na_atoms_non_zero)
+            err2_sum = np.sum(error_non_zero ** 2)
+
+            # 平均原子数密度と統合誤差を、0より大きいデータの数で割って計算
+            b = b_sum / N_non_zero
+            err = np.sqrt(err2_sum) / N_non_zero
+
+        else:
+            # 0より大きいデータがなかった場合、平均と誤差を0にする
+            print("警告: 有効な（0より大きい）データがありませんでした。")
+            b = 0.0
+            err = 0.0
 
         print(f"平均原子数密度: {b:.4e}")
         print(f"統合誤差: {err:.4e}")

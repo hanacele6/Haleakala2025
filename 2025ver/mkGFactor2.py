@@ -1,19 +1,24 @@
 import numpy as np
 from pathlib import Path  # ファイルパスを扱うためのライブラリをインポート
+import pandas as pd      # CSVファイルを扱うためのpandasライブラリをインポート
 
 
 def pro_gamma_convolution_custom_path():
     """
     IDLのpro gamma_convolutionをPythonに変換したものです。
     入力・出力のファイルパスを環境に合わせて指定しています。
+    mcparams*.csvから視線速度Vmsを読み込むように変更。
     """
     # --- 0. ファイルパスの設定 (Path Setup) ---
     # 作業の基点となるディレクトリを指定
     # Windowsのパスは、先頭に 'r' を付けるとバックスラッシュ(\)を正しく扱えます
     base_dir = Path(r'C:\Users\hanac\University\Senior\Mercury\Haleakala2025')
     output_dir = Path(r'\Users\hanac\University\Senior\Mercury\Haleakala2025\output')
+
     # 入力ファイルのフルパスを構築
     input_filename = base_dir / 'solarspectrum.txt'
+    # Vmsを読み込むCSVファイルのパス
+    csv_filename = Path("mcparams20250613.csv")#下にもあるよ
 
     # 出力ディレクトリのパスを構築
     output_dir = output_dir / 'gamma_factor'
@@ -23,8 +28,27 @@ def pro_gamma_convolution_custom_path():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. 初期化 (Initialization) ---
-    day = '20250507'
-    Vms = -8.715907 # 視線速度 (km/s)
+    day = '20250613' # ここ忘れずに！！！！
+
+    # --- Vmsの読み込み (Load Vms from CSV) ---
+    try:
+        # CSVファイルを読み込む (1行目がヘッダーとして扱われる)
+        params_df = pd.read_csv(csv_filename)
+        # 'mercury_sun_radial_velocity_km_s'列の最初の値(0番目の行)を取得
+        Vms = params_df['mercury_sun_radial_velocity_km_s'].iloc[0]
+        print(f"CSVから視線速度を読み込みました: Vms = {Vms:.6f} km/s")
+        print("-" * 30)
+    except FileNotFoundError:
+        print(f"エラー: パラメータファイルが見つかりません。")
+        print(f"指定されたパスを確認してください: {csv_filename}")
+        return
+    except KeyError:
+        print(f"エラー: CSVファイルに 'mercury_sun_radial_velocity_km_s' の列が見つかりません。")
+        return
+    except Exception as e:
+        print(f"パラメータファイルの読み込み中にエラーが発生しました: {e}")
+        return
+
     im = 5757  # データ点数
 
     # 波長関連のパラメータ (nm)
@@ -110,7 +134,7 @@ def pro_gamma_convolution_custom_path():
 
     # --- 6. ファイル出力 (Output) ---
     # 出力ファイル名を構築 (gamma_factorフォルダ内に作成)
-    output_filename = output_dir / f'gamma_{day}_test.txt'
+    output_filename = output_dir / f'gamma_{day}.txt'
     with open(output_filename, 'w') as f:
         f.write(f'{wl0[id1]:.8f} {gamma0:.8f}\n')
 

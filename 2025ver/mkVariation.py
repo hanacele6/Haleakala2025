@@ -9,7 +9,7 @@ import sys
 if __name__ == '__main__':
     # --- 基本設定 ---
     # 処理したい日付のリスト。ここに日付を追加すれば、自動で集計対象になります。
-    days_to_process = ["20250501", "20250502", "20250503"]  # 例
+    days_to_process = ["20250501", "20250502", "20250507", "20250511", "20250514"]  # 例
 
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     # --- 1. 位相角(PA)補正の準備 ---
     try:
         # 補正ファイルを読み込み、2次の多項式でフィットする
-        pa_data, cf_data = np.loadtxt(correction_file, unpack=True)
+        pa_data, cf_data = np.loadtxt(correction_file, usecols=(0, 1), unpack=True)
         pa_correction_coeffs = np.polyfit(pa_data, cf_data, 2)
         print("位相角補正ファイルを読み込み、多項式フィットを実行しました。")
     except FileNotFoundError:
@@ -53,16 +53,22 @@ if __name__ == '__main__':
             continue
 
         # --- 2b. その日の詳細なパラメータをCSVから読み込む ---
-        csv_file_path = base_dir / "2025ver" / f"mcparams{day[:6]}.csv"
+        csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
         try:
             df = pd.read_csv(csv_file_path)
-            # 日付とTypeで該当する最初の行を特定
-            obs_row = df[(df['Date_UT'].str.startswith(day)) & (df['Type'] == 'MERCURY')].iloc[0]
+            
+            type_match_df = df[df['Type'].str.strip() == 'MERCURY']
+            if type_match_df.empty:
+                print(f"    -> 警告: CSVにTypeが'MERCURY'の行が見つかりません。スキップします。")
+                continue
+
+            # 条件を満たす最初の行を取得
+            obs_row = type_match_df.iloc[0]
 
             # ↓↓↓ CSVのヘッダー名に合わせて、以下のキーを修正してください ↓↓↓
-            Rms = obs_row['heliocentric_distance_au']  # 太陽心距離
-            beta = obs_row['ecliptic_lat_deg']  # 黄緯
-            elon = obs_row['ecliptic_lon_deg']  # 黄経
+            Rms = obs_row['mercury_sun_distance_au']  # 太陽心距離
+            beta = obs_row['ecliptic_latitude_deg']  # 黄緯
+            elon = obs_row['ecliptic_longitude_deg']  # 黄経
 
         except (FileNotFoundError, KeyError, IndexError) as e:
             print(

@@ -171,6 +171,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
 
         # ホワイトフラット補正
         if apply_wl_flat and spFlt is not None:
+
             # ゼロ除算を避けるため、フラットの値が小さい部分は補正しないなどの工夫も有効
             flat_j = spFlt[j, :]
             valid_flat = flat_j > 1e-6  # 極端に小さい値を除外
@@ -437,10 +438,10 @@ if __name__ == "__main__":
 
     # 1. ベースディレクトリとCSVファイルのパス
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    csv_file_path = base_dir / "2025ver" / "mcparams202505.csv"
+    csv_file_path = base_dir / "2025ver" / "mcparams20250613.csv"
 
     # 2. データが格納されているディレクトリ
-    data_dir = base_dir / "output/20250501/"
+    data_dir = base_dir / "output/20250613/" #ここ忘れずに！！！
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
     master_wl_flat_name = ("master_led")
@@ -456,6 +457,7 @@ if __name__ == "__main__":
 
     all_fibers = np.arange(120)
     bad_fibers = [6, 49, 69, 89, 94,109,117]
+    #bad_fibers.extend(range(86, 120))
     good_fibers = np.setdiff1d(all_fibers, bad_fibers)
 
     header_info = {

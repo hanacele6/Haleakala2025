@@ -259,10 +259,10 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
 
 
 if __name__ == "__main__":
-    date = '20250501'
+    date = '20250616'
     base_output_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
     output_dir = base_output_dir / date
-    csv_file_path = Path("mcparams202505.csv")
+    csv_file_path = Path("mcparams20250616.csv")
     TRACE_TARGET_DESCRIPTION = 'LED'
     dark_file = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/dk01h_20s.sp.fits")
     config = {

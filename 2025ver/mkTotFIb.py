@@ -113,15 +113,15 @@ if __name__ == "__main__":
 
     # 1. & 2. & 3. (変更なし)
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    data_dir = base_dir / "output/20250501/"
-    csv_file_path = base_dir / "2025ver" / "mcparams202505.csv"
+    data_dir = base_dir / "output/20250613/"
+    csv_file_path = base_dir / "2025ver" / "mcparams20250613.csv"
     TYPES_TO_PROCESS = ['MERCURY']
     type_col = 'Type'
     fiber_defs = {
         'NFIBX': 10,
         'NFIBY': 12,
-        'target_rows': [ 4, 5, 6, 7],#水星あるとこ
-        'background_rows': [0, 1, 2, 3, 8, 9, 10, 11]#水星ないとこ
+        'target_rows': [ 3, 4, 5, 6, 7],#水星あるとこ
+        'background_rows': [0, 1, 2, 8, 9, 10, 11]#水星ないとこ
     }
 
     # 4. ★★★ スペクトル切り出し設定 ★★★

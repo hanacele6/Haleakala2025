@@ -8,16 +8,16 @@ from scipy.ndimage import median_filter
 # --- ユーザー設定 ---
 
 # 処理結果を保存するディレクトリ
-date = "20250501"
+date = "20250617"#忘れずに！！！
 output_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
 output_dir = output_path / date
 
 # 処理対象のファイルリストが書かれたCSVファイル
-CSV_FILE = "mcparams202505.csv"
+CSV_FILE = "mcparams20250617.csv"
 
 # ホットピクセル除去のパラメータ
 MEDIAN_FILTER_KERNEL_SIZE = 3
-SIGMA_THRESHOLD = 3000.0  # 自動除去のしきい値
+SIGMA_THRESHOLD = 1000.0  # 自動除去のしきい値
 
 # 手動で補正したい領域があれば、ここのコメントを外して指定
 MANUAL_ROI_LIST = [
