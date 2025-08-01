@@ -13,7 +13,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     d2領域の除外をON/OFFできるバージョン。
     """
     sft_val = constants['sft']
-    sft_suffix = f"_sft{int(sft_val * 1000):03d}"  # 例: sft=0.001 -> _sft001
+    sft_suffix = f"_sft{int(sft_val * 10000):03d}"  # 例: sft=0.001 -> _sft01
     base_filename = f"{input_dat_path.stem}{sft_suffix}"
 
     print(f"\n  -> Processing: {base_filename} (sft={sft_val})")
@@ -44,7 +44,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 
     # モデル計算に必要な2種類の太陽光スペクトルの波長軸を計算
     # 1. 直接光 (sftシフト適用)
-    direct_solar_wl = sol_data[:, 0] - sft
+    direct_solar_wl = sol_data[:, 0] - sft #- 0.29
     # 2. 水星反射光 (sftシフト + ドップラーシフト適用)
     reflected_solar_wl = direct_solar_wl * (1 + Vms / c) * (1 + Vme / c)
 
@@ -271,7 +271,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250613"
+    day = "20250701"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -295,7 +295,8 @@ if __name__ == "__main__":
     }
 
     # 試行するsft値のリスト
-    sft_values_to_test = [0.001, 0.002, 0.003]
+    #sft_values_to_test = [0.001, 0.002, 0.003]
+    sft_values_to_test = [-0.0005, 0.0005, 0.0015]
 
     try:
         df = pd.read_csv(csv_file_path)

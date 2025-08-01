@@ -18,7 +18,7 @@ def pro_gamma_convolution_custom_path():
     # 入力ファイルのフルパスを構築
     input_filename = base_dir / 'solarspectrum.txt'
     # Vmsを読み込むCSVファイルのパス
-    csv_filename = Path("mcparams20250613.csv")#下にもあるよ
+    csv_filename = Path("mcparams20250701.csv")#下にもあるよ
 
     # 出力ディレクトリのパスを構築
     output_dir = output_dir / 'gamma_factor'
@@ -28,7 +28,7 @@ def pro_gamma_convolution_custom_path():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. 初期化 (Initialization) ---
-    day = '20250613' # ここ忘れずに！！！！
+    day = '20250701' # ここ忘れずに！！！！
 
     # --- Vmsの読み込み (Load Vms from CSV) ---
     try:

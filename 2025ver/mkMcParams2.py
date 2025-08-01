@@ -1,4 +1,3 @@
-#TAAはあやしい
 import pandas as pd
 import numpy as np
 from astropy.io import fits
@@ -8,7 +7,7 @@ import os
 # --- 設定項目 ---
 # ご自身の環境に合わせて、SPICEカーネルをまとめたフォルダのパスに変更してください
 SPICE_KERNEL_DIR = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/kernels"
-CSV_FILE = "mcparams202505.csv"
+CSV_FILE = "mcparams20250630.csv"
 
 
 def planazel(et, target='MERCURY', lon=203.742, lat=20.708, alt=3043.0):
@@ -38,27 +37,34 @@ def update_csv_with_spice(csv_path, kernel_dir):
 
     df = pd.read_csv(csv_path)
 
+    # ▼▼▼【変更点】ユーザーが使う最初の2列を特定する▼▼▼
     if len(df.columns) < 2:
         print(f"エラー: CSVファイルには少なくとも2列（ファイルパス、説明）が必要です。")
         spice.kclear()
         return
-
+    # ユーザーが使用する列（最初の2列）の名前を保持
     user_cols = df.columns[:2].tolist()
-    fits_col_name = user_cols[0]
+    fits_col_name = user_cols[0]  # 1列目はFITSパス
 
+    # ▼▼▼【変更点】スクリプトが書き込む列を定義する▼▼▼
+    # 3列目にくる日付の列
     date_col = ['DATE-OBS']
+    # 4列目以降にくる計算結果の列
     numeric_cols = [
         'apparent_diameter_arcsec', 'mercury_sun_distance_au',
         'mercury_sun_radial_velocity_km_s', 'mercury_earth_radial_velocity_km_s',
         'phase_angle_deg', 'true_anomaly_deg',
         'ecliptic_longitude_deg', 'ecliptic_latitude_deg'
     ]
+    # スクリプトが管理する全ての列
     script_cols = date_col + numeric_cols
 
+    # DataFrameにスクリプト管理列がなければ作成
     for col in script_cols:
         if col not in df.columns:
             df[col] = pd.NA
 
+    # 計算が必要な行を特定（スクリプト管理列のいずれかが空の行）
     rows_to_process = df[df[script_cols].isnull().any(axis=1)]
     if rows_to_process.empty:
         print("新しいFITSファイルの追加はありません。すべてのデータは計算済みです。")
@@ -77,6 +83,7 @@ def update_csv_with_spice(csv_path, kernel_dir):
         radius_km = 2439.7
 
     for index, row in rows_to_process.iterrows():
+        # 1列目の名前を使ってFITSパスを取得
         fits_path = row[fits_col_name]
         if not (isinstance(fits_path, str) and os.path.exists(fits_path)):
             print(f"ファイルが見つからないかパスが不正です: {fits_path}")
@@ -105,13 +112,11 @@ def update_csv_with_spice(csv_path, kernel_dir):
             beta_deg = lat_rad * spice.dpr()
 
             orbital_elements = spice.oscelt(posSP, et, mu_sun)
-
-            # ▼▼▼【修正箇所】▼▼▼
-            # 複雑な手動計算をやめ、SPICEの計算結果(6番目の要素)を直接利用する
             true_anomaly_deg = np.degrees(orbital_elements[5])
 
-            # 計算結果をDataFrameに書き込む
+            # 日時を書き込む
             df.loc[index, 'DATE-OBS'] = date_obs_str
+            # その他の計算結果を書き込む
             df.loc[index, 'apparent_diameter_arcsec'] = apparent_diameter_arcsec
             df.loc[index, 'mercury_sun_distance_au'] = mercury_sun_dist_km / AU
             df.loc[index, 'mercury_sun_radial_velocity_km_s'] = mercury_sun_radial_velocity
@@ -126,9 +131,12 @@ def update_csv_with_spice(csv_path, kernel_dir):
         except Exception as e:
             print(f"ファイル '{os.path.basename(fits_path)}' の処理中にエラーが発生しました: {e}")
 
+    # ▼▼▼【変更点】最終的な列の順番を定義し、並べ替える▼▼▼
     final_column_order = user_cols + script_cols
+    # DataFrameを定義した順序に並べ替える
     df_final = df[final_column_order]
 
+    # 並べ替えたDataFrameをCSVに保存
     df_final.to_csv(csv_path, index=False, float_format='%.6f')
     print(f"\n計算と追記が完了し、'{csv_path}' を更新しました。")
     print("\n--- 更新後のファイルプレビュー ---")

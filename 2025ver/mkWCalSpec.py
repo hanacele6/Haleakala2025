@@ -438,10 +438,11 @@ if __name__ == "__main__":
 
     # 1. ベースディレクトリとCSVファイルのパス
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    csv_file_path = base_dir / "2025ver" / "mcparams20250613.csv"
+    csv_file_path = base_dir / "2025ver" / "mcparams20250701.csv"
 
     # 2. データが格納されているディレクトリ
-    data_dir = base_dir / "output/20250613/" #ここ忘れずに！！！
+    data_dir = base_dir / "output/20250701/" #ここ忘れずに！！！
+    data_dir2 = base_dir / "output/20250615/"  # skyがないとき用
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
     master_wl_flat_name = ("master_led")
@@ -457,7 +458,8 @@ if __name__ == "__main__":
 
     all_fibers = np.arange(120)
     bad_fibers = [6, 49, 69, 89, 94,109,117]
-    #bad_fibers.extend(range(86, 120))
+    #bad_fibers.extend(range(70, 120))
+    bad_fibers.extend(range(0, 6))
     good_fibers = np.setdiff1d(all_fibers, bad_fibers)
 
     header_info = {

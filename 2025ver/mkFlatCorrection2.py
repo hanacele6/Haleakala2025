@@ -11,9 +11,9 @@ import sys
 # ルートディレクトリ
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 # 日付フォルダ
-date = "20250501"
+date = "20250614"
 # 観測ログのCSVファイル
-csv_file_path = Path( "mcparams202505.csv")
+csv_file_path = Path( "mcparams20250614.csv")
 # --------------------------------------------------------------------------
 
 # --- ディレクトリ設定 ---

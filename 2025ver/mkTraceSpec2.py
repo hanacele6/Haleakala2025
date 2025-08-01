@@ -9,10 +9,10 @@ import time
 import re  # 番号を抽出するためにインポート
 
 # --- 設定値 (Setting Values) ---
-date = '20250615'
+date = '20250710' #7mada
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 output_dir = base_dir / f"output/{date}"
-csv_file_path = Path("mcparams20250615.csv")  # 基準となるCSVファイル
+csv_file_path = Path("mcparams20250710.csv")  # 基準となるCSVファイル
 
 # ディレクトリが存在しない場合に作成
 output_dir.mkdir(parents=True, exist_ok=True)
@@ -56,6 +56,7 @@ NY = 1024
 ifibm = fibp.shape[0]
 hwid = 3
 
+type_counters = {}
 
 # --- Gauss関数定義 (Gaussian function for curve_fit) ---
 def gaussian(x, amplitude, mean, stddev, offset):
@@ -179,14 +180,11 @@ with open(poserr_path, 'w') as lunw2:
         # CSVの2列目から説明を取得
         description = df.iloc[ifile][desc_col]
 
-        # 元のファイル名から末尾の番号を抽出 (例: '..._1' -> '1')
-        stem = original_path.stem
-        match = re.search(r'_(\d+)$', stem)
-        if match:
-            file_num = match.group(1)
-        else:
-            # 見つからなければ通し番号を使う
-            file_num = str(ifile + 1)
+        # 説明(description)ごとのカウンターを更新し、番号を取得
+        # .get(description, 0) で、初めてのキーなら0を取得
+        current_count = type_counters.get(description, 0) + 1
+        type_counters[description] = current_count  # カウンターを更新
+        file_num = str(current_count)
 
         # 新しいファイル名を組み立てる
         output_file_name = f"{description}{file_num}_tr.fits"

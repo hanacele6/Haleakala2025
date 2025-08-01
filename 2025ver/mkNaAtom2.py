@@ -44,7 +44,7 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config):
     # --- 3つのスペクトルそれぞれにフィットを実行 ---
     for name, spectrum in spectra_to_fit.items():
         # フィット範囲を決定
-        center_idx_abs = (iim // 2) -15
+        center_idx_abs = (iim // 2) + 5
         dw = fit_config['fit_half_width_pix']
         start_idx_abs = center_idx_abs - dw
         end_idx_abs = center_idx_abs + dw
@@ -137,22 +137,20 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config):
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250613"
+    day = "20250701"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # sftの値（ファイル名から探すために使用）
-    sft_map = {
-        'main': '002',
-        'minus': '001',
-        'plus': '003'
-    }
+    #sft_map = {'main': '002','minus': '001','plus': '003'}
+    #sft_map = {'main': '02','minus': '01','plus': '03'}#dawn
+    sft_map = {'main': '-05', 'minus': '005', 'plus': '015'}#dusk
 
     # --- フィッティングとプロットに関する設定 ---
     FIT_CONFIG = {
-        'fit_half_width_pix': 20,
-        'noise_wing_width_pix': 60
+        'fit_half_width_pix': 14,
+        'noise_wing_width_pix': 30#60
     }
     PLOT_CONFIG = {
         'create_plots': True,

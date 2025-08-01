@@ -7,7 +7,7 @@ import os
 # --- 設定項目 ---
 # ご自身の環境に合わせて、SPICEカーネルをまとめたフォルダのパスに変更してください
 SPICE_KERNEL_DIR = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/kernels"
-CSV_FILE = "mcparams2025.csv"
+CSV_FILE = "mcparams20250710.csv"
 
 
 def planazel(et, target='MERCURY', lon=203.742, lat=20.708, alt=3043.0):

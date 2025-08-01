@@ -8,12 +8,12 @@ from scipy.ndimage import median_filter
 # --- ユーザー設定 ---
 
 # 処理結果を保存するディレクトリ
-date = "20250617"#忘れずに！！！
+date = "20250710"#忘れずに！！！
 output_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
 output_dir = output_path / date
 
 # 処理対象のファイルリストが書かれたCSVファイル
-CSV_FILE = "mcparams20250617.csv"
+CSV_FILE = "mcparams20250710.csv"
 
 # ホットピクセル除去のパラメータ
 MEDIAN_FILTER_KERNEL_SIZE = 3

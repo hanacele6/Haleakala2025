@@ -9,7 +9,7 @@ import sys
 if __name__ == '__main__':
     # --- 基本設定 ---
     # 処理したい日付のリスト。ここに日付を追加すれば、自動で集計対象になります。
-    days_to_process = ["20250501", "20250502", "20250507", "20250511", "20250514"]  # 例
+    days_to_process = ["20250612", "20250613", "20250614", "20250615", "20250616", "20250617"]  # 例
 
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 
