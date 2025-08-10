@@ -13,7 +13,7 @@ import sys
 def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
                      sky_flat_fsp_path=None, params=None,
                      save_plots=False, representative_fiber_plot=None,
-                     apply_wl_flat=True):
+                     apply_wl_flat=True , processing_range=None):
     """
     2Dスペクトルを波長校正し、等間隔の波長軸に再サンプリングします。
 
@@ -40,6 +40,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     base_filename = os.path.basename(input_fsp_path).replace(".fits", "")
     output_dir = os.path.dirname(input_fsp_path)
     file_wc = os.path.join(output_dir, f"{base_filename}.wc.fits")
+    #file_wc = os.path.join(output_dir, f"{base_filename}.wc_test.fits")
     file_dcb = os.path.join(output_dir, f"{base_filename}.dcb.fits")
     file_img = os.path.join(output_dir, f"{base_filename}.img.fits")
     plot_output_dir = os.path.join(output_dir, "wcal_plots", base_filename)
@@ -47,6 +48,10 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     if save_plots:
         os.makedirs(plot_output_dir, exist_ok=True)
         print(f"  -> Diagnostic plots will be saved to '{plot_output_dir}'")
+
+    #PROCESS_WAV_MIN = 588.39
+    #PROCESS_WAV_MAX = 591.417
+    #print(f"  -> Processing with fixed wavelength range: {PROCESS_WAV_MIN:.2f} - {PROCESS_WAV_MAX:.2f} nm")
 
     # --- FITSファイルの読み込み ---
     try:
@@ -59,6 +64,9 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         print(f"  -> Reading wavelength map: {os.path.basename(wavmap_path)}")
         with fits.open(wavmap_path) as hdul:
             wmp = hdul[0].data.astype(np.float64)
+            wavair_factor = 1.000276
+            #wavair_factor = 1.000
+            wmp = wmp * wavair_factor
 
         spFlt = None
         if apply_wl_flat and wl_flat_path and os.path.exists(wl_flat_path):
@@ -99,20 +107,63 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         return
     # --- 波長軸の再定義（リニアな等間隔グリッドを作成） ---
     wmp_shifted = wmp + wavshift
-    wav_min_end = np.nanmax(wmp_shifted[iFibAct, 0])
-    wav_max_start = np.nanmin(wmp_shifted[iFibAct, nx - 1])
 
-    # 昇順か降順かを判定
-    if wav_min_end < wav_max_start:
-        rwmin, rwmax_orig = wav_min_end, wav_max_start
+    # --- 波長軸の再定義（リニアな等間隔グリッドを作成） ---
+    wmp_shifted = wmp + wavshift
+
+    if processing_range:
+        print(
+            f"  -> Defining new grid based on target range density: {processing_range[0]:.4f} - {processing_range[1]:.4f} nm")
+
+        # --- ここからが新しいロジック ---
+        # 1. target_range内に元々ピクセルが何個あるか、全ファイバーで平均を取る
+        pixels_in_range = []
+        for j in iFibAct:
+            wmp_j = wmp_shifted[j, :]
+            # target_range内にあるピクセルの数を数える
+            count = np.sum((wmp_j >= processing_range[0]) & (wmp_j <= processing_range[1]))
+            if count > 0:
+                pixels_in_range.append(count)
+
+        if not pixels_in_range:
+            raise ValueError("No valid pixels found within the target_range for any fiber.")
+
+        # 平均ピクセル数を計算（小数点以下を丸めて整数に）
+        avg_pixels_in_range = int(np.round(np.mean(pixels_in_range)))
+        print(f"     Average original pixels in target range: {avg_pixels_in_range}")
+
+        # 2. target_rangeの幅と平均ピクセル数から、新しい波長ステップを定義
+        target_width = processing_range[1] - processing_range[0]
+        # 新しいステップ (nm/pixel)
+        rwstep_f = target_width / (avg_pixels_in_range - 1) if avg_pixels_in_range > 1 else target_width
+
+        # 3. 新しい波長軸を構築する (元の総ピクセル数nxは維持する)
+        # target_rangeが中心に来るように、全体の開始波長を決める
+        rwmin_f = processing_range[0] - (rwstep_f * ((nx - avg_pixels_in_range) / 2))
+        wavs = rwmin_f + rwstep_f * np.arange(nx, dtype=np.float64)
+        # --- 新しいロジックここまで ---
+
     else:
-        rwmin, rwmax_orig = wav_max_start, wav_min_end
+        # processing_rangeが指定されていない場合は、従来通りの自動設定
+        wav_min_end = np.nanmax(wmp_shifted[iFibAct, 0])
+        wav_max_start = np.nanmin(wmp_shifted[iFibAct, nx - 1])
+        if wav_min_end < wav_max_start:
+            rwmin, rwmax_orig = wav_min_end, wav_max_start
+        else:
+            rwmin, rwmax_orig = wav_max_start, wav_min_end
 
-    rwstep = np.abs((rwmax_orig - rwmin) / (nx - 1))
-    rwmin_f = float(f"{rwmin:.8g}")
-    rwstep_f = float(f"{rwstep:.4g}")
-    wavs = rwmin_f + rwstep_f * np.arange(nx, dtype=np.float64)
+        rwstep = np.abs((rwmax_orig - rwmin) / (nx - 1))
+        rwmin_f = float(f"{rwmin:.8g}")
+        rwstep_f = float(f"{rwstep:.4g}")
+        wavs = rwmin_f + rwstep_f * np.arange(nx, dtype=np.float64)
+
     rwmax_f = wavs[-1]
+
+    print(f"  -> Resampling to new linear wavelength axis:")
+    print(f"     WAV_MIN : {rwmin_f:.4f} nm")
+    print(f"     WAV_MAX : {rwmax_f:.4f} nm")
+    print(f"     WAV_STEP: {rwstep_f:.5f} nm/pix")
+
     rwmid_f = (rwmin_f + rwmax_f) / 2
 
     print(f"  -> Resampling to new linear wavelength axis:")
@@ -134,56 +185,152 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     print("  -> Processing and resampling each fiber...")
     # 1. ホワイトフラット補正と再サンプリング
     for j in iFibAct:
-        # --- 各ファイバーの処理（最終診断モード） ---
-        print("  -> Processing and resampling each fiber (ULTIMATE DIAGNOSTIC MODE)...")
-        # このループは最初の有効なファイバーを処理した後にbreakで終了します
-        for j in iFibAct:
-            wmp_j = wmp_shifted[j, :]
-            if np.all(np.isnan(wmp_j)):
-                # 無効なファイバーは通常通りスキップ
-                continue
+        # --- ここから修正 ---
+        # このファイバーの波長データが有効かチェック
+        wmp_j = wmp_shifted[j, :]
+        if np.all(np.isnan(wmp_j)):
+            print(f"    -> WARNING: Fiber {j} has no valid wavelength data. Skipping.")
+            continue  # このファイバーをスキップして次のループへ
 
-            # フラット補正がOFFなので、入力データをそのまま使う
-            spDat_to_resample = spDat[j, :]
+            # 1. 波長マップがNaNだけ、または無限大を含む場合はスキップ
+        if np.all(np.isnan(wmp_j)) or not np.all(np.isfinite(wmp_j)):
+            print(f"    -> WARNING: Fiber {j} has invalid (NaN/Inf) wavelength data. Skipping.")
+            continue
 
-            # --- ここからが最終診断の本丸です ---
-            print("\n" + "#" * 15 + f" ファイバー {j} の詳細診断 " + "#" * 15)
+            # 2. 波長が単調増加または単調減少するかをチェック
+        diffs = np.diff(wmp_j)
+        is_monotonic_increasing = np.all(diffs > 0)
+        is_monotonic_decreasing = np.all(diffs < 0)
 
-            # ステップ1: 補間オブジェクトを作成
-            print("ステップ1: interp1d オブジェクトを作成します...")
-            try:
-                ifunct = interp1d(wmp_j, spDat_to_resample, kind=interp_kind, fill_value="extrapolate",
+        if not (is_monotonic_increasing or is_monotonic_decreasing):
+            print(f"    -> WARNING: Fiber {j} is not monotonic. Skipping.")
+            continue  # 条件を満たさない場合、このファイバーの処理を中断し、次のループへ
+
+        spDat_to_resample = spDat[j, :].copy()  # 元データをコピー
+        spSky_to_resample = spSky[j, :].copy() if spSky is not None else None
+
+        # ホワイトフラット補正
+        if apply_wl_flat and spFlt is not None:
+
+            # ゼロ除算を避けるため、フラットの値が小さい部分は補正しないなどの工夫も有効
+            flat_j = spFlt[j, :]
+            valid_flat = flat_j > 1e-6  # 極端に小さい値を除外
+            median_flat = np.median(flat_j[512:1536])
+
+            # spDatFlt (プロット用) を計算
+            spDatFlt[j, valid_flat] = (spDat[j, valid_flat] / flat_j[valid_flat]) * median_flat
+            # 補間するデータも更新
+            spDat_to_resample = spDatFlt[j, :]
+
+            # スカイデータも同様に処理
+            if spSky is not None:
+                # spSkyFlt (プロット用) を計算し、補間するデータも更新
+                spSky_to_resample_temp = np.zeros_like(spSky[j, :])
+                spSky_to_resample_temp[valid_flat] = (spSky[j, valid_flat] / flat_j[valid_flat]) * median_flat
+                spSky_to_resample = spSky_to_resample_temp
+        else:
+            # フラット補正をしない場合、プロット用の spDatFlt には元データを入れておく
+            spDatFlt[j, :] = spDat_to_resample
+
+
+        # 波長軸に沿って再サンプリング
+        ifunct = interp1d(wmp_j, spDat_to_resample, kind=interp_kind, fill_value="extrapolate",
+                          bounds_error=False)
+        spDatWC[j, :] = ifunct(wavs)
+        if spSky is not None and spSky_to_resample is not None:
+            ifunct_sky = interp1d(wmp_j, spSky_to_resample, kind=interp_kind, fill_value="extrapolate",
                                   bounds_error=False)
-                print(" -> 成功。")
-            except Exception as e:
-                print(f" -> 失敗。エラー: {e}")
-                break
+            spSkyWC[j, :] = ifunct_sky(wavs)
 
-            # ステップ2: 新しい波長軸で値を評価（補間）
-            print("ステップ2: 新しい波長軸(wavs)で値を評価します...")
-            try:
-                resampled_data_row = ifunct(wavs)
-                print(" -> 成功。")
-            except Exception as e:
-                print(f" -> 失敗。エラー: {e}")
-                break
+#debug
+        """
+        diffs = np.diff(wmp_j)
+        if np.any(diffs <= 0):
+            print(f"!!! 問題発生: ファイバー {j} で波長が単調増加していません。")
+            problem_indices = np.where(diffs <= 0)[0]
+            for idx in problem_indices:
+                print(f"  -> ピクセル {idx} と {idx + 1} の間で問題発生:")
+                print(f"     wmp[{idx}] = {wmp_j[idx]}, wmp[{idx + 1}] = {wmp_j[idx + 1]}")
 
-            # ステップ3: 評価結果の統計情報を表示
-            print("ステップ3: 評価結果の統計情報を表示します...")
-            print(f"  -> 補間後のデータ(1行分)の平均値: {np.nanmean(resampled_data_row)}")
-            print(f"  -> 補間後のデータ(1行分)の最大値: {np.nanmax(resampled_data_row)}")
-            print(f"  -> サンプルデータ [1020:1030]: {resampled_data_row[1020:1030]}")
 
-            # ステップ4: このデータをspDatWCに代入
-            print(f"ステップ4: 結果を spDatWC の {j} 行目に代入します...")
-            spDatWC[j, :] = resampled_data_row
-            print(f" -> 成功。spDatWCの{j}行目の平均値: {np.nanmean(spDatWC[j, :])}")
+        # 波長軸に沿って再サンプリング (正しいデータを使用)
+        ifunct = interp1d(wmp_j, spDat_to_resample, kind=interp_kind, fill_value="extrapolate",
+                          bounds_error=False)
+        spDatWC[j, :] = ifunct(wavs)
 
-            print("\n最初の有効なファイバーの処理が完了しました。ここで診断を終了します。")
-            # 最初の有効なファイバーだけで強制終了して確認
-            break
+        # スカイデータも同様に処理
+        if spSky is not None and spSky_to_resample is not None:
+            ifunct_sky = interp1d(wmp_j, spSky_to_resample, kind=interp_kind, fill_value="extrapolate",
+                                  bounds_error=False)
+            spSkyWC[j, :] = ifunct_sky(wavs)
+        """
 
-            # (以降の処理は変更なし)
+#波長範囲制限
+        """
+        valid_indices_mask = (wmp_j >= PROCESS_WAV_MIN) & (wmp_j <= PROCESS_WAV_MAX)
+
+        if not np.any(valid_indices_mask):
+            print(f"    -> WARNING: Fiber {j} has no data in the specified range. Skipping.")
+            continue
+
+        # 2. 有効なデータ範囲を切り出す
+        valid_wmp = wmp_j[valid_indices_mask]
+        valid_spec = spDat_to_resample[valid_indices_mask]
+
+        if len(valid_wmp) < 10:
+            print(f"    -> WARNING: Fiber {j} has insufficient valid data after trimming. Skipping.")
+            continue
+
+        # 3. 値の重複を削除し、ユニークな値だけを取得する（最終防衛ライン）
+        #unique_wmp, unique_indices = np.unique(valid_wmp, return_index=True)
+        #unique_spec = valid_spec[unique_indices]
+
+        #if len(unique_wmp) < 10:
+        #    print(f"    -> WARNING: Fiber {j} has insufficient unique data. Skipping.")
+        #    continue
+
+        # 4. 安全なデータだけで補間関数を作成
+        #ifunct = interp1d(unique_wmp, unique_spec, kind=interp_kind,
+        #                  fill_value="extrapolate", bounds_error=False)
+        ifunct = interp1d(valid_wmp, valid_spec, kind=interp_kind,
+                          fill_value="extrapolate", bounds_error=False)
+        spDatWC[j, :] = ifunct(wavs)
+
+        # スカイデータも同様に処理
+        if spSky is not None and spSky_to_resample is not None:
+            # スカイデータも同じマスクで切り出す
+            valid_sky_spec = spSky_to_resample[valid_indices_mask]
+            #unique_sky_spec = valid_sky_spec[unique_indices]
+
+            #ifunct_sky = interp1d(unique_wmp, unique_sky_spec, kind=interp_kind,
+            #                      fill_value="extrapolate", bounds_error=False)
+            ifunct_sky = interp1d(valid_wmp, valid_sky_spec, kind=interp_kind,
+                                  fill_value="extrapolate", bounds_error=False)
+            spSkyWC[j, :] = ifunct_sky(wavs)
+        """
+
+    # 2. スカイフラット補正（ファイバー間の感度補正）
+    if spSky is not None:
+        print("  -> Applying sky flat correction...")
+        temp_sky_median = np.zeros(ny)
+        for j in iFibAct:
+            # スキップされたファイバーなどでspSkyWCが0のままの可能性がある
+            if np.any(spSkyWC[j, :]):
+                temp_sky_median[j] = np.median(spSkyWC[j, 512:1536])
+
+        median_of_medians = np.median(temp_sky_median[iFibAct])
+
+        # FibFFを1で初期化（補正係数=1は「何もしない」という意味）
+        FibFF = np.ones(ny)
+
+        # スカイの明るさが0でない、有効なファイバーだけを対象に補正係数を計算
+        valid_fibers = (temp_sky_median != 0)
+        FibFF[valid_fibers] = median_of_medians / temp_sky_median[valid_fibers]
+
+        # 計算した補正係数を適用
+        for j in iFibAct:
+            spDatWC[j, :] *= FibFF[j]
+
     # 3. 最終的な画像とデータキューブを作成
     for j in iFibAct:
         iy, ix = j // nFibX, j % nFibX
@@ -328,17 +475,21 @@ if __name__ == "__main__":
     from pathlib import Path
 
     # --- 基本設定（ユーザーが環境に合わせて変更する部分） ---
+    #600 to 600
 
     # 1. ベースディレクトリとCSVファイルのパス
+    day = "20250705"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    csv_file_path = base_dir / "2025ver" / "mcparams202505.csv"
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # 2. データが格納されているディレクトリ
-    data_dir = base_dir / "output/20250501/"
+    data_dir = base_dir / "output" / day
+    data_dir2 = base_dir / "output/20250511/"  # skyがないとき用
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
-    master_wl_flat_name = ("LED1_f")
-    master_sky_flat_name = "master_sky_f"
+    master_wl_flat_name = ("master_led")
+    master_sky_flat_name = "master_sky" #問題あり
+    #master_sky_flat_name = "master_sky_f" #問題なし
 
     # 4. 処理したいデータのタイプをリストで指定
     TYPES_TO_PROCESS = ['MERCURY']
@@ -347,26 +498,35 @@ if __name__ == "__main__":
     # CSVの列名を指定します (ファイル番号の列は不要になりました)
     type_col = 'Type'  # 'SKY', 'MERCURY'などが書かれた列のヘッダー名
 
-    header_params = {
+    all_fibers = np.arange(120)
+    bad_fibers = [6, 49, 69, 89, 94,109,117]
+    #bad_fibers.extend(range(70, 120))
+    bad_fibers.extend(range(0, 6))
+    good_fibers = np.setdiff1d(all_fibers, bad_fibers)
+
+    header_info = {
         'NFIBX': 10,
         'NFIBY': 12,
         # iFibAct: 有効なファイバー番号のリスト。以下は0から119まで全て有効な場合の例
-        'iFibAct': np.arange(120),
+        'iFibAct': good_fibers,
         # iFib: 全ファイバーのリスト。通常はiFibActと同じで良い
         'iFib': np.arange(120)
     }
 
+    target_range = (588.4993, 590.4566)
+
     # 6. その他のパラメータ
     params = {
         'wavshift': 0.0,
-        'interpolation_kind': 'quadratic'
+        'interpolation_kind': 'quadratic',
+        'header_info': header_info
     }
 
 
     print("--- 波長校正・再サンプリング処理を開始します ---")
     print(f"読み込むCSV: {csv_file_path}")
 
-    APPLY_WL_FLAT = False
+    APPLY_WL_FLAT = True
 
     # --- CSVの読み込み ---
     try:
@@ -396,12 +556,13 @@ if __name__ == "__main__":
         for i, (index, row) in enumerate(target_df.iterrows(), start=1):
 
             # 'MERCURY'とカウンター'1'から "MERCURY1_f" というベース名を作成
-            target_base_name = f"{process_type}{i}_f"
+            target_base_name = f"{process_type}{i}_tr"
             print(f"\n  ({i}/{len(target_df)}) 処理中: {target_base_name}")
 
             # 処理に必要なファイルパスを構築
             input_fsp = data_dir / f"{target_base_name}.fits"
             wavmap = data_dir / f"{master_sky_flat_name}.wmp.fits"
+            #wavmap = data_dir / f"sky01r_sp.wmp.fits"
             wl_flat = data_dir / f"{master_wl_flat_name}.fits"
             sky_flat = data_dir / f"{master_sky_flat_name}.fits"
 
@@ -419,7 +580,8 @@ if __name__ == "__main__":
                 #sky_flat_fsp_path=None,
                 params=params,
                 save_plots=False,
-                representative_fiber_plot=None
+                representative_fiber_plot=None,
+                processing_range = target_range
             )
 
     print("\n--- 全ての処理が完了しました ---")

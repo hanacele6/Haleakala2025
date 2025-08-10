@@ -259,17 +259,21 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
 
 
 if __name__ == "__main__":
-    date = '20250710'
+    date = '20150223'
+    base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     base_output_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
     output_dir = base_output_dir / date
-    csv_file_path = Path("mcparams20250710.csv") # 忘れずに！！！！
+    csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
     TRACE_TARGET_DESCRIPTION = 'LED'
     dark_file = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/dk01h_20s.sp.fits")
     config = {
         'nFibX': 10, 'nFibY': 12,
-        'iFibInact': [6, 49, 69, 89, 94, 109, 117],  # 使ってないファイバー
+        'iFibInact': [6, 49, 69, 89, 94, 109, 117],# 使ってないファイバー
+        #'iFibInact': [],# 使ってないファイバー
         'yFib0': 195, 'yFib1': 5.95, 'ypixFibWid': 6.0,
+        #'yFib0': 28, 'yFib1': 8.35, 'ypixFibWid': 5.0,
         'trace_interval_x': 1,  # fitを行う間隔
+        #'trace_interval_x': 4,
         'poly_fit_order': 6,
     }
 

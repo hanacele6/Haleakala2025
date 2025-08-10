@@ -13,7 +13,7 @@ import sys
 def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
                      sky_flat_fsp_path=None, params=None,
                      save_plots=False, representative_fiber_plot=None,
-                     apply_wl_flat=True):
+                     apply_wl_flat=True , processing_range=None):
     """
     2Dスペクトルを波長校正し、等間隔の波長軸に再サンプリングします。
 
@@ -107,17 +107,17 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         return
     # --- 波長軸の再定義（リニアな等間隔グリッドを作成） ---
     wmp_shifted = wmp + wavshift
-    wav_min_end = np.nanmax(wmp_shifted[iFibAct, 0])
-    wav_max_start = np.nanmin(wmp_shifted[iFibAct, nx - 1])
 
-     #昇順か降順かを判定
-    if wav_min_end < wav_max_start:
-        rwmin, rwmax_orig = wav_min_end, wav_max_start
+    if processing_range:
+        rwmin, rwmax_orig = processing_range
+        print(f"  -> Processing with specified wavelength range: {rwmin:.4f} - {rwmax_orig:.4f} nm")
     else:
-        rwmin, rwmax_orig = wav_max_start, wav_min_end
-
-    #rwmin = PROCESS_WAV_MIN
-    #rwmax_orig = PROCESS_WAV_MAX
+        wav_min_end = np.nanmax(wmp_shifted[iFibAct, 0])
+        wav_max_start = np.nanmin(wmp_shifted[iFibAct, nx - 1])
+        if wav_min_end < wav_max_start:
+            rwmin, rwmax_orig = wav_min_end, wav_max_start
+        else:
+            rwmin, rwmax_orig = wav_max_start, wav_min_end
 
     rwstep = np.abs((rwmax_orig - rwmin) / (nx - 1))
     rwmin_f = float(f"{rwmin:.8g}")
@@ -435,14 +435,15 @@ if __name__ == "__main__":
     from pathlib import Path
 
     # --- 基本設定（ユーザーが環境に合わせて変更する部分） ---
+    #600 to 2048
 
     # 1. ベースディレクトリとCSVファイルのパス
+    day  = "20250712"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    csv_file_path = base_dir / "2025ver" / "mcparams20250701.csv"
-
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
     # 2. データが格納されているディレクトリ
-    data_dir = base_dir / "output/20250701/" #ここ忘れずに！！！
-    data_dir2 = base_dir / "output/20250615/"  # skyがないとき用
+    data_dir = base_dir / "output" / day
+    data_dir2 = base_dir / "output/20250716/"  # skyがないとき用
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
     master_wl_flat_name = ("master_led")
@@ -470,6 +471,8 @@ if __name__ == "__main__":
         # iFib: 全ファイバーのリスト。通常はiFibActと同じで良い
         'iFib': np.arange(120)
     }
+
+    target_range = (588.4993, 590.4566)
 
     # 6. その他のパラメータ
     params = {
@@ -517,10 +520,10 @@ if __name__ == "__main__":
 
             # 処理に必要なファイルパスを構築
             input_fsp = data_dir / f"{target_base_name}.fits"
-            wavmap = data_dir / f"{master_sky_flat_name}.wmp.fits"
+            wavmap = data_dir2 / f"{master_sky_flat_name}.wmp.fits"
             #wavmap = data_dir / f"sky01r_sp.wmp.fits"
             wl_flat = data_dir / f"{master_wl_flat_name}.fits"
-            sky_flat = data_dir / f"{master_sky_flat_name}.fits"
+            sky_flat = data_dir2 / f"{master_sky_flat_name}.fits"
 
             if not all([input_fsp.exists(), wavmap.exists(), wl_flat.exists()]):
                 print(f"    -> スキップ: {target_base_name} の関連ファイルが見つかりません。")
@@ -536,7 +539,8 @@ if __name__ == "__main__":
                 #sky_flat_fsp_path=None,
                 params=params,
                 save_plots=False,
-                representative_fiber_plot=None
+                representative_fiber_plot=None,
+                processing_range = target_range
             )
 
     print("\n--- 全ての処理が完了しました ---")

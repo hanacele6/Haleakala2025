@@ -16,10 +16,11 @@ def gaussian_linear_baseline(x, height, center, sigma, const, linear):
     return height * np.exp(-(x - center) ** 2 / (2 * abs(sigma) ** 2)) + const + linear * x
 
 
-def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavelength):
+def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config, target_wavelength):
     """
     3つのスペクトルファイル（主、プラス誤差、マイナス誤差）を読み込み、
     それぞれにガウスフィットを行い、積分強度と誤差を計算する関数。
+    ★★★ プロット機能強化版 ★★★
     """
     try:
         # 3つの異なるファイルを読み込む
@@ -40,11 +41,11 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
         plot_colors = {'main': 'blue', 'plus': 'green', 'minus': 'red'}
 
     fit_results = {}
+    integration_range_to_plot = {}  # プロット用の積分範囲を保持
 
     # --- 3つのスペクトルそれぞれにフィットを実行 ---
     for name, spectrum in spectra_to_fit.items():
         # フィット範囲を決定
-        #center_idx_abs  = (iim // 2) + 5
         center_idx_abs = np.argmin(np.abs(wl - target_wavelength))
         dw = fit_config['fit_half_width_pix']
         start_idx_abs = center_idx_abs - dw
@@ -64,19 +65,7 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
         ]
 
         try:
-
-            # 下限値: [高さ > 0, 中心 > 0, 幅 > 0, ベースライン切片, ベースライン傾き]
-            #lower_bounds = [-np.inf, -np.inf, 0, -np.inf, -np.inf]
-
-            # 上限値: [高さ, 中心の最大値, 幅の最大値, ベースライン切片, ベースライン傾き]
-            #upper_bounds = [np.inf, np.inf, 6, np.inf, np.inf]
-
-
-            popt, _ = curve_fit(gaussian_linear_baseline, x_data, y_data, p0=initial_guess,
-                                #bounds=(lower_bounds, upper_bounds)
-                                )
-
-
+            popt, _ = curve_fit(gaussian_linear_baseline, x_data, y_data, p0=initial_guess)
 
             # --- 積分範囲を計算 ---
             center_rel, sigma_fit = popt[1], popt[2]
@@ -89,14 +78,14 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
             start_int = max(0, start_int)
             end_int = min(iim - 1, end_int)
 
-            if fit_config.get('subtract_baseline', True):
-                # ベースラインを引いてから積分
-                baseline_in_range = popt[3] + popt[4] * (np.arange(start_int, end_int + 1))
-                integrated_counts = np.sum(spectrum[start_int:end_int + 1] - baseline_in_range)
-            else:
-                # ベースラインを引かずにそのまま積分
-                integrated_counts = np.sum(spectrum[start_int:end_int + 1])
+            # 'main'スペクトルの積分範囲をプロット用に保存
+            if name == 'main':
+                integration_range_to_plot = {'start': start_int, 'end': end_int}
 
+            # ベースラインを引いてから積分
+            baseline_in_range = popt[3] + popt[4] * (
+                        np.arange(start_int, end_int + 1) - start_idx_abs)  # 修正: xの参照点をフィット範囲の開始点に合わせる
+            integrated_counts = np.sum(spectrum[start_int: end_int + 1] - baseline_in_range)
             width = end_int - start_int + 1
 
             fit_results[name] = {'counts': integrated_counts, 'width': width}
@@ -104,13 +93,21 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 
             # --- プロット処理 ---
             if plot_config['create_plots']:
-                plt.scatter(x_data + start_idx_abs, y_data, color=plot_colors[name], label=f'{name} data', s=10)
-                x_smooth = np.linspace(x_data.min(), x_data.max(), 200)
-                fit_curve = gaussian_linear_baseline(x_smooth, *popt)
-                baseline_curve = popt[3] + popt[4] * x_smooth
-                plt.plot(x_smooth + start_idx_abs, fit_curve, color=plot_colors[name], label=f'{name} fit')
-                plt.plot(x_smooth + start_idx_abs, baseline_curve, color=plot_colors[name], linestyle='--',
+                # 元データをプロット
+                plt.scatter(wl[start_idx_abs: end_idx_abs + 1], y_data, color=plot_colors[name], label=f'{name} data',
+                            s=15, alpha=0.7)
+
+                # フィット曲線とベースラインをプロットするための滑らかなx軸を生成
+                x_smooth_abs = np.linspace(wl[start_idx_abs], wl[end_idx_abs], 300)
+                x_smooth_rel = np.linspace(x_data.min(), x_data.max(), 300)  # フィット関数用の相対座標
+
+                fit_curve = gaussian_linear_baseline(x_smooth_rel, *popt)
+                baseline_curve = popt[3] + popt[4] * x_smooth_rel
+
+                plt.plot(x_smooth_abs, fit_curve, color=plot_colors[name], label=f'{name} fit')
+                plt.plot(x_smooth_abs, baseline_curve, color=plot_colors[name], linestyle='--',
                          label=f'{name} baseline')
+
 
         except RuntimeError:
             print(f"    -> 警告: '{name}' スペクトルのガウスフィットに失敗しました。")
@@ -118,11 +115,25 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 
     # --- グラフの仕上げと保存 ---
     if plot_config['create_plots']:
+        # ★★★ ここから追加機能 ★★★
+        # 'main'フィットの積分範囲をハイライト表示
+        if integration_range_to_plot:
+            start_wl = wl[integration_range_to_plot['start']]
+            end_wl = wl[integration_range_to_plot['end']]
+            plt.axvspan(start_wl, end_wl, color='orange', alpha=0.3, label='Integration Range (main, 3σ)')
+        # ★★★ ここまで追加機能 ★★★
+
         plt.title(f'Gaussian Fit for {plot_config["base_name"]}')
-        plt.xlabel('Pixel Index')
-        plt.ylabel('Intensity (MR-scaled)')
-        plt.legend()
+        plt.xlabel('Wavelength (nm)',fontsize=22)  # X軸をピクセルから波長に変更
+        plt.ylabel('Intensity (photons/s)',fontsize=22)
+        plt.legend(fontsize=18)
+        plt.tick_params(axis='both', which='major', labelsize=18)
         plt.grid(True, linestyle=':')
+        # 表示範囲をフィット領域に限定して見やすくする
+        fit_start_wl = wl[np.argmin(np.abs(wl - target_wavelength)) - fit_config['fit_half_width_pix']]
+        fit_end_wl = wl[np.argmin(np.abs(wl - target_wavelength)) + fit_config['fit_half_width_pix']]
+        plt.xlim(fit_start_wl, fit_end_wl)
+
         plot_path = plot_config['output_dir'] / f'{plot_config["base_name"]}_fit.png'
         plt.savefig(plot_path)
         print(f"    -> フィット結果のプロットを保存: {plot_path.name}")
@@ -149,28 +160,25 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 
     return {'counts': cts2, 'stat_error': err_stat, 'sys_error': err_fuse}
 
-
 # ==============================================================================
 # スクリプトの実行部
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250630"
+    day = "20250703"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # sftの値（ファイル名から探すために使用）
     #sft_map = {'main': '002','minus': '001','plus': '003'}
-    sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
-    #sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
-    #sft_map = {'main': '000', 'minus': '-10', 'plus': '010'}#tese
+    #sft_map = {'main': '02','minus': '01','plus': '03'}#dawn
+    sft_map = {'main': '-05', 'minus': '005', 'plus': '015'}#dusk
 
     # --- フィッティングとプロットに関する設定 ---
     FIT_CONFIG = {
-        'subtract_baseline': False,#積分の際にベースラインを引くか否か
-        'fit_half_width_pix': 21,#70,#14
-        'noise_wing_width_pix': 60#90#300#60
+        'fit_half_width_pix': 30,#70,#14
+        'noise_wing_width_pix': 90#300#60
     }
     PLOT_CONFIG = {
         'create_plots': True,
@@ -235,16 +243,16 @@ if __name__ == '__main__':
 
         # 必要な3つのファイルパスを構築
         try:
-            file_paths = {
-                'main': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['main']}.exos.dat")),
-                'plus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['plus']}.exos.dat")),
-                'minus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['minus']}.exos.dat"))
-            }
             #file_paths = {
-            #    'main': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['main']}.exos.dat")),
-            #    'plus': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['plus']}.exos.dat")),
-            #    'minus': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['minus']}.exos.dat"))
+            #    'main': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['main']}.exos.dat")),
+            #    'plus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['plus']}.exos.dat")),
+            #    'minus': next(data_dir.glob(f"{base_name}.totfib_sft{sft_map['minus']}.exos.dat"))
             #}
+            file_paths = {
+                'main': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['main']}.exos.dat")),
+                'plus': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['plus']}.exos.dat")),
+                'minus': next(data_dir.glob(f"{base_name}.totfib_orig_sft{sft_map['minus']}.exos.dat"))
+            }
         except StopIteration:
             print(
                 f"    -> 警告: {base_name} に対応する3つのexos.datファイルセットが見つかりませんでした。スキップします。")

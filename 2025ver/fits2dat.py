@@ -10,12 +10,12 @@ import sys
 
 # 1. 解析したいFITSファイルのパスを指定
 #    夕方の観測で得られたマスターskyフレームなどを指定します。
-#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20250701/master_sky.fits" # ★要変更
-fits_filepath = "C:/Users/hanac/University/Senior/PythonProject/merc2025a/fits/20250501/sky01r_sp.wmp.fits"
-#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20250613/MERCURY1_tr.wc.fits" # ★要変更
+#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20150223/master_sky.fits" # ★要変更
+#fits_filepath = "C:/Users/hanac/University/Senior/PythonProject/merc2025a/fits/20250501/sky01r_sp.wmp.fits"
+fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20150223/MERCURY1_tr.wc.fits" # ★要変更
 # 2. どのファイバーのスペクトルを見るか指定
 #    画像の真ん中あたりのファイバー番号が良いでしょう（例：50、100など）
-fiber_to_inspect = 55 # ★お好みで変更
+fiber_to_inspect =56  # ★お好みで変更
 
 # 3. 出力するdatファイルのパス
 #    指定しない場合は、入力FITSファイルと同じ場所に「(入力ファイル名)_fiber(番号).dat」という名前で保存されます。

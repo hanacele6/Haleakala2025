@@ -4,8 +4,11 @@ from pathlib import Path
 import sys
 import pandas as pd
 
+
+# ★★★ 変更点①: 関数の引数に代替値(fallback)を追加 ★★★
 def subtract_background(input_wc_path, fiber_definitions, output_dir,
-                          crop_spectrum=False, center_wl=None, crop_half_width=None): # ★★★ 引数を追加
+                        crop_spectrum=False, center_wl=None, crop_half_width=None,
+                        fallback_wcs=None, fallback_ifibers=None):
     """
     波長校正済みの2Dスペクトルを読み込み、背景光減算後、任意でスペクトルを切り出す。
 
@@ -16,19 +19,28 @@ def subtract_background(input_wc_path, fiber_definitions, output_dir,
         crop_spectrum (bool, optional): Trueの場合、スペクトルを切り出す。Defaults to False.
         center_wl (float, optional): 切り出す中心波長(nm)。 Defaults to None.
         crop_half_width (int, optional): 中心から左右に切り出すデータ点数。Defaults to None.
+        fallback_wcs (dict, optional): WCSキーワードが見つからない場合の代替値。Defaults to None.
+        fallback_ifibers (np.ndarray, optional): IFIBERSが見つからない場合の代替リスト。Defaults to None.
     """
     print(f"  -> Processing: {input_wc_path.name}")
 
-    # --- FITSファイルの読み込み (変更なし) ---
+    # --- FITSファイルの読み込み ---
     try:
         with fits.open(input_wc_path) as hdul:
             spec_2d = hdul[0].data.astype(np.float64)
             header = hdul[0].header
+
+            # ★★★ 変更点②: IFIBERSの読み込み処理を修正 ★★★
             if 'IFIBERS' in hdul:
                 active_fibers = hdul['IFIBERS'].data
+            elif fallback_ifibers is not None:
+                print("    -> WARNING: 'IFIBERS' extension not found. Using provided fallback list.")
+                active_fibers = fallback_ifibers
             else:
-                print("    -> WARNING: 'IFIBERS' extension not found. Assuming all fibers are active.")
+                print(
+                    "    -> WARNING: 'IFIBERS' extension not found and no fallback provided. Assuming all fibers are active.")
                 active_fibers = np.arange(spec_2d.shape[0])
+
     except FileNotFoundError:
         print(f"    -> ERROR: File not found: {input_wc_path}. Skipping.")
         return
@@ -36,16 +48,33 @@ def subtract_background(input_wc_path, fiber_definitions, output_dir,
         print(f"    -> ERROR: Could not read FITS file {input_wc_path}: {e}. Skipping.")
         return
 
-    # --- 波長軸の再構築 (変更なし) ---
-    try:
-        nx = header['NAXIS1']
-        crval1 = header['CRVAL1']
-        cdelt1 = header['CDELT1']
-        crpix1 = header.get('CRPIX1', 1.0)
-        wavelengths = crval1 + (np.arange(nx) - (crpix1 - 1)) * cdelt1
-    except KeyError as e:
-        print(f"    -> ERROR: WCS keyword {e} not found. Cannot build wavelength axis. Skipping.")
+    # ★★★ 変更点③: 波長軸の再構築処理を修正 ★★★
+    # .get()を使い、ヘッダーにキーワードがなくてもエラーにならないようにする
+    nx = header.get('NAXIS1')
+    crval1 = header.get('CRVAL1')
+    cdelt1 = header.get('CDELT1')
+    crpix1 = header.get('CRPIX1')
+
+    # ヘッダーに値がなく、かつ代替値(fallback_wcs)が指定されている場合、それを使用する
+    if fallback_wcs:
+        if crval1 is None:
+            crval1 = fallback_wcs.get('CRVAL1')
+            if crval1 is not None: print(f"    -> WARNING: 'CRVAL1' not found. Using fallback: {crval1}")
+        if cdelt1 is None:
+            cdelt1 = fallback_wcs.get('CDELT1')
+            if cdelt1 is not None: print(f"    -> WARNING: 'CDELT1' not found. Using fallback: {cdelt1}")
+        if crpix1 is None:
+            crpix1 = fallback_wcs.get('CRPIX1')
+            if crpix1 is not None: print(f"    -> WARNING: 'CRPIX1' not found. Using fallback: {crpix1}")
+
+    # 最終的に必要な値が揃っているか確認
+    if any(v is None for v in [nx, crval1, cdelt1, crpix1]):
+        print(f"    -> ERROR: Cannot build wavelength axis. Missing critical WCS keywords.")
+        print(f"       (NAXIS1, CRVAL1, CDELT1, CRPIX1 must be in FITS header or fallback settings). Skipping.")
         return
+
+    # 波長軸を計算
+    wavelengths = crval1 + (np.arange(nx) - (crpix1 - 1)) * cdelt1
 
     # --- ファイバーのグループ分けと背景光減算 (変更なし) ---
     n_fib_x = fiber_definitions['NFIBX']
@@ -66,7 +95,7 @@ def subtract_background(input_wc_path, fiber_definitions, output_dir,
     bkg_per_fiber_spec = bkg_sum_spec / n_bkg
     final_spectrum = target_sum_spec - (bkg_per_fiber_spec * n_target)
 
-    # --- ★★★ ここから追加：スペクトルの切り出し処理 ★★★ ---
+    # --- スペクトルの切り出し処理 (変更なし) ---
     base_filename = input_wc_path.name.replace(".wc.fits", "")
 
     if crop_spectrum:
@@ -74,32 +103,27 @@ def subtract_background(input_wc_path, fiber_definitions, output_dir,
             print("    -> ERROR: Cropping is enabled, but center wavelength/width is not set. Skipping.")
             return
 
-        # 1. 中心波長に最も近いデータのインデックスを探す
         center_idx = np.argmin(np.abs(wavelengths - center_wl))
-
-        # 2. 切り出す範囲の開始・終了インデックスを計算
         start_idx = center_idx - crop_half_width
-        end_idx = center_idx + crop_half_width + 1  # Pythonのスライスは最後の要素を含まないため+1
+        end_idx = center_idx + crop_half_width + 1
 
-        # 3. 配列の範囲外にならないかチェック
         if start_idx < 0 or end_idx > len(wavelengths):
             print(f"    -> ERROR: Cannot crop around {center_wl} nm.")
-            print(f"       The window [{start_idx}:{end_idx}] exceeds data boundaries [0:{len(wavelengths)}]. Skipping.")
+            print(
+                f"       The window [{start_idx}:{end_idx}] exceeds data boundaries [0:{len(wavelengths)}]. Skipping.")
             return
 
-        # 4. 波長とスペクトルを切り出す
         wavelengths_to_save = wavelengths[start_idx:end_idx]
         spectrum_to_save = final_spectrum[start_idx:end_idx]
-        output_dat_path = output_dir / f"{base_filename}.totfib.dat" # ファイル名変更
+        output_dat_path = output_dir / f"{base_filename}.totfib.dat"
         print(f"    -> Cropped spectrum to {len(wavelengths_to_save)} points around {center_wl:.2f} nm.")
 
     else:
-        # 切り出しを行わない場合は、元のデータをそのまま使う
         wavelengths_to_save = wavelengths
         spectrum_to_save = final_spectrum
         output_dat_path = output_dir / f"{base_filename}.totfib_orig.dat"
 
-    # --- 結果をテキストファイルに保存 ---
+    # --- 結果をテキストファイルに保存 (変更なし) ---
     data_to_save = np.vstack((wavelengths_to_save, spectrum_to_save)).T
     np.savetxt(output_dat_path, data_to_save, fmt='%.8e', header="Wavelength(nm) Intensity", comments='')
     print(f"    -> Saved final spectrum to: {output_dat_path.name}")
@@ -112,7 +136,7 @@ if __name__ == "__main__":
     # --- 基本設定（ユーザーが環境に合わせて変更する部分） ---
 
     # 1. & 2. & 3.
-    day = "20250705"
+    day = "20150223"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -121,19 +145,24 @@ if __name__ == "__main__":
     fiber_defs = {
         'NFIBX': 10,
         'NFIBY': 12,
-        'target_rows': [  2,3, 4, 5, 6,7,8],#水星あるとこ
-        'background_rows': [0, 1 , 9, 10, 11]#水星ないとこ
-        #'target_rows': [2,3, 4, 5, 6, 7,8,9,10],  # 水星あるとこ
-        #'background_rows': [0, 1, 11]  # 水星ないとこ
+        'target_rows': [2, 3, 4, 5, 6, 7, 8],
+        'background_rows': [0, 1, 9, 10, 11]
     }
 
-    # 4. ★★★ スペクトル切り出し設定 ★★★
-    CROP_SPECTRUM = True  # Trueにするとスペクトルを切り出す
-    # 切り出す中心の波長(nm)を指定 (例: ナトリウムD線)
-    CENTER_WAVELENGTH = 589.7558  #真空
-    #CENTER_WAVELENGTH = 589.594   #空気中
-    # 中心から左右に切り出すデータ点数 (±200点 -> 合計401点)
+    # 4. スペクトル切り出し設定
+    CROP_SPECTRUM = False
+    CENTER_WAVELENGTH = 589.7558
     CROP_HALF_WIDTH = 200
+
+    # ★★★ 変更点④: FITSヘッダー情報が見つからない場合の代替値を追加 ★★★
+    FALLBACK_WCS = {
+        'CRVAL1': 589.0,  # 基準ピクセルの波長(nm)
+        'CDELT1': 0.015,  # 1ピクセルあたりの波長の変化量(nm/pix)
+        'CRPIX1': 1.0  # 基準ピクセルの位置
+    }
+    # IFIBERSが見つからない場合、Noneのままにすると全てのファイバーを有効とみなします。
+    # もし特定のファイバーリストを代替値として使いたい場合は、np.array([...])などで指定します。
+    FALLBACK_IFIBERS = None
 
     # --- 処理の開始 (変更なし) ---
     print("--- ファイバー合成・背景光減算処理を開始します ---")
@@ -157,19 +186,21 @@ if __name__ == "__main__":
 
         for i, (index, row) in enumerate(target_df.iterrows(), start=1):
             base_name = f"{process_type}{i}_tr"
-            input_file = data_dir / f"{base_name}.wc.fits"
+            input_file = data_dir / f"{base_name}.wc.fit"
             if not input_file.exists():
                 print(f"  -> スキップ: 入力ファイル {input_file.name} が見つかりません。")
                 continue
 
-            # ★★★ メインの処理関数に新しい引数を渡す ★★★
+            # ★★★ 変更点⑤: メインの処理関数に新しい引数を渡す ★★★
             subtract_background(
                 input_wc_path=input_file,
                 fiber_definitions=fiber_defs,
                 output_dir=data_dir,
                 crop_spectrum=CROP_SPECTRUM,
                 center_wl=CENTER_WAVELENGTH,
-                crop_half_width=CROP_HALF_WIDTH
+                crop_half_width=CROP_HALF_WIDTH,
+                fallback_wcs=FALLBACK_WCS,
+                fallback_ifibers=FALLBACK_IFIBERS
             )
 
     print("\n--- 全ての処理が完了しました ---")

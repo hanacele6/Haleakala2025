@@ -9,10 +9,10 @@ import time
 import re  # 番号を抽出するためにインポート
 
 # --- 設定値 (Setting Values) ---
-date = '20250710' #7mada
+date = '20150223' #7mada
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 output_dir = base_dir / f"output/{date}"
-csv_file_path = Path("mcparams20250710.csv")  # 基準となるCSVファイル
+csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"  # 基準となるCSVファイル
 
 # ディレクトリが存在しない場合に作成
 output_dir.mkdir(parents=True, exist_ok=True)

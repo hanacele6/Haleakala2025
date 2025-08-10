@@ -12,7 +12,7 @@ if __name__ == "__main__":
     # --------------------------------------------------------------------------
     # 1. パスの設定
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-    data_dir = base_dir / "output/20250701/"
+    data_dir = base_dir / "output/20250711/"
     solar_spec_path = base_dir / "SolarSpectrum.txt"
 
     # 2. 比較したい観測データファイル名

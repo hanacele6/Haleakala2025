@@ -21,7 +21,7 @@ def run_hapke_model_corrected():
         #base_path = Path.cwd()
         base_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
         # パラメータを読み込む基準の日付を指定
-        date = "20250701" #下にもあります。
+        date = "20250712" #下にもあります。
         out_dir = base_path / 'output' / date
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"出力ディレクトリ: {out_dir.resolve()}")
@@ -31,7 +31,8 @@ def run_hapke_model_corrected():
 
     # --- 2. CSVファイルから観測パラメータを読み込む (日付誤差対応) ---
     try:
-        csv_path = Path("mcparams20250701.csv")
+        csv_path = base_path / "2025ver" / f"mcparams{date}.csv"
+        #csv_path = Path("mcparams20250711.csv")
         params_df = pd.read_csv(csv_path)
 
         # --- 日付の誤差に対応 ---

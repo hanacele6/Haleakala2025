@@ -1,311 +1,358 @@
 import numpy as np
 from astropy.io import fits
-import matplotlib.pyplot as plt
 from pathlib import Path
-import pandas as pd
 import sys
-import warnings
-
-# Suppress RankWarning from polyfit
-warnings.filterwarnings('ignore', category=np.RankWarning)
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
-def plot_exosphere_results(exosphere_data_list, output_base_path, date_str):
+def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path, output_dir,
+                                    constants, fit_config):
     """
-    Plots the final exosphere signals. This function is from your original script.
+    d2固定だがデータ幅は可変。観測データを太陽光の波長範囲にクロップし、
+    d2領域の除外をON/OFFできるバージョン。
     """
-    if not exosphere_data_list:
-        print("No exosphere data to plot.")
+    sft_val = constants['sft']
+    sft_suffix = f"_sft{int(sft_val * 10000):03d}"  # 例: sft=0.001 -> _sft01
+    base_filename = f"{input_dat_path.stem}{sft_suffix}"
+
+    print(f"\n  -> Processing: {base_filename} (sft={sft_val})")
+
+    # --- 1. 入力ファイルの読み込み ---
+    try:
+        obs_data = np.loadtxt(input_dat_path, skiprows=1)
+        wl, Nat = obs_data[:, 0], obs_data[:, 1]
+        sol_data = np.loadtxt(solar_spec_path)
+    except FileNotFoundError as e:
+        print(f"    -> ERROR: Input file not found: {e}. Skipping.")
+        return
+    except Exception as e:
+        print(f"    -> ERROR: Failed to read input files: {e}. Skipping.")
         return
 
-    plot_subdir_name = "py_ExospherePlots"
-    plot_output_dir = output_base_path / "fits" / date_str / plot_subdir_name
-    plot_output_dir.mkdir(parents=True, exist_ok=True)
-
-    plt.figure(figsize=(14, 10))
-    colors = plt.cm.get_cmap('tab10', max(10, len(exosphere_data_list)))
-
-    for i, data in enumerate(exosphere_data_list):
-        file_id = data['file_identifier']
-        wl = data['wavelength']
-        exos = data['exos_signal']
-        airm = data['airm']
-        fwhm = data['FWHM']
-        color = colors(i % 10)
-        label = f"File ID {file_id} (Airmass={airm:.1f}, FWHM={fwhm:.1f} pix)"
-        plt.plot(wl, exos, color=color, linewidth=1.5, label=label, alpha=0.8)
-
-    plt.xlabel('Wavelength (nm)', fontsize=12)
-    plt.ylabel('Intensity (MR-scaled)', fontsize=12)
-    plt.title(f'Mercury Exosphere Spectra - Extracted Signals ({date_str})', fontsize=14, fontweight='bold')
-    plt.legend(fontsize=10, loc='upper right')
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    combined_plot_path = plot_output_dir / f"all_exos_combined.png"
-    plt.savefig(combined_plot_path)
-    print(f"Saved combined plot: {combined_plot_path}")
-    plt.show()
 
 
-def process_single_file(file_id, base_name, totfib_filepath, solar_params, physical_params):
+    # --- 2. 物理定数と太陽光データの準備 ---
+    Vme, Vms, Rmn, sft, Rmc, c = (constants['Vme'], constants['Vms'], constants['Rmn'],
+                                  constants['sft'], constants['Rmc'], constants['c'])
+    Shap = (Rmc / Rmn) ** 2 / 1e+4
+
+    # 太陽光の波長を真空→大気に変換
+    #wavair_factor = 1.000276
+    wavair_factor = 1.000
+    sol_data[:, 0] = sol_data[:, 0] / wavair_factor
+
+    # モデル計算に必要な2種類の太陽光スペクトルの波長軸を計算
+    # 1. 直接光 (sftシフト適用)
+    direct_solar_wl = sol_data[:, 0] - sft #- 0.29
+    # 2. 水星反射光 (sftシフト + ドップラーシフト適用)
+    reflected_solar_wl = direct_solar_wl * (1 + Vms / c) * (1 + Vme / c)
+
+    # --- 3. 処理範囲の決定と観測データのクロップ (コード3の方式) ---
+    # 2つの波長軸が両方とも存在する「共通の有効範囲」を計算する
+    valid_wl_min = max(np.min(direct_solar_wl), np.min(reflected_solar_wl))
+    valid_wl_max = min(np.max(direct_solar_wl), np.max(reflected_solar_wl))
+    print(f"    -> Valid overlapping solar range: {valid_wl_min:.4f} - {valid_wl_max:.4f} nm")
+
+    # 計算した有効範囲を使って観測データを切り取る
+    original_count = len(wl)
+    crop_mask = (wl >= valid_wl_min) & (wl <= valid_wl_max)
+    wl, Nat = wl[crop_mask], Nat[crop_mask]
+
+    # 切り取り後のデータ点数を確認
+    if len(wl) < 20:
+        print("    -> ERROR: No/few overlapping wavelength points found after cropping.")
+        return
+
+    ixm = len(wl)
+    dwl = np.median(np.diff(wl))
+    print(f"    -> Cropped observation data to solar range. Points: {original_count} -> {ixm}")
+
+    # --- 4. 補間用の太陽光モデルの最終準備 ---
+    # 後の5番セクションで使う形式にデータを格納し直す
+    sol = np.zeros((sol_data.shape[0], 3))
+    sol[:, 0] = direct_solar_wl
+    sol[:, 1] = sol_data[:, 2]  # フラックス成分1
+    sol[:, 2] = sol_data[:, 1]  # フラックス成分2
+    wlsurf = reflected_solar_wl
+
+
+
+    # --- 5. 線形補間 ---
+    iwm2, iws1, iws2 = sol.shape[0], 0, 0
+    surf = np.zeros((ixm, 2), dtype=np.float64)
+    for ix in range(ixm):
+        for iw in range(iws1, iwm2 - 1):
+            if (wl[ix] - sol[iw, 0]) * (wl[ix] - sol[iw + 1, 0]) <= 0:
+                x1, x2, y1, y2 = sol[iw, 0], sol[iw + 1, 0], sol[iw, 1], sol[iw + 1, 1]
+                surf[ix, 0] = y1 if (x2 - x1) == 0 else (y1 * (x2 - wl[ix]) + y2 * (wl[ix] - x1)) / (x2 - x1)
+                iws1 = iw
+                break
+        for iw in range(iws2, iwm2 - 1):
+            if (wl[ix] - wlsurf[iw]) * (wl[ix] - wlsurf[iw + 1]) <= 0:
+                x1, x2, y1, y2 = wlsurf[iw], wlsurf[iw + 1], sol[iw, 2], sol[iw + 1, 2]
+                surf[ix, 1] = y1 if (x2 - x1) == 0 else (y1 * (x2 - wl[ix]) + y2 * (wl[ix] - x1)) / (x2 - x1)
+                iws2 = iw
+                break
+
+    # --- 6. 最適化ループの準備 (d2除外のON/OFF) ---
     """
-    Processes a single observation file using the logic from your original pro_subsurfnew2_refactored script.
-    This function contains the core processing loop for one file.
+    if fit_config['exclude_d2_region']:
+        center_pix = ixm // 2
+        d2 = fit_config['d2_pixel_index']
+        if d2 >= ixm:
+            print(f"    -> WARNING: d2 ({d2}) is out of bounds for data width {ixm}. Using center pixel instead.")
+            d2 = center_pix
+        print(f"    -> Fitting will exclude region around d2={d2}.")
+
+        slice_end1, slice_start1 = center_pix - 7, center_pix + 6
+        slice_end2, slice_start2 = d2 - 7, d2 + 6
+
+        #slice_end1, slice_start1 = center_pix - 4, center_pix + 3
+        #slice_end2, slice_start2 = d2 - 4, d2 + 3
+
+        if not (0 <= slice_end2 < slice_start2 <= ixm and 0 <= slice_end1 < slice_start1 <= ixm):
+            print(f"    -> ERROR: Slicing indices are out of bounds for data width {ixm}. Skipping.")
+            return
+
+        Nat2 = np.concatenate((Nat[0:slice_end2], Nat[slice_start2:ixm]))
+        pix_range_fit = np.concatenate((np.arange(slice_end2), np.arange(slice_start2, ixm)))
+        surf_slicer = lambda s: np.concatenate((s[0:slice_end2], s[slice_start2:ixm]))
     """
-    print(f"\nProcessing File: {base_name} ({totfib_filepath.name})")
 
-    # Unpack parameters
-    valid_interp_min_wl = solar_params['valid_interp_min_wl']
-    valid_interp_max_wl = solar_params['valid_interp_max_wl']
-    solar_wl_air_shifted = solar_params['solar_wl_air_shifted']
-    solar_flux_comp0 = solar_params['solar_flux_comp0']
-    solar_wl_reflected = solar_params['solar_wl_reflected']
-    solar_flux_comp1 = solar_params['solar_flux_comp1']
+    if fit_config['exclude_d2_region']:
+        # 1. パラメータを取得
+        d2_wl = fit_config['d2_wavelength_nm']
+        half_width = fit_config['d2_exclusion_half_width_pix']
 
-    vme_obs = physical_params['vme_obs']
-    vms_obs = physical_params['vms_obs']
-    rmn_mercury_arcsec = physical_params['rmn_mercury_arcsec']
-    na_d2_line_wavelength_nm = physical_params['na_d2_line_wavelength_nm']
-    na_line_exclusion_half_width_pixels = physical_params['na_line_exclusion_half_width_pixels']
+        # 2. 波長(wl)配列から、指定したd2_wlに最も近いピクセルのインデックスを動的に見つける
+        d2_idx = np.argmin(np.abs(wl - d2_wl))
+        print(f"    -> D2 line ({d2_wl} nm) found near pixel index: {d2_idx}")
 
-    # --- Read and Crop Observation Data ---
-    try:
-        # Assume one header row
-        totfib_data_full = np.loadtxt(totfib_filepath, skiprows=1)
-        wl_obs_full, Nat_obs_full = totfib_data_full[:, 0], totfib_data_full[:, 1]
-    except Exception as e:
-        print(f"  -> ERROR reading {totfib_filepath.name}: {e}. Skipping.")
-        return None
+        # 3. 除外するピクセル範囲を計算する
+        exclude_start = max(0, d2_idx - half_width)
+        exclude_end = min(ixm, d2_idx + half_width + 1)  # +1 はPythonのスライス仕様のため
+        print(f"    -> Excluding pixel range: {exclude_start} to {exclude_end - 1}")
 
-    processing_mask = (wl_obs_full >= valid_interp_min_wl) & (wl_obs_full <= valid_interp_max_wl)
-    wl_obs, Nat_obs = wl_obs_full[processing_mask], Nat_obs_full[processing_mask]
-    ixm = len(wl_obs)
+        # 4. 単一のブールマスクを作成し、観測データ、モデル、x軸のすべてに一貫して適用する
+        fit_mask = np.ones(ixm, dtype=bool)
+        fit_mask[exclude_start:exclude_end] = False
 
-    if ixm < 20:
-        print(f"  -> WARNING: Only {ixm} data points remain after cropping. Skipping.")
-        return None
-    print(f"  -> Processing {ixm} data points within range {wl_obs.min():.2f}-{wl_obs.max():.2f} nm.")
+        Nat2 = Nat[fit_mask]
+        pix_range_fit = np.arange(ixm)[fit_mask]
+        surf_slicer = lambda s: s[fit_mask]
+    else:
+        print("    -> Fitting will use full spectrum (d2 exclusion is OFF).")
+        Nat2 = Nat
+        pix_range_fit = np.arange(ixm)
+        surf_slicer = lambda s: s
 
-    # --- Interpolate Solar Model ---
-    solar_model_comp0_interp = np.interp(wl_obs, solar_wl_air_shifted, solar_flux_comp0)
-    solar_model_comp1_interp = np.interp(wl_obs, solar_wl_reflected, solar_flux_comp1)
-    surf_model_components = np.column_stack([solar_model_comp0_interp, solar_model_comp1_interp])
+    if len(Nat2) < 3:
+        print("    -> ERROR: Not enough data points to perform fit after exclusion. Skipping.")
+        return
 
-    # --- D2 Line Exclusion (Your Original, Correct Logic) ---
-    na_d2_center_idx = np.argmin(np.abs(wl_obs - na_d2_line_wavelength_nm))
-    idx_exclude_start = max(0, na_d2_center_idx - na_line_exclusion_half_width_pixels)
-    idx_exclude_end = min(ixm - 1, na_d2_center_idx + na_line_exclusion_half_width_pixels)
-    fitting_mask = np.ones(ixm, dtype=bool)
-    fitting_mask[idx_exclude_start: idx_exclude_end + 1] = False
-    Nat_for_fitting = Nat_obs[fitting_mask]
-    pixel_indices_for_fitting = np.arange(ixm)[fitting_mask]
+    # --- 7. 最適化ループ ---
+    zansamin = 1.0e+32
+    best_params = {}
 
-    if len(Nat_for_fitting) < 3:
-        print(f"  -> WARNING: Not enough points ({len(Nat_for_fitting)}) for fitting after D2 exclusion. Skipping.")
-        return None
-
-    # --- Best Fit Search ---
-    zansamin = 1e32
-    best_params_fit = {}
-    for iFWHM_val in range(30, 101):
-        FWHM = iFWHM_val * 0.1
+    for iFWHM in range(30, 101):
+        FWHM = iFWHM * 0.1
         sigma = FWHM / (2.0 * np.sqrt(2.0 * np.log(2.0)))
 
-        x_psf = np.arange(ixm) - (ixm / 2.0)
-        psf = np.exp(-(x_psf / sigma) ** 2 / 2.0)
-        psf_normalized = psf / np.sum(psf)
-        fft_psf_rolled = np.fft.fft(np.roll(psf_normalized, -(ixm // 2)))
+        psf = np.exp(-((np.arange(ixm, dtype=np.float64) - float(ixm) / 2.0) / sigma) ** 2 / 2.0)
+        psf2 = psf / np.sum(psf)
+        fft_surf0, fft_surf1 = np.fft.fft(surf[:, 0]), np.fft.fft(surf[:, 1])
+        fft_psf2 = np.fft.fft(psf2)
+        shift_amount = -int(ixm / 2)
+        #conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
+        #conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
+        conv_surf0 = np.roll(np.real(np.fft.ifft(fft_surf0 * fft_psf2)), shift=shift_amount)
+        conv_surf1 = np.roll(np.real(np.fft.ifft(fft_surf1 * fft_psf2)), shift=shift_amount)
+        surf1 = np.column_stack([conv_surf0, conv_surf1])
 
-        surf1_convolved = np.zeros_like(surf_model_components)
-        for i in range(2):
-            fft_surf_comp = np.fft.fft(surf_model_components[:, i])
-            convolved_fft = np.fft.ifft(fft_surf_comp * fft_psf_rolled)
-            surf1_convolved[:, i] = np.real(convolved_fft)
+        for iairm in range(51):
+            airm = 0.1 * iairm
+            surf1_clipped = np.clip(surf1, a_min=0, a_max=None)
+            surf2 = surf1_clipped[:, 0] ** airm * surf1_clipped[:, 1]
+            surf3 = surf_slicer(surf2)
 
-        for iairm_val in range(51):
-            airm = 0.1 * iairm_val
-            term1_positive = np.maximum(surf1_convolved[:, 0], 1e-9)
-            model_shape = (term1_positive ** airm) * surf1_convolved[:, 1]
-            model_shape_masked = model_shape[fitting_mask]
+            with np.errstate(divide='ignore', invalid='ignore'):
+                ratioa = Nat2 / surf3
 
-            try:
-                # Use a safe division to avoid errors with very small model values
-                ratio = np.divide(Nat_for_fitting, model_shape_masked, out=np.zeros_like(Nat_for_fitting),
-                                  where=model_shape_masked != 0)
-                poly_coeffs = np.polyfit(pixel_indices_for_fitting, ratio, 2)
+            if not np.all(np.isfinite(ratioa)): continue
 
-                fitted_ratio = np.polyval(poly_coeffs, pixel_indices_for_fitting)
-                residuals_sq = (Nat_for_fitting - model_shape_masked * fitted_ratio) ** 2
-                zansa = np.sum(residuals_sq)
+            #denominator = surf3.copy()
+            #zero_mask = np.abs(denominator) < 1e-30
+            #denominator[zero_mask] = 1e-30  # ゼロに近い値を微小な値で置換
+            #ratioa = Nat2 / denominator
 
-                if zansa < zansamin:
-                    zansamin = zansa
-                    best_params_fit = {
-                        'poly_coeffs': poly_coeffs,
-                        'airm': airm,
-                        'FWHM': FWHM,
-                        'final_model': model_shape * np.polyval(poly_coeffs, np.arange(ixm)),
-                        'model_shape_for_ratio2': model_shape
-                    }
-            except (np.linalg.LinAlgError, ValueError):
-                continue
+            aa0 = np.polyfit(pix_range_fit, ratioa, 2)[::-1]
+            ratiof = aa0[0] + aa0[1] * pix_range_fit + aa0[2] * pix_range_fit ** 2
+            zansa = np.sum((Nat2 - surf3 * ratiof) ** 2)
 
-    if not best_params_fit:
-        print(f"  -> WARNING: No valid fit found for {base_name}. Skipping.")
-        return None
+            if zansa <= zansamin:
+                zansamin = zansa
+                best_params = {
+                    'ratiof_full': aa0[0] + aa0[1] * np.arange(ixm) + aa0[2] * np.arange(ixm) ** 2,
+                    'airms': airm, 'FWHMs': FWHM, 'surf2s': surf2
+                }
 
-    print(f"  -> Best fit: Airmass={best_params_fit['airm']:.2f}, FWHM={best_params_fit['FWHM']:.2f} pix")
-
-    # --- Final Signal Extraction and Saving ---
-    Natb_exosphere_counts = Nat_obs - best_params_fit['final_model']
-
-    # cts2MR Factor Calculation
-    dwl_obs_mean = np.mean(np.diff(wl_obs))
-    Rmc_cm = 4.879e8
-    Shap_cm2_per_pix = (Rmc_cm / rmn_mercury_arcsec) ** 2 / 1e4 if rmn_mercury_arcsec > 1e-9 else 0.0
-
-    model_for_ratio2 = best_params_fit['model_shape_for_ratio2'][fitting_mask]
-    denom = np.sum(model_for_ratio2 ** 2)
-    ratio2_equivalent = np.sum(Nat_for_fitting * model_for_ratio2) / denom if denom > 1e-30 else 0.0
-
-    cts2MR_factor = 1.0
-    hapke_filepath = totfib_filepath.parent / f"Hapke{physical_params['date_str']}.fits"
-    if hapke_filepath.exists() and Shap_cm2_per_pix > 0 and abs(ratio2_equivalent) > 0:
-        try:
-            hap_data = fits.getdata(hapke_filepath)
-            tothap = np.sum(hap_data) * Shap_cm2_per_pix * dwl_obs_mean * 1e12
-            cts2MR_factor = tothap / ratio2_equivalent
-        except Exception as e:
-            print(f"  -> WARNING: Could not process Hapke file: {e}")
-
-    exos_signal_final_MR = Natb_exosphere_counts * cts2MR_factor
-
-    # Save Files using the base_name
-    output_dir = totfib_filepath.parent
-    exos_output_dat = output_dir / f"{base_name}.exos.dat"
-    np.savetxt(exos_output_dat, np.column_stack([wl_obs, exos_signal_final_MR]), fmt="%.6e",
-               header="Wavelength(nm) Flux(MR)")
-    print(f"  -> Saved exosphere signal: {exos_output_dat.name}")
-
-    return {
-        'file_identifier': file_id,  # Keep original file_id for plot labels
-        'wavelength': wl_obs,
-        'exos_signal': exos_signal_final_MR,
-        'airm': best_params_fit['airm'],
-        'FWHM': best_params_fit['FWHM']
-    }
-
-
-def main_processor(date_str, base_dir, type_col_name='Type'):
-    """
-    Main function to drive the processing. It reads the solar spectrum and the CSV file,
-    then loops through each observation, calling the processing function for each.
-    """
-    base_dir = Path(base_dir)
-    # The directory structure from your second script
-    data_dir = base_dir / "output" / date_str
-
-    # --- Read Solar Spectrum (once for all files) ---
-    solar_file_path = base_dir / "SolarSpectrum.txt"
-    try:
-        solar_raw = np.loadtxt(solar_file_path)
-    except Exception as e:
-        print(f"FATAL Error: Could not read solar spectrum file {solar_file_path}: {e}")
+    if not best_params:
+        print("    -> ERROR: Could not find any valid fit parameters. Skipping.")
         return
 
-    VACUUM_TO_AIR_FACTOR = 1.000276
-    solar_wl_air = solar_raw[:, 0] / VACUUM_TO_AIR_FACTOR
-    solar_params = {
-        'solar_flux_comp0': solar_raw[:, 2],
-        'solar_flux_comp1': solar_raw[:, 1],
+    print(f"    -> Best fit: airm={best_params['airms']:.2f}, FWHM={best_params['FWHMs']:.2f}, zansa={zansamin:.4e}")
+
+
+    # --- 8. 最終計算と保存 ---
+    if fit_config['exclude_d2_region']:
+        Nat2_final = Nat2
+        surf3s_final = surf_slicer(best_params['surf2s'])
+    else:
+        Nat2_final = Nat
+        surf3s_final = best_params['surf2s']
+
+    if np.sum(surf3s_final ** 2) == 0:
+        print("    -> ERROR: Cannot calculate ratio2, model sum is zero. Skipping final save.")
+        return
+
+    # --- 8. 最終計算と保存 ---
+
+    # ratio2の計算は不要なのでコメントアウトまたは削除
+    # if np.sum(surf3s_final ** 2) == 0:
+    #     print("    -> ERROR: Cannot calculate ratio2, model sum is zero. Skipping final save.")
+    #     return
+    # ratio2 = np.sum(Nat2_final * surf3s_final) / np.sum(surf3s_final ** 2)
+
+    # 最適化で見つけた完全なモデルを構築する
+    # このモデルは、連続光の形状補正（多項式フィット）を含んでいる
+    full_model = best_params['surf2s'] * best_params['ratiof_full']
+
+    # 観測データ全体から、この完全なモデルを引き算する
+    Natb = Nat - full_model
+
+    # デバッグ用に、テストファイルに書き出すモデルもfull_modelに変更する
+    output_test_path = output_dir / f"{base_filename}.test.dat"
+    output_data1 = np.column_stack([wl, Nat / np.mean(Nat),
+                                    full_model / np.mean(Nat)])  # ここをfull_modelに変更
+    np.savetxt(output_test_path, output_data1, fmt='%.8e',
+               header="Wavelength(nm) Observed_Norm Combined_Solar_Model_Norm")
+
+    try:
+        hap = fits.getdata(hapke_path)
+        tothap = np.sum(hap) * Shap * dwl * 1e+12
+
+        # cts2MRの計算には、モデルの連続光成分を代表する値を使うのが望ましい
+        # ここでは、最適化に使われたデータ範囲でのモデルの平均値を使う
+        if fit_config['exclude_d2_region']:
+            model_for_fit = surf_slicer(full_model)
+        else:
+            model_for_fit = full_model
+
+        # ゼロ割を避ける
+        if np.sum(model_for_fit ** 2) == 0:
+            print("    -> ERROR: Model sum is zero. Skipping final conversion.")
+            return
+
+        # 再度、観測データとの比を計算して最終的なスケーリング係数を求める
+        # これにより、Hapke計算に使う係数がより安定する
+        final_scaling_factor = np.sum(Nat2_final * model_for_fit) / np.sum(model_for_fit ** 2)
+        cts2MR = tothap / final_scaling_factor
+
+        output_exos_path = output_dir / f"{base_filename}.exos.dat"
+        exos_data = np.column_stack([wl, Natb * cts2MR])
+        np.savetxt(output_exos_path, exos_data, fmt='%.8e', header="Wavelength(nm) Flux(MR)")
+        print(f"    -> Saved final spectrum to: {output_exos_path.name}")
+    except FileNotFoundError:
+        print(f"    -> WARNING: Hapke file not found at {hapke_path}. Skipping final conversion.")
+    except Exception as e:
+        print(f"    -> ERROR: An error occurred during final conversion: {e}")
+
+
+# ==============================================================================
+# スクリプトの実行部
+# ==============================================================================
+if __name__ == "__main__":
+    # --- 1. 基本設定 ---
+    day = "20250712"
+    base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
+    data_dir = base_dir / "output" / day
+    csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
+    solar_spec_path = base_dir / "SolarSpectrum.txt"
+
+    TYPES_TO_PROCESS = ['MERCURY']
+    type_col = 'Type'
+
+    # ★★★【設定項目】★★★
+    # --- 2. フィッティング設定 ---
+    FIT_CONFIG = {
+        # d2ピクセル周辺のフィット除外を有効にするか (True: 除外する, False: 除外しない)
+        'exclude_d2_region': True,
+
+        # 固定ピクセル番号の代わりに、波長と除外する半値幅（ピクセル数）を指定
+        #'d2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
+        'd2_wavelength_nm':589.7558,
+        'd2_exclusion_half_width_pix': 7,  # 中心から左右に除外するピクセル数
+
+        'create_debug_plot': False
     }
 
-    # --- Read CSV to get file list and parameters ---
-    csv_file_path = base_dir / "2025ver" / f"mcparams{date_str[:6]}.csv"
+    # 試行するsft値のリスト
+    sft_values_to_test = [0.001, 0.002, 0.003]#dawn
+    #sft_values_to_test = [-0.0005, 0.0005, 0.0015]#dusk
+    #sft_values_to_test = [-0.001, 0.000, 0.001]#test
+    #sft_values_to_test = [-0.0015, -0.0005, 0.0005]#test2
+
     try:
         df = pd.read_csv(csv_file_path)
     except FileNotFoundError:
-        print(f"FATAL ERROR: Parameter CSV file not found: {csv_file_path}")
-        return
+        print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
+        sys.exit()
 
-    print(f"\n--- Starting Mercury Exosphere Extraction for {date_str} ---")
+        # sft値のリストでループを追加
+    for sft_val in sft_values_to_test:
+        print("\n" + "#" * 30 + f" sft = {sft_val} の処理を開始 " + "#" * 30)
 
-    all_results_for_plotting = []
-
-    # --- Loop through specified types, e.g., 'MERCURY' ---
-    types_to_process = ['MERCURY']
-    for process_type in types_to_process:
-        print("\n" + "=" * 25 + f" Processing Type: {process_type} " + "=" * 25)
-        target_df = df[df[type_col_name] == process_type].copy()
-
-        if target_df.empty:
-            print(f"-> No data found for type '{process_type}' in CSV.")
-            continue
-
-        # --- Loop through each entry for this type ---
-        for idx, (row_index, row) in enumerate(target_df.iterrows(), start=1):
-            # Generate filename like 'MERCURY1_tr'
-            base_name = f"{process_type}{idx}_tr"
-            input_file = data_dir / f"{base_name}.totfib.dat"
-
-            # Fallback to check for _orig.dat file
-            if not input_file.exists():
-                input_file_orig = data_dir / f"{base_name}.totfib_orig.dat"
-                if input_file_orig.exists():
-                    input_file = input_file_orig
-                else:
-                    print(f"\nSkipping {base_name}: Input file not found.")
-                    continue
-
-            try:
-                # Get parameters from the current row of the CSV
-                file_id = int(row.get('file_id', idx))  # Use file_id from CSV if it exists, otherwise use index
-                vme_obs = float(row['mercury_earth_radial_velocity_km_s'])
-                vms_obs = float(row['mercury_sun_radial_velocity_km_s'])
-                rmn_arcsec = float(row['apparent_diameter_arcsec'])
-                sft_solar_nm = float(row.get('sft_solar_nm', 0.002))
-            except (KeyError, ValueError) as e:
-                print(f"\nERROR reading row {row_index} from CSV: {e}. Skipping this entry.")
+        for process_type in TYPES_TO_PROCESS:
+            print("\n" + "=" * 25 + f" 処理タイプ: {process_type} " + "=" * 25)
+            target_df = df[df[type_col] == process_type].copy()
+            if target_df.empty:
+                print(f"-> CSV内に '{process_type}' のデータが見つかりませんでした。")
                 continue
 
-            # Update solar parameters with per-file Doppler shifts
-            c_light_km_s = 299792.458
-            solar_params['solar_wl_air_shifted'] = solar_wl_air - sft_solar_nm
-            doppler_factor = (1 + vms_obs / c_light_km_s) * (1 + vme_obs / c_light_km_s)
-            solar_params['solar_wl_reflected'] = solar_params['solar_wl_air_shifted'] * doppler_factor
-            solar_params['valid_interp_min_wl'] = max(np.min(solar_params['solar_wl_air_shifted']),
-                                                      np.min(solar_params['solar_wl_reflected']))
-            solar_params['valid_interp_max_wl'] = min(np.max(solar_params['solar_wl_air_shifted']),
-                                                      np.max(solar_params['solar_wl_reflected']))
+            for idx, (row_index, row) in enumerate(target_df.iterrows(), start=1):
+                base_name = f"{process_type}{idx}_tr"
 
-            physical_params = {
-                'vme_obs': vme_obs,
-                'vms_obs': vms_obs,
-                'rmn_mercury_arcsec': rmn_arcsec,
-                'na_d2_line_wavelength_nm': 589.594,
-                'na_line_exclusion_half_width_pixels': 4,#もともとは7
-                'date_str': date_str
-            }
+                input_file = data_dir / f"{base_name}.totfib.dat"
+                if not input_file.exists():
+                    input_file = data_dir / f"{base_name}.totfib_orig.dat"
 
-            # Call the processing function for this single file
-            result = process_single_file(file_id, base_name, input_file, solar_params, physical_params)
+                if not input_file.exists():
+                    print(f"  -> スキップ: 入力ファイル {input_file.name} が見つかりません。")
+                    continue
 
-            if result:
-                all_results_for_plotting.append(result)
+                try:
+                    hapke_path = data_dir / f"Hapke{day}.fits"
+                    constants_this_run = {
+                        'Vme': row['mercury_earth_radial_velocity_km_s'],
+                        'Vms': row['mercury_sun_radial_velocity_km_s'],
+                        'Rmn': row['apparent_diameter_arcsec'],
+                        'sft': sft_val,
+                        'Rmc': 4.879e+8,
+                        'c': 299792.458
+                    }
+                except KeyError as e:
+                    print(f"    -> エラー: CSVに列 '{e}' が見つかりません。")
+                    continue
 
-    # --- Plotting ---
-    if all_results_for_plotting:
-        print("\n--- Plotting Results ---")
-        plot_exosphere_results(all_results_for_plotting, base_dir, date_str)
+                process_spectrum_original_logic(
+                    input_dat_path=input_file,
+                    solar_spec_path=solar_spec_path,
+                    hapke_path=hapke_path,
+                    output_dir=data_dir,
+                    constants=constants_this_run,
+                    fit_config=FIT_CONFIG
 
-    print("\n--- All Processing Complete ---")
+                )
 
-
-if __name__ == "__main__":
-    # --- 1. Main Settings (Please change these to match your setup) ---
-    obs_date = "20250501"
-    # Use r-string for Windows paths or Path object for cross-platform compatibility
-    project_base_directory = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
-
-    # --- 2. Run the Processor ---
-    main_processor(date_str=obs_date, base_dir=project_base_directory)
+    print("\n--- 全ての処理が完了しました ---")

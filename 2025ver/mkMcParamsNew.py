@@ -7,7 +7,42 @@ import os
 # --- 設定項目 ---
 # ご自身の環境に合わせて、SPICEカーネルをまとめたフォルダのパスに変更してください
 SPICE_KERNEL_DIR = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/kernels"
-CSV_FILE = "mcparams20150223.csv"
+CSV_FILE = "mcparams20250720.csv"
+
+
+# ▼▼▼【拡張機能】明け方/夕方を判断するための関数 ▼▼▼
+def get_terminator_side(et):
+    """
+    指定された時刻(et)において、地球から見た水星が「明け方」側か「夕方」側かを判断する。
+    """
+    try:
+        # 地球から見た水星の中心点の経度を計算
+        subp_vec, _, _ = spice.subpnt('INTERCEPT/ELLIPSOID', 'MERCURY', et, 'IAU_MERCURY', 'LT+S', 'EARTH')
+        _, obs_lon_rad, _ = spice.reclat(subp_vec)
+
+        # 水星で太陽が真上にある点の経度を計算
+        subsol_vec, _, _ = spice.subslr('INTERCEPT/ELLIPSOID', 'MERCURY', et, 'IAU_MERCURY', 'LT+S', 'SUN')
+        _, noon_lon_rad, _ = spice.reclat(subsol_vec)
+
+        # 経度を度数法に変換
+        obs_lon_deg = obs_lon_rad * spice.dpr()
+        noon_lon_deg = noon_lon_rad * spice.dpr()
+
+        # 観測面中心と正午地点の経度差を計算 (-180度から+180度の範囲)
+        delta_lon = (obs_lon_deg - noon_lon_deg + 540) % 360 - 180
+
+        # 経度差に基づいて方角を判断
+        if delta_lon >= 0:
+            side = "Dusk"
+        else:
+            side = "Dawn"
+
+        # ラベルと、数値（経度差）の両方を返す
+        return side, delta_lon
+
+    except Exception:
+        # エラー時はNA（Not a Number）を返す
+        return np.nan, np.nan
 
 
 def planazel(et, target='MERCURY', lon=203.742, lat=20.708, alt=3043.0):
@@ -37,34 +72,31 @@ def update_csv_with_spice(csv_path, kernel_dir):
 
     df = pd.read_csv(csv_path)
 
-    # ▼▼▼【変更点】ユーザーが使う最初の2列を特定する▼▼▼
     if len(df.columns) < 2:
         print(f"エラー: CSVファイルには少なくとも2列（ファイルパス、説明）が必要です。")
         spice.kclear()
         return
-    # ユーザーが使用する列（最初の2列）の名前を保持
-    user_cols = df.columns[:2].tolist()
-    fits_col_name = user_cols[0]  # 1列目はFITSパス
 
-    # ▼▼▼【変更点】スクリプトが書き込む列を定義する▼▼▼
-    # 3列目にくる日付の列
+    user_cols = df.columns[:2].tolist()
+    fits_col_name = user_cols[0]
+
     date_col = ['DATE-OBS']
-    # 4列目以降にくる計算結果の列
     numeric_cols = [
         'apparent_diameter_arcsec', 'mercury_sun_distance_au',
         'mercury_sun_radial_velocity_km_s', 'mercury_earth_radial_velocity_km_s',
         'phase_angle_deg', 'true_anomaly_deg',
         'ecliptic_longitude_deg', 'ecliptic_latitude_deg'
     ]
-    # スクリプトが管理する全ての列
-    script_cols = date_col + numeric_cols
+    # ▼▼▼【拡張機能】新しい列名を追加 ▼▼▼
+    terminator_cols = ['terminator_side', 'terminator_lon_delta_deg']
 
-    # DataFrameにスクリプト管理列がなければ作成
+    # スクリプトが管理する全ての列
+    script_cols = date_col + numeric_cols + terminator_cols
+
     for col in script_cols:
         if col not in df.columns:
             df[col] = pd.NA
 
-    # 計算が必要な行を特定（スクリプト管理列のいずれかが空の行）
     rows_to_process = df[df[script_cols].isnull().any(axis=1)]
     if rows_to_process.empty:
         print("新しいFITSファイルの追加はありません。すべてのデータは計算済みです。")
@@ -83,7 +115,6 @@ def update_csv_with_spice(csv_path, kernel_dir):
         radius_km = 2439.7
 
     for index, row in rows_to_process.iterrows():
-        # 1列目の名前を使ってFITSパスを取得
         fits_path = row[fits_col_name]
         if not (isinstance(fits_path, str) and os.path.exists(fits_path)):
             print(f"ファイルが見つからないかパスが不正です: {fits_path}")
@@ -95,35 +126,32 @@ def update_csv_with_spice(csv_path, kernel_dir):
                 date_obs_str = header.get('EXPMID', header.get('DATE'))
 
             et = spice.str2et(date_obs_str)
+
+            # --- 元の計算 ---
             az, el, ddist, ddot = planazel(et, 'MERCURY')
             apparent_diameter_arcsec = np.degrees(2 * np.arctan(radius_km / ddist)) * 3600
-
             posSP, _ = spice.spkezr('MERCURY', et, 'J2000', 'LT+S', 'SUN')
             posEP, _ = spice.spkezr('MERCURY', et, 'J2000', 'LT+S', 'EARTH')
-
             mercury_sun_dist_km = spice.vnorm(posSP[:3])
             mercury_sun_radial_velocity = spice.vdot(posSP[:3], posSP[3:]) / mercury_sun_dist_km
             phase_angle_deg = np.degrees(spice.vsep(posSP[:3], posEP[:3]))
-
             pos_ecliptic, _ = spice.spkezr('MERCURY', et, 'ECLIPJ2000', 'LT+S', 'SUN')
             _, lon_rad, lat_rad = spice.reclat(pos_ecliptic[:3])
-
             elon_deg = (lon_rad * spice.dpr()) % 360
             beta_deg = lat_rad * spice.dpr()
-
             orbital_elements = spice.oscelt(posSP, et, mu_sun)
             rp, ecc = orbital_elements[0], orbital_elements[1]
             p = rp * (1.0 + ecc)
             cos_nu = np.clip((p / mercury_sun_dist_km - 1.0) / ecc, -1.0, 1.0)
             nu_rad = np.arccos(cos_nu)
-            if mercury_sun_radial_velocity < 0:
-                nu_rad = (2 * np.pi) - nu_rad
+            if mercury_sun_radial_velocity < 0: nu_rad = (2 * np.pi) - nu_rad
             true_anomaly_deg = np.degrees(nu_rad)
 
-            # ▼▼▼【変更点】計算結果をDataFrameに書き込む▼▼▼
-            # 日時を書き込む
+            # ▼▼▼【拡張機能】明け方/夕方を計算 ▼▼▼
+            side_label, lon_delta = get_terminator_side(et)
+
+            # --- DataFrameへの書き込み ---
             df.loc[index, 'DATE-OBS'] = date_obs_str
-            # その他の計算結果を書き込む
             df.loc[index, 'apparent_diameter_arcsec'] = apparent_diameter_arcsec
             df.loc[index, 'mercury_sun_distance_au'] = mercury_sun_dist_km / AU
             df.loc[index, 'mercury_sun_radial_velocity_km_s'] = mercury_sun_radial_velocity
@@ -133,17 +161,19 @@ def update_csv_with_spice(csv_path, kernel_dir):
             df.loc[index, 'ecliptic_longitude_deg'] = elon_deg
             df.loc[index, 'ecliptic_latitude_deg'] = beta_deg
 
-            print(f"処理完了: {os.path.basename(fits_path)}")
+            # ▼▼▼【拡張機能】新しいデータを書き込み ▼▼▼
+            df.loc[index, 'terminator_side'] = side_label
+            df.loc[index, 'terminator_lon_delta_deg'] = lon_delta
+
+            # コンソールにも表示
+            print(f"処理完了: {os.path.basename(fits_path)} -> {side_label} (経度差: {lon_delta:.1f}°)")
 
         except Exception as e:
             print(f"ファイル '{os.path.basename(fits_path)}' の処理中にエラーが発生しました: {e}")
 
-    # ▼▼▼【変更点】最終的な列の順番を定義し、並べ替える▼▼▼
     final_column_order = user_cols + script_cols
-    # DataFrameを定義した順序に並べ替える
     df_final = df[final_column_order]
 
-    # 並べ替えたDataFrameをCSVに保存
     df_final.to_csv(csv_path, index=False, float_format='%.6f')
     print(f"\n計算と追記が完了し、'{csv_path}' を更新しました。")
     print("\n--- 更新後のファイルプレビュー ---")

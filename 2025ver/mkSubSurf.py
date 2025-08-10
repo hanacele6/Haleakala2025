@@ -271,7 +271,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250701"
+    day = "20250630"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -289,14 +289,16 @@ if __name__ == "__main__":
         # 固定ピクセル番号の代わりに、波長と除外する半値幅（ピクセル数）を指定
         #'d2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
         'd2_wavelength_nm':589.7558,
-        'd2_exclusion_half_width_pix': 7,  # 中心から左右に除外するピクセル数
+        'd2_exclusion_half_width_pix': 20,  # 中心から左右に除外するピクセル数
 
         'create_debug_plot': False
     }
 
     # 試行するsft値のリスト
-    #sft_values_to_test = [0.001, 0.002, 0.003]
-    sft_values_to_test = [-0.0005, 0.0005, 0.0015]
+    sft_values_to_test = [0.001, 0.002, 0.003]#dawn
+    #sft_values_to_test = [-0.0005, 0.0005, 0.0015]#dusk
+    #sft_values_to_test = [-0.001, 0.000, 0.001]#test
+    #sft_values_to_test = [-0.0015, -0.0005, 0.0005]#test2
 
     try:
         df = pd.read_csv(csv_file_path)

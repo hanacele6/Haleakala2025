@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 import sys
+import matplotlib.pyplot as plt
 
 # ==============================================================================
 # スクリプトの実行部
@@ -9,13 +10,14 @@ import sys
 if __name__ == '__main__':
     # --- 基本設定 ---
     # 処理したい日付のリスト。ここに日付を追加すれば、自動で集計対象になります。
-    days_to_process = ["20250612", "20250613", "20250614", "20250615", "20250616", "20250617"]  # 例
+    #days_to_process = ["20250701", "20250702", "20250703", "20250705", "20250706", "20250707", "20250709", "20250710","20250711", "20250712", "20250713", "20250716", "20250717", "20250720"]
+    days_to_process = ["20250613", "20250614", "20250615", "20250616", "20250617", "20250630"]
 
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 
     # --- 入力ファイルと出力ファイル ---
     # このスクリプトは、複数の日の結果を一つのファイルにまとめます
-    output_filename = base_dir / 'output' / 'DailyVariation_Summary.dat'
+    output_filename = base_dir / 'output' / 'DailyVariation_Summary_202506.dat' #ここ変えるでい
     # 位相角補正用のファイル
     correction_file = base_dir / 'PA_correction2.txt'
 
@@ -36,6 +38,8 @@ if __name__ == '__main__':
 
     # --- 2. 各日付のデータをループ処理 ---
     final_results_list = []
+    taa_for_plot = []
+    correction_factors_for_plot = []
 
     for day in days_to_process:
         print(f"\n-> {day} のデータを処理中...")
@@ -97,6 +101,9 @@ if __name__ == '__main__':
         final_results_list.append(result_line)
         print(f"    -> 処理完了: TAA={TAA:.2f}, 補正後原子数={corrected_atoms:.3e}")
 
+        taa_for_plot.append(TAA)
+        correction_factors_for_plot.append(pa_correction_factor)
+
     # --- 3. 最終結果をファイルに書き出し ---
     if final_results_list:
         # NumPy配列に変換して保存
@@ -111,3 +118,30 @@ if __name__ == '__main__':
     else:
         print("\n処理対象のデータが見つからなかったため、出力ファイルは作成されませんでした。")
 
+    print("\nTAAごとの補正係数をプロットしています...")
+
+    try:
+        plt.figure(figsize=(10, 6))
+        # 散布図を作成
+        plt.scatter(taa_for_plot, correction_factors_for_plot, c='blue', marker='o',
+                    label='Calculated Correction Factor')
+
+        # グラフのタイトルとラベルを設定
+        plt.title('Correction Factor vs. TAA')
+        plt.xlabel('TAA (deg)')
+        plt.ylabel('PA Correction Factor')
+        plt.grid(True)  # グリッドを表示
+        plt.legend()
+
+        # プロットをファイルに保存
+        plot_filename = base_dir / 'output' / 'Correction_Factor_vs_TAA.png'
+        plt.savefig(plot_filename)
+        print(f"プロットを {plot_filename.name} として保存しました。")
+
+    except Exception as e:
+        print(f"プロットの作成中にエラーが発生しました: {e}")
+
+    print(f"\n全ての処理が完了しました。")
+
+else:
+    print("\n処理対象のデータが見つからなかったため、出力ファイルは作成されませんでした。")

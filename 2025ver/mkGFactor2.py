@@ -10,15 +10,17 @@ def pro_gamma_convolution_custom_path():
     mcparams*.csvから視線速度Vmsを読み込むように変更。
     """
     # --- 0. ファイルパスの設定 (Path Setup) ---
+    day = '20250720'  # ここ忘れずに！！！！
     # 作業の基点となるディレクトリを指定
     # Windowsのパスは、先頭に 'r' を付けるとバックスラッシュ(\)を正しく扱えます
-    base_dir = Path(r'C:\Users\hanac\University\Senior\Mercury\Haleakala2025')
-    output_dir = Path(r'\Users\hanac\University\Senior\Mercury\Haleakala2025\output')
+    base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
+    output_dir = base_dir / "output"
+    csv_filename = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # 入力ファイルのフルパスを構築
     input_filename = base_dir / 'solarspectrum.txt'
     # Vmsを読み込むCSVファイルのパス
-    csv_filename = Path("mcparams20250701.csv")#下にもあるよ
+    #csv_filename = Path("mcparams20250711.csv")#下にもあるよ
 
     # 出力ディレクトリのパスを構築
     output_dir = output_dir / 'gamma_factor'
@@ -28,7 +30,7 @@ def pro_gamma_convolution_custom_path():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- 1. 初期化 (Initialization) ---
-    day = '20250701' # ここ忘れずに！！！！
+
 
     # --- Vmsの読み込み (Load Vms from CSV) ---
     try:

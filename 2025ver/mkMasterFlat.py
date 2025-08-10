@@ -15,9 +15,9 @@ from datetime import datetime
 # ルートディレクトリ
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 # 日付フォルダ
-date = "20250701"
+date = "20150223"
 # 観測ログのCSVファイル
-csv_file_path = Path("mcparams20250701.csv")
+csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
 # 処理したいデータの種類 (CSVの2列目の値)
 TYPE_TO_PROCESS = 'LED'#LED or SKY
 # --------------------------------------------------------------------------
@@ -112,10 +112,10 @@ def combine_fits_files(file_list, save_path, combine_type='clippedmean', sigma=2
         plt.show()
 
 
-def get_file_number(filename_stem):
-    """ファイル名の末尾から連番を抽出する"""
-    match = re.search(r'(\d+)$', filename_stem)
-    return match.group(1) if match else None
+#def get_file_number(filename_stem):
+#    """ファイル名の末尾から連番を抽出する"""
+#    match = re.search(r'(\d+)$', filename_stem)
+#    return match.group(1) if match else None
 
 
 if __name__ == '__main__':
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         print(f"エラー: CSVファイルに2列以上のデータがありません。")
         sys.exit()
 
-    # ▼▼▼ フィルタリング方法を、動くコードと全く同じシンプルな形式に修正 ▼▼▼
+
     # これで「'SKY'が見つからない」問題が解決するはずです。
     target_df = df[df[type_col] == TYPE_TO_PROCESS]
 
@@ -148,17 +148,18 @@ if __name__ == '__main__':
 
     files_to_combine = []
     print("\n処理対象のファイルを検索します...")
-    for index, row in target_df.iterrows():
-        # 1列目(fits_col)と2列目(type_col)を使ってファイルパスを構築
-        stem = Path(row[fits_col]).stem
-        file_num = get_file_number(stem)
+    for file_num, (index, row) in enumerate(target_df.iterrows(), 1):
+        # 2列目のタイプ名（例: 'SKY'）を取得
+        file_type = row[type_col]
 
-        # ここでも、動くコードと同様に row[type_col] をそのまま使う
-        input_filename = f"{row[type_col]}{file_num}_tr.fits"
-        #input_filename = f"{row[type_col]}{file_num}_f.fits" #感度校正後はこっち
+        # 抽出したタイプ名と連番でファイル名を組み立てる
+        # 例: 1番目のSKYファイルなら "SKY1_tr.fits"
+        input_filename = f"{file_type}{file_num}_tr.fits"
+        # input_filename = f"{file_type}{file_num}_f.fits" #感度校正後はこっち
+
         file_path = input_data_dir / input_filename
         files_to_combine.append(file_path)
-        print(f"  + {input_filename}")
+        print(f"  + {input_filename}  (連番 {file_num} を使用)")
 
     # --- FITS合成の実行 ---
     output_filepath = output_dir / f"master_{TYPE_TO_PROCESS.lower()}.fits"
