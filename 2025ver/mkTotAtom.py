@@ -8,7 +8,7 @@ import sys
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250630"
+    day = "20250821"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"

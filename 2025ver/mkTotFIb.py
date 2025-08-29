@@ -112,7 +112,7 @@ if __name__ == "__main__":
     # --- 基本設定（ユーザーが環境に合わせて変更する部分） ---
 
     # 1. & 2. & 3.
-    day = "20250705"
+    day = "20250821"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -131,6 +131,7 @@ if __name__ == "__main__":
     CROP_SPECTRUM = True  # Trueにするとスペクトルを切り出す
     # 切り出す中心の波長(nm)を指定 (例: ナトリウムD線)
     CENTER_WAVELENGTH = 589.7558  #真空
+    #CENTER_WAVELENGTH = 589.9  # 真空
     #CENTER_WAVELENGTH = 589.594   #空気中
     # 中心から左右に切り出すデータ点数 (±200点 -> 合計401点)
     CROP_HALF_WIDTH = 200

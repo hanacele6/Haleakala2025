@@ -7,7 +7,7 @@ import os
 # --- 設定項目 ---
 # ご自身の環境に合わせて、SPICEカーネルをまとめたフォルダのパスに変更してください
 SPICE_KERNEL_DIR = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/kernels"
-CSV_FILE = "mcparams20250720.csv"
+CSV_FILE = "mcparams20250828.csv"
 
 
 # ▼▼▼【拡張機能】明け方/夕方を判断するための関数 ▼▼▼
@@ -65,7 +65,7 @@ def update_csv_with_spice(csv_path, kernel_dir):
         spice.furnsh(os.path.join(kernel_dir, "lsk/naif0012.tls"))
         spice.furnsh(os.path.join(kernel_dir, "pck/pck00011.tpc"))
         spice.furnsh(os.path.join(kernel_dir, "spk/planets/de430.bsp"))
-        spice.furnsh(os.path.join(kernel_dir, "pck/earth_000101_250814_250518.bpc"))
+        spice.furnsh(os.path.join(kernel_dir, "pck/earth_000101_251119_250824.bpc"))
     except Exception as e:
         print(f"SPICEカーネルの読み込みに失敗しました: {e}")
         return

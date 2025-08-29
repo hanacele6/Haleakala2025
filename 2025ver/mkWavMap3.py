@@ -302,17 +302,19 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, flgPause=True, save
 # ==============================================================================
 if __name__ == "__main__":
     base_dir = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/"
-    master_sky_filepath = os.path.join(base_dir, "output/20150223/master_sky.fits")#変えるのはここ
+    master_sky_filepath = os.path.join(base_dir, "output/20250821/master_sky.fits")#変えるのはここ
     solar_spectrum_directory = os.path.join(base_dir, "psg/")
     calibration_params = {
         #'wlinesM': np.array([588.544, 589.157, 589.449, 589.756, 590.732, 591.580, 591.789]),
         #'wlinesM' : np.array([588.39, 588.995, 589.3, 589.592, 590.560, 591.002, 591.417]),
-        'wlinesM': np.array([588.39, 588.995, 589.3, 589.592, 590.560,591.002, 591.417]),#7波長
+        #'wlinesM': np.array([588.39, 588.995, 589.3, 589.592, 590.560,591.002, 591.417]),#7波長
         #'wlinesM': np.array([588.39, 588.995, 589.3, 589.592, 590.560, 591.002, 591.417]),#6波長
+        'wlinesM': np.array([588.39, 588.995, 589.592, 590.560, 591.002, 591.417]),  #202508
         #'wlinesM': np.array([588.995, 589.592,]),#2波長
         #'pxlinesD0_base': np.array([769, 949, 1035, 1127, 1423, 1557, 1685]),#202505
         #'pxlinesD0_base': np.array([852, 1034, 1119, 1220, 1507, 1637 ,1769]),#202506
-        'pxlinesD0_base': np.array([1012, 1198, 1289, 1380, 1811,1942,  2006]),#202507
+        #'pxlinesD0_base': np.array([1012, 1198, 1289, 1380, 1811,1942,  2006]),#202507
+        'pxlinesD0_base': np.array([1012, 1198, 1380, 1811, 1942, 2006]),  #202508
         #'pxlinesD0_base': np.array([790, 1139]),#20150223
         'pixdwavs_val': 0.0,
         'wavstep1': 0.00293,

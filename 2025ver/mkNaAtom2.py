@@ -155,7 +155,7 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250630"
+    day = "20250821"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -169,7 +169,7 @@ if __name__ == '__main__':
     # --- フィッティングとプロットに関する設定 ---
     FIT_CONFIG = {
         'subtract_baseline': False,#積分の際にベースラインを引くか否か
-        'fit_half_width_pix': 21,#70,#14
+        'fit_half_width_pix': 35,#21,#70,#14
         'noise_wing_width_pix': 60#90#300#60
     }
     PLOT_CONFIG = {
@@ -180,6 +180,7 @@ if __name__ == '__main__':
     # --- 物理定数 ---
     PI = np.pi
     NaD1_nm = 589.7558
+    #NaD1_nm = 589.85
     #NaD1_nm = 589.594  #空気中
     c_cms = 299792.458 * 1e5
     me_g = 9.1093897e-28

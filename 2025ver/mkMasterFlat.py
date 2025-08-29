@@ -15,11 +15,12 @@ from datetime import datetime
 # ルートディレクトリ
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 # 日付フォルダ
-date = "20150223"
+date = "20250821"
 # 観測ログのCSVファイル
 csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
-# 処理したいデータの種類 (CSVの2列目の値)
-TYPE_TO_PROCESS = 'LED'#LED or SKY
+
+# --- 変更点 1: 処理したいデータ種類をリストで指定 ---
+TYPES_TO_PROCESS = ['LED', 'SKY']
 # --------------------------------------------------------------------------
 
 # --- ディレクトリ設定 ---
@@ -87,7 +88,7 @@ def combine_fits_files(file_list, save_path, combine_type='clippedmean', sigma=2
     if base_header:
         base_header['NCOMBINE'] = (len(all_data), 'Number of combined frames')
         base_header['COMBTYPE'] = (combine_type, 'Frame combination method')
-        base_header['HISTORY'] = f'Combined from {len(all_data)} files by combine_script.py'
+        base_header['HISTORY'] = f'Combined from {len(all_data)} files by this script'
         base_header['HISTORY'] = f'Combination performed on {datetime.now().isoformat()}'
 
         # 収集した情報でヘッダーを更新
@@ -112,25 +113,14 @@ def combine_fits_files(file_list, save_path, combine_type='clippedmean', sigma=2
         plt.show()
 
 
-#def get_file_number(filename_stem):
-#    """ファイル名の末尾から連番を抽出する"""
-#    match = re.search(r'(\d+)$', filename_stem)
-#    return match.group(1) if match else None
-
-
 if __name__ == '__main__':
-    print("--- FITS合成処理を開始します ---")
-    print(f"設定:\n  日付: {date}\n  処理タイプ: {TYPE_TO_PROCESS}")
+    print(f"--- FITS合成処理を開始します (日付: {date}) ---")
 
-    # --- CSVの読み込みとファイルリストの作成 ---
+    # --- CSVの読み込み ---
     try:
-        # 動くコードと全く同じ方法でCSVを読み込み、列を取得します
         df = pd.read_csv(csv_file_path)
-
-        # 1列目をファイル名、2列目をタイプ(説明)として扱う
         fits_col = df.columns[0]
         type_col = df.columns[1]
-
     except FileNotFoundError:
         print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
         sys.exit()
@@ -138,36 +128,37 @@ if __name__ == '__main__':
         print(f"エラー: CSVファイルに2列以上のデータがありません。")
         sys.exit()
 
+    # --- 変更点 2: リスト内の各タイプに対して処理を繰り返す ---
+    for current_type in TYPES_TO_PROCESS:
+        print(f"\n--- 処理を開始します: [ {current_type} ] ---")
 
-    # これで「'SKY'が見つからない」問題が解決するはずです。
-    target_df = df[df[type_col] == TYPE_TO_PROCESS]
+        # --- 変更点 3: 'current_type' を使ってCSVをフィルタリング ---
+        target_df = df[df[type_col] == current_type]
 
-    if target_df.empty:
-        print(f"エラー: CSVの2列目({type_col})に '{TYPE_TO_PROCESS}' のデータが見つかりません。")
-        sys.exit()
+        if target_df.empty:
+            print(f"警告: CSV内に '{current_type}' のデータが見つかりませんでした。スキップします。")
+            continue # ループの次のイテレーションへ
 
-    files_to_combine = []
-    print("\n処理対象のファイルを検索します...")
-    for file_num, (index, row) in enumerate(target_df.iterrows(), 1):
-        # 2列目のタイプ名（例: 'SKY'）を取得
-        file_type = row[type_col]
+        files_to_combine = []
+        print("処理対象のファイルを検索します...")
+        for file_num, (index, row) in enumerate(target_df.iterrows(), 1):
+            file_type = row[type_col]
+            # 例: 1番目のSKYファイルなら "SKY1_tr.fits"
+            input_filename = f"{file_type}{file_num}_tr.fits"
+            # input_filename = f"{file_type}{file_num}_f.fits" #感度校正後はこっち
 
-        # 抽出したタイプ名と連番でファイル名を組み立てる
-        # 例: 1番目のSKYファイルなら "SKY1_tr.fits"
-        input_filename = f"{file_type}{file_num}_tr.fits"
-        # input_filename = f"{file_type}{file_num}_f.fits" #感度校正後はこっち
+            file_path = input_data_dir / input_filename
+            files_to_combine.append(file_path)
+            print(f"  + {input_filename}  (連番 {file_num} を使用)")
 
-        file_path = input_data_dir / input_filename
-        files_to_combine.append(file_path)
-        print(f"  + {input_filename}  (連番 {file_num} を使用)")
+        # --- 変更点 4: 'current_type' を使って出力ファイル名を決定 ---
+        output_filepath = output_dir / f"master_{current_type.lower()}.fits"
+        #output_filepath = output_dir / f"master_{current_type.lower()}_f.fits" #感度校正後はこっち
 
-    # --- FITS合成の実行 ---
-    output_filepath = output_dir / f"master_{TYPE_TO_PROCESS.lower()}.fits"
-    #output_filepath = output_dir / f"master_{TYPE_TO_PROCESS.lower()}_f.fits" #感度校正後はこっち
-
-    combine_fits_files(
-        file_list=files_to_combine,
-        save_path=output_filepath
-    )
+        # FITS合成の実行
+        combine_fits_files(
+            file_list=files_to_combine,
+            save_path=output_filepath
+        )
 
     print("\n--- 全ての処理が完了しました ---")
