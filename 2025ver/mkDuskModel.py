@@ -23,7 +23,7 @@ def run_dusk_model_improved():
     # TAA_SRP.txtから太陽放射圧(SRP)のデータを読み込む
     try:
         # 1列目のTAAはここでは使わないので、srp_valuesのみ取得
-        _, srp_values = np.loadtxt('TAA_SRP.txt', unpack=True)
+        _, srp_values = np.loadtxt('TAA_SRP2.txt', unpack=True)
     except (IOError, ValueError):
         print("エラー: 'TAA_SRP.txt' が見つからないか、形式が正しくありません。")
         print("処理を続けるためにダミーデータを生成します。")

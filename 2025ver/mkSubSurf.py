@@ -271,7 +271,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250821"
+    day = "20250822"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -295,8 +295,8 @@ if __name__ == "__main__":
     }
 
     # 試行するsft値のリスト
-    sft_values_to_test = [0.001, 0.002, 0.003]#dawn
-    #sft_values_to_test = [-0.0005, 0.0005, 0.0015]#dusk
+    #sft_values_to_test = [0.001, 0.002, 0.003]#dawn
+    sft_values_to_test = [-0.0005, 0.0005, 0.0015]#dusk
     #sft_values_to_test = [-0.001, 0.000, 0.001]#test
     #sft_values_to_test = [-0.0015, -0.0005, 0.0005]#test2
 

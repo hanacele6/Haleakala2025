@@ -259,7 +259,7 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
 
 
 if __name__ == "__main__":
-    date = '20250823'
+    date = '20250824'
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     base_output_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
     output_dir = base_output_dir / date

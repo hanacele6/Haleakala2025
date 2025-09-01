@@ -76,6 +76,7 @@ def run_sra_simulation():
                 TAA, AU, lon, lat, Vms_ms = map(float, line.split())
 
                 x, y = 0.0, RM
+                x, y = -RM, 0.0
                 SRPt, tot_x, tot_V, tot_Nad = 0.0, 0.0, 0.0, 0.0
                 b0 = 0.0
                 Vms = Vms_ms / 1000.0
