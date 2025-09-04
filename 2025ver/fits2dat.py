@@ -10,7 +10,7 @@ import sys
 
 # 1. 解析したいFITSファイルのパスを指定
 #    夕方の観測で得られたマスターskyフレームなどを指定します。
-fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20250813/master_sky.fits" # ★要変更
+fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20250827/master_sky.fits" # ★要変更
 #fits_filepath = "C:/Users/hanac/University/Senior/PythonProject/merc2025a/fits/20250501/sky01r_sp.wmp.fits"
 #fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20150223/MERCURY1_tr.wc.fits" # ★要変更
 # 2. どのファイバーのスペクトルを見るか指定

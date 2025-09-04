@@ -11,12 +11,13 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     """
     d2固定だがデータ幅は可変。観測データを太陽光の波長範囲にクロップし、
     d2領域の除外をON/OFFできるバージョン。
+    フィッティング波長範囲の手動指定、および複数領域のフィット除外機能を追加。
     """
     sft_val = constants['sft']
-    sft_suffix = f"_sft{int(sft_val * 10000):03d}"  # 例: sft=0.001 -> _sft01
+    sft_suffix = f"_sft{int(sft_val * 10000):03d}"
     base_filename = f"{input_dat_path.stem}{sft_suffix}"
 
-    print(f"\n  -> Processing: {base_filename} (sft={sft_val})")
+    print(f"\n  -> Processing: {base_filename} (sft={sft_val:.6f})")
 
     # --- 1. 入力ファイルの読み込み ---
     try:
@@ -37,43 +38,47 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
                                   constants['sft'], constants['Rmc'], constants['c'])
     Shap = (Rmc / Rmn) ** 2 / 1e+4
 
-    # 太陽光の波長を真空→大気に変換
-    #wavair_factor = 1.000276
     wavair_factor = 1.000
     sol_data[:, 0] = sol_data[:, 0] / wavair_factor
 
-    # モデル計算に必要な2種類の太陽光スペクトルの波長軸を計算
-    # 1. 直接光 (sftシフト適用)
-    direct_solar_wl = sol_data[:, 0] - sft #- 0.29
-    # 2. 水星反射光 (sftシフト + ドップラーシフト適用)
+    direct_solar_wl = sol_data[:, 0] - sft
     reflected_solar_wl = direct_solar_wl * (1 + Vms / c) * (1 + Vme / c)
 
-    # --- 3. 処理範囲の決定と観測データのクロップ (コード3の方式) ---
-    # 2つの波長軸が両方とも存在する「共通の有効範囲」を計算する
-    valid_wl_min = max(np.min(direct_solar_wl), np.min(reflected_solar_wl))
-    valid_wl_max = min(np.max(direct_solar_wl), np.max(reflected_solar_wl))
-    print(f"    -> Valid overlapping solar range: {valid_wl_min:.4f} - {valid_wl_max:.4f} nm")
+    # --- 3. 処理範囲の決定と観測データのクロップ ---
+    solar_range_min = max(np.min(direct_solar_wl), np.min(reflected_solar_wl))
+    solar_range_max = min(np.max(direct_solar_wl), np.max(reflected_solar_wl))
+    print(f"    -> Available solar model range: {solar_range_min:.4f} - {solar_range_max:.4f} nm")
 
-    # 計算した有効範囲を使って観測データを切り取る
+    user_wl_range = fit_config.get('wavelength_range_nm')
+    final_min, final_max = solar_range_min, solar_range_max
+
+    if user_wl_range and len(user_wl_range) == 2:
+        user_min, user_max = min(user_wl_range), max(user_wl_range)
+        print(f"    -> User-specified fitting range: {user_min:.4f} - {user_max:.4f} nm")
+        final_min = max(final_min, user_min)
+        final_max = min(final_max, user_max)
+        print(f"    -> Applying intersected range for fitting: {final_min:.4f} - {final_max:.4f} nm")
+    else:
+        print(f"    -> No user range specified. Using full available solar range for fitting.")
+
     original_count = len(wl)
-    crop_mask = (wl >= valid_wl_min) & (wl <= valid_wl_max)
+    crop_mask = (wl >= final_min) & (wl <= final_max)
     wl, Nat = wl[crop_mask], Nat[crop_mask]
 
-    # 切り取り後のデータ点数を確認
     if len(wl) < 20:
-        print("    -> ERROR: No/few overlapping wavelength points found after cropping.")
+        print(f"    -> ERROR: No/few overlapping wavelength points ({len(wl)} found) in the final range [{final_min:.4f}, {final_max:.4f}]. Skipping.")
         return
 
     ixm = len(wl)
     dwl = np.median(np.diff(wl))
-    print(f"    -> Cropped observation data to solar range. Points: {original_count} -> {ixm}")
+    print(f"    -> Cropped observation data to final range. Points: {original_count} -> {ixm}")
+
 
     # --- 4. 補間用の太陽光モデルの最終準備 ---
-    # 後の5番セクションで使う形式にデータを格納し直す
     sol = np.zeros((sol_data.shape[0], 3))
     sol[:, 0] = direct_solar_wl
-    sol[:, 1] = sol_data[:, 2]  # フラックス成分1
-    sol[:, 2] = sol_data[:, 1]  # フラックス成分2
+    sol[:, 1] = sol_data[:, 2]
+    sol[:, 2] = sol_data[:, 1]
     wlsurf = reflected_solar_wl
 
 
@@ -95,57 +100,51 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
                 iws2 = iw
                 break
 
-    # --- 6. 最適化ループの準備 (d2除外のON/OFF) ---
-    """
-    if fit_config['exclude_d2_region']:
-        center_pix = ixm // 2
-        d2 = fit_config['d2_pixel_index']
-        if d2 >= ixm:
-            print(f"    -> WARNING: d2 ({d2}) is out of bounds for data width {ixm}. Using center pixel instead.")
-            d2 = center_pix
-        print(f"    -> Fitting will exclude region around d2={d2}.")
+    # --- 6. 最適化ループの準備 (フィット除外領域の処理) ---
+    fit_mask = np.ones(ixm, dtype=bool)
+    print("    -> Preparing fit exclusion mask...")
 
-        slice_end1, slice_start1 = center_pix - 7, center_pix + 6
-        slice_end2, slice_start2 = d2 - 7, d2 + 6
-
-        #slice_end1, slice_start1 = center_pix - 4, center_pix + 3
-        #slice_end2, slice_start2 = d2 - 4, d2 + 3
-
-        if not (0 <= slice_end2 < slice_start2 <= ixm and 0 <= slice_end1 < slice_start1 <= ixm):
-            print(f"    -> ERROR: Slicing indices are out of bounds for data width {ixm}. Skipping.")
-            return
-
-        Nat2 = np.concatenate((Nat[0:slice_end2], Nat[slice_start2:ixm]))
-        pix_range_fit = np.concatenate((np.arange(slice_end2), np.arange(slice_start2, ixm)))
-        surf_slicer = lambda s: np.concatenate((s[0:slice_end2], s[slice_start2:ixm]))
-    """
-
-    if fit_config['exclude_d2_region']:
-        # 1. パラメータを取得
+    if fit_config.get('exclude_d2_region', False):
         d2_wl = fit_config['d2_wavelength_nm']
         half_width = fit_config['d2_exclusion_half_width_pix']
-
-        # 2. 波長(wl)配列から、指定したd2_wlに最も近いピクセルのインデックスを動的に見つける
         d2_idx = np.argmin(np.abs(wl - d2_wl))
         print(f"    -> D2 line ({d2_wl} nm) found near pixel index: {d2_idx}")
 
-        # 3. 除外するピクセル範囲を計算する
         exclude_start = max(0, d2_idx - half_width)
-        exclude_end = min(ixm, d2_idx + half_width + 1)  # +1 はPythonのスライス仕様のため
-        print(f"    -> Excluding pixel range: {exclude_start} to {exclude_end - 1}")
-
-        # 4. 単一のブールマスクを作成し、観測データ、モデル、x軸のすべてに一貫して適用する
-        fit_mask = np.ones(ixm, dtype=bool)
+        exclude_end = min(ixm, d2_idx + half_width + 1)
+        print(f"    -> Applying D2 exclusion mask for pixel range: {exclude_start} to {exclude_end - 1}")
         fit_mask[exclude_start:exclude_end] = False
-
-        Nat2 = Nat[fit_mask]
-        pix_range_fit = np.arange(ixm)[fit_mask]
-        surf_slicer = lambda s: s[fit_mask]
     else:
-        print("    -> Fitting will use full spectrum (d2 exclusion is OFF).")
+        print("    -> D2 region exclusion is OFF.")
+
+    custom_exclusion_ranges = fit_config.get('exclusion_wavelength_ranges_nm')
+    if custom_exclusion_ranges and isinstance(custom_exclusion_ranges, list):
+        print("    -> Applying custom wavelength exclusion masks...")
+        for i, wl_range in enumerate(custom_exclusion_ranges):
+            if isinstance(wl_range, list) and len(wl_range) == 2:
+                start_wl, end_wl = min(wl_range), max(wl_range)
+                range_mask = (wl >= start_wl) & (wl <= end_wl)
+                num_excluded = np.sum(range_mask)
+                if num_excluded > 0:
+                     fit_mask[range_mask] = False
+                     print(f"       - Range {i+1}: Excluded {num_excluded} pixels between {start_wl:.4f} nm and {end_wl:.4f} nm.")
+                else:
+                     print(f"       - Range {i+1}: No pixels found in range {start_wl:.4f} nm to {end_wl:.4f} nm.")
+            else:
+                print(f"       - WARNING: Skipping invalid range format: {wl_range}")
+    else:
+        print("    -> No custom wavelength exclusion ranges specified.")
+
+    if np.all(fit_mask):
+        print("    -> Fitting will use the full spectrum (no exclusions applied).")
         Nat2 = Nat
         pix_range_fit = np.arange(ixm)
         surf_slicer = lambda s: s
+    else:
+        Nat2 = Nat[fit_mask]
+        pix_range_fit = np.arange(ixm)[fit_mask]
+        surf_slicer = lambda s: s[fit_mask]
+        print(f"    -> Total points for fitting after applying all masks: {len(Nat2)} / {ixm}")
 
     if len(Nat2) < 3:
         print("    -> ERROR: Not enough data points to perform fit after exclusion. Skipping.")
@@ -164,8 +163,6 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         fft_surf0, fft_surf1 = np.fft.fft(surf[:, 0]), np.fft.fft(surf[:, 1])
         fft_psf2 = np.fft.fft(psf2)
         shift_amount = -int(ixm / 2)
-        #conv_surf0 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf0 * fft_psf2)))
-        #conv_surf1 = np.fft.fftshift(np.real(np.fft.ifft(fft_surf1 * fft_psf2)))
         conv_surf0 = np.roll(np.real(np.fft.ifft(fft_surf0 * fft_psf2)), shift=shift_amount)
         conv_surf1 = np.roll(np.real(np.fft.ifft(fft_surf1 * fft_psf2)), shift=shift_amount)
         surf1 = np.column_stack([conv_surf0, conv_surf1])
@@ -180,11 +177,6 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
                 ratioa = Nat2 / surf3
 
             if not np.all(np.isfinite(ratioa)): continue
-
-            #denominator = surf3.copy()
-            #zero_mask = np.abs(denominator) < 1e-30
-            #denominator[zero_mask] = 1e-30  # ゼロに近い値を微小な値で置換
-            #ratioa = Nat2 / denominator
 
             aa0 = np.polyfit(pix_range_fit, ratioa, 2)[::-1]
             ratiof = aa0[0] + aa0[1] * pix_range_fit + aa0[2] * pix_range_fit ** 2
@@ -205,8 +197,8 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 
 
     # --- 8. 最終計算と保存 ---
-    if fit_config['exclude_d2_region']:
-        Nat2_final = Nat2
+    if not np.all(fit_mask):
+        Nat2_final = Nat[fit_mask]
         surf3s_final = surf_slicer(best_params['surf2s'])
     else:
         Nat2_final = Nat
@@ -216,48 +208,21 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         print("    -> ERROR: Cannot calculate ratio2, model sum is zero. Skipping final save.")
         return
 
-    # --- 8. 最終計算と保存 ---
+    ratio2 = np.sum(Nat2_final * surf3s_final) / np.sum(surf3s_final ** 2)
+    Natb = Nat - ratio2 * best_params['surf2s']
 
-    # ratio2の計算は不要なのでコメントアウトまたは削除
-    # if np.sum(surf3s_final ** 2) == 0:
-    #     print("    -> ERROR: Cannot calculate ratio2, model sum is zero. Skipping final save.")
-    #     return
-    # ratio2 = np.sum(Nat2_final * surf3s_final) / np.sum(surf3s_final ** 2)
 
-    # 最適化で見つけた完全なモデルを構築する
-    # このモデルは、連続光の形状補正（多項式フィット）を含んでいる
-    full_model = best_params['surf2s'] * best_params['ratiof_full']
-
-    # 観測データ全体から、この完全なモデルを引き算する
-    Natb = Nat - full_model
-
-    # デバッグ用に、テストファイルに書き出すモデルもfull_modelに変更する
+    # --- ファイル保存処理 ---
     output_test_path = output_dir / f"{base_filename}.test.dat"
-    output_data1 = np.column_stack([wl, Nat / np.mean(Nat),
-                                    full_model / np.mean(Nat)])  # ここをfull_modelに変更
+    output_data1 = np.column_stack([wl, Nat / np.mean(Nat2_final),
+                                    best_params['surf2s'] * best_params['ratiof_full'] / np.mean(Nat2_final)])
     np.savetxt(output_test_path, output_data1, fmt='%.8e',
                header="Wavelength(nm) Observed_Norm Combined_Solar_Model_Norm")
 
     try:
         hap = fits.getdata(hapke_path)
         tothap = np.sum(hap) * Shap * dwl * 1e+12
-
-        # cts2MRの計算には、モデルの連続光成分を代表する値を使うのが望ましい
-        # ここでは、最適化に使われたデータ範囲でのモデルの平均値を使う
-        if fit_config['exclude_d2_region']:
-            model_for_fit = surf_slicer(full_model)
-        else:
-            model_for_fit = full_model
-
-        # ゼロ割を避ける
-        if np.sum(model_for_fit ** 2) == 0:
-            print("    -> ERROR: Model sum is zero. Skipping final conversion.")
-            return
-
-        # 再度、観測データとの比を計算して最終的なスケーリング係数を求める
-        # これにより、Hapke計算に使う係数がより安定する
-        final_scaling_factor = np.sum(Nat2_final * model_for_fit) / np.sum(model_for_fit ** 2)
-        cts2MR = tothap / final_scaling_factor
+        cts2MR = tothap / ratio2
 
         output_exos_path = output_dir / f"{base_filename}.exos.dat"
         exos_data = np.column_stack([wl, Natb * cts2MR])
@@ -268,13 +233,12 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     except Exception as e:
         print(f"    -> ERROR: An error occurred during final conversion: {e}")
 
-
 # ==============================================================================
 # スクリプトの実行部
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250712"
+    day = "20250827"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -286,22 +250,54 @@ if __name__ == "__main__":
     # ★★★【設定項目】★★★
     # --- 2. フィッティング設定 ---
     FIT_CONFIG = {
-        # d2ピクセル周辺のフィット除外を有効にするか (True: 除外する, False: 除外しない)
+        # --- d2輝線周辺のフィット除外 ---
         'exclude_d2_region': True,
+        'd2_wavelength_nm': 589.7558,
+        'd2_exclusion_half_width_pix': 20,
 
-        # 固定ピクセル番号の代わりに、波長と除外する半値幅（ピクセル数）を指定
-        #'d2_wavelength_nm': 589.594,  # Na D2線の中心波長 (真空→大気補正後の値に近いもの)
-        'd2_wavelength_nm':589.7558,
-        'd2_exclusion_half_width_pix': 7,  # 中心から左右に除外するピクセル数
+        # --- 全体のフィッティング波長範囲の手動指定 ---
+        'wavelength_range_nm': None,
 
-        'create_debug_plot': False
+        # --- 特定の波長領域をフィットから除外するリスト ---
+        'exclusion_wavelength_ranges_nm': None,
+
+        # ★★★【新機能】波長の強制アラインメント ★★★
+        # 指定した太陽光と観測スペクトルの波長が一致するようにsft値を自動計算します。
+        # この設定を有効にすると、下の `sft_values_to_test` は無視されます。
+        # 不要な場合は None に設定します。
+        'force_align_wavelengths': {
+            'solar_nm': 590.182,     # 太陽光スペクトルでの基準となる波長 (例: Fraunhofer D2線)
+            'observed_nm': 590.119,  # 観測スペクトルでの基準となる波長 (例: Na輝線)
+        },
+        # 'force_align_wavelengths': None, # 無効にする場合
+
+        # --- その他 ---
+        'create_debug_plot': False,
     }
 
-    # 試行するsft値のリスト
-    sft_values_to_test = [0.001, 0.002, 0.003]#dawn
-    #sft_values_to_test = [-0.0005, 0.0005, 0.0015]#dusk
-    #sft_values_to_test = [-0.001, 0.000, 0.001]#test
-    #sft_values_to_test = [-0.0015, -0.0005, 0.0005]#test2
+    # ★★★ このリストは、強制アラインメントが無効の場合に使われます ★★★
+    sft_values_to_test_default = [-0.0005, 0.0005, 0.0015] #dusk
+
+    # ★★★ アラインメント設定に基づいてsft値を決定 (★★★ ロジック変更箇所 ★★★) ★★★
+    align_config = FIT_CONFIG.get('force_align_wavelengths')
+    if align_config and 'solar_nm' in align_config and 'observed_nm' in align_config:
+        solar_ref_wl = align_config['solar_nm']
+        obs_ref_wl = align_config['observed_nm']
+        # sft = solar_original - observed_target となるように計算
+        calculated_sft = solar_ref_wl - obs_ref_wl
+        sft_values_to_test = [calculated_sft]
+        print("\n" + "#" * 60)
+        print("  波長強制アラインメントが有効です。")
+        print(f"  太陽光 {solar_ref_wl} nm が 観測 {obs_ref_wl} nm に一致するように、")
+        print(f"  sft = {calculated_sft:.6f} の単一値で処理を実行します。")
+        print("#" * 60)
+    else:
+        sft_values_to_test = sft_values_to_test_default
+        print("\n" + "#" * 60)
+        print("  波長強制アラインメントは無効です。")
+        print(f"  指定されたsft値のリストで処理を実行します: {sft_values_to_test}")
+        print("#" * 60)
+
 
     try:
         df = pd.read_csv(csv_file_path)
@@ -309,12 +305,11 @@ if __name__ == "__main__":
         print(f"エラー: CSVファイルが見つかりません: {csv_file_path}")
         sys.exit()
 
-        # sft値のリストでループを追加
     for sft_val in sft_values_to_test:
-        print("\n" + "#" * 30 + f" sft = {sft_val} の処理を開始 " + "#" * 30)
+        print("\n" + "=" * 25 + f" sft = {sft_val:.6f} の処理を開始 " + "=" * 25)
 
         for process_type in TYPES_TO_PROCESS:
-            print("\n" + "=" * 25 + f" 処理タイプ: {process_type} " + "=" * 25)
+            print("\n" + "-" * 20 + f" 処理タイプ: {process_type} " + "-" * 20)
             target_df = df[df[type_col] == process_type].copy()
             if target_df.empty:
                 print(f"-> CSV内に '{process_type}' のデータが見つかりませんでした。")
@@ -352,7 +347,6 @@ if __name__ == "__main__":
                     output_dir=data_dir,
                     constants=constants_this_run,
                     fit_config=FIT_CONFIG
-
                 )
 
     print("\n--- 全ての処理が完了しました ---")

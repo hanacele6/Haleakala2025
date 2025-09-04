@@ -15,7 +15,7 @@ from datetime import datetime
 # ルートディレクトリ
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 # 日付フォルダ
-date = "20250822"
+date = "20250828"
 # 観測ログのCSVファイル
 csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
 

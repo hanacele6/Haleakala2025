@@ -478,7 +478,7 @@ if __name__ == "__main__":
     #600 to 600
 
     # 1. ベースディレクトリとCSVファイルのパス
-    day = "20250822"
+    day = "20250827"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 

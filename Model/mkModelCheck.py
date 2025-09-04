@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 # 1. 比較したいCSVファイルのファイル名を設定
 # お手元のファイル名に書き換えてください
 file1 = 'dusk.csv'  # 6列あるCSVファイル
-file2 = 'dusk_model_output2.csv'  # 2列あるCSVファイル
+file2 = 'dusk_model_output.csv'  # 2列あるCSVファイル
 
 try:
     # ヘッダーがないCSVとしてファイルを読み込む

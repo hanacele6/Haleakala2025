@@ -186,7 +186,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
             #denominator[zero_mask] = 1e-30  # ゼロに近い値を微小な値で置換
             #ratioa = Nat2 / denominator
 
-            aa0 = np.polyfit(pix_range_fit, ratioa, 2)[::-1]
+            aa0 = np.polyfit(pix_range_fit, ratioa, 3)[::-1]
             ratiof = aa0[0] + aa0[1] * pix_range_fit + aa0[2] * pix_range_fit ** 2
             zansa = np.sum((Nat2 - surf3 * ratiof) ** 2)
 
@@ -271,7 +271,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250822"
+    day = "20250827"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"

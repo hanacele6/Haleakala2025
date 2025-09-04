@@ -18,7 +18,7 @@ def run_dusk_model_final():
     # --- 定数と物理パラメータ ---
     # 論文やシミュレーションの設定と値を合わせる
     #LIFETIME_AT_1AU = 168918.0  # Na原子の寿命 @1AU [s] (シミュレーションの値)
-    LIFETIME_AT_1AU = 61728.4
+    LIFETIME_AT_1AU = 61728.4 #実験値
     # 論文で示唆された範囲内の値 (2-5e7)
     FLUX_AT_PERIHELION = 4.6e7  # 近日点(0.307AU)での基準光子フラックス Φ₀ [atoms/cm^2/s]
 

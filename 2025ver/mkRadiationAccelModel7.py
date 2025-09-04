@@ -39,7 +39,7 @@ def simulate_single_particle(args):
     vx_eject = V_EJECT_SPEED * np.cos(ejection_angle_rad)
     vy_eject = V_EJECT_SPEED * np.sin(ejection_angle_rad)
 
-    # 【重要】vx_msは水星から見た相対速度なので、初速度は放出速度そのもの
+    #vx_msは水星から見た相対速度なので、初速度は放出速度そのもの
     vx_ms = vx_eject
     vy_ms = vy_eject
 
@@ -50,11 +50,11 @@ def simulate_single_particle(args):
     itmax = int(tau * 5.0 / DT + 0.5)
 
     for it in range(itmax):
-        # 【重要】ドップラー効果の計算の「瞬間だけ」、太陽から見た絶対速度を計算する
+        #ドップラー効果の計算の時だけ、太陽から見た絶対速度を計算する
         # (粒子の対水星速度 + 水星の対太陽速度)
         velocity_for_doppler = vx_ms + Vms
-        w_na_d2 = 589.1582 * (1.0 - velocity_for_doppler / C)
-        w_na_d1 = 589.7558 * (1.0 - velocity_for_doppler / C)
+        w_na_d2 = 589.1582 * (1.0 - velocity_for_doppler / C) #ドップラーシフトの計算
+        w_na_d1 = 589.7558 * (1.0 - velocity_for_doppler / C) #ドップラーシフトの計算
         if not (wl[0] <= w_na_d2 < wl[-1] and wl[0] <= w_na_d1 < wl[-1]):
             break
         gamma2 = np.interp(w_na_d2, wl, gamma)
@@ -63,7 +63,7 @@ def simulate_single_particle(args):
         jl_nu = JL * 1e9 * ((m_na_wl * 1e-9) ** 2 / (C * 1e3))
         J2 = sigma0_perdnu2 * jl_nu / AU ** 2 * gamma2
         J1 = sigma0_perdnu1 * jl_nu / AU ** 2 * gamma1
-        b = (H / MASS_NA) * (J1 / (w_na_d1 * 1e-7) + J2 / (w_na_d2 * 1e-7))
+        b = (H / MASS_NA) * (J1 / (w_na_d1 * 1e-7) + J2 / (w_na_d2 * 1e-7)) #b = h/m*(J/λ)
 
         if it == 0:
             b0 = b
@@ -80,16 +80,16 @@ def simulate_single_particle(args):
             if r_sq_grav > 0:
                 r_grav = np.sqrt(r_sq_grav)
                 grav_accel_total = GM_MERCURY / r_sq_grav
-                accel_gx = -grav_accel_total * (x / r_grav)
-                accel_gy = -grav_accel_total * (y / r_grav)
+                accel_gx = -grav_accel_total * (x / r_grav) #x方向の重力加速度
+                accel_gy = -grav_accel_total * (y / r_grav) #y方向の重力加速度
 
         vx_ms_prev, vy_ms_prev = vx_ms, vy_ms
         accel_srp_x = b / 100.0 / 1000.0
         total_accel_x = accel_srp_x + accel_gx
         total_accel_y = accel_gy
-        vx_ms += total_accel_x * DT
-        vy_ms += total_accel_y * DT
-        x += ((vx_ms_prev + vx_ms) / 2.0) * DT
+        vx_ms += total_accel_x * DT #v(t+Δt)=v(t)+a(t)Δt
+        vy_ms += total_accel_y * DT #v(t+Δt)=v(t)+a(t)Δt
+        x += ((vx_ms_prev + vx_ms) / 2.0) * DT #x(t+Δt)=x(t)+ (v(t)+v(t+Δt))/2*Δt
         y += (vy_ms_prev + vy_ms) / 2.0 * DT
 
         if x >= 0 and time_to_terminator < 0:
@@ -105,13 +105,13 @@ def simulate_single_particle(args):
             # 【重要】衝突計算も水星固定座標系で行う
             # 地面は静止している(速度0)と見なせるため、衝突速度はvx_ms, vy_msそのもの
             v_in_sq = vx_ms ** 2 + vy_ms ** 2
-            E_in = 0.5 * MASS_NA * (v_in_sq * 1e10)
+            E_in = 0.5 * MASS_NA * (v_in_sq * 1e10) #1/2*mv^2
             E_T = K_BOLTZMANN * T_SURFACE
-            E_out = BETA * E_T + (1.0 - BETA) * E_in
+            E_out = BETA * E_T + (1.0 - BETA) * E_in #β=((E_out - E_in)/(E_T - E_in)) → E_out = βE_T + (1-β)E_in
             v_out_sq = E_out / (0.5 * MASS_NA) / 1e10
             v_out_speed = np.sqrt(v_out_sq) if v_out_sq > 0 else 0.0
-            surface_angle = np.arctan2(y, x)
-            rebound_angle_rad = surface_angle + np.random.uniform(-PI / 2.0, PI / 2.0)
+            surface_angle = np.arctan2(y, x) #法線の角度を計算
+            rebound_angle_rad = surface_angle + np.random.uniform(-PI / 2.0, PI / 2.0) #法線を基準にランダムな角度を計算　反射角とする
 
             # 反発後の速度も、もちろん相対速度
             vx_ms = v_out_speed * np.cos(rebound_angle_rad)
@@ -141,7 +141,7 @@ def run_main_simulation():
     # --- ★★★ 変更点 ★★★ ---
     # 物理定数に基づいて表面の基準温度を計算する
     AU_REF = 0.387         # 水星の平均軌道半径 [AU]
-    ALBEDO = 0.12          # 水星のアルベド（反射能）
+    ALBEDO = 0.142          # 水星のアルベド（反射能）
     S_1AU_SI = 1366.0      # 太陽定数 (1AUでのフラックス) [W/m^2]
     SIGMA_SB_SI = 5.67e-8  # シュテファン・ボルツマン定数 [W m^-2 K^-4]
 
@@ -154,20 +154,24 @@ def run_main_simulation():
     # --- シミュレーション設定 ---
     settings = {
         'GRAVITY_ENABLED': True,
-        'V_EJECT_SPEED': 0.9,
+        'V_EJECT_SPEED': 0.9, #放出速度
         'BETA': 0.5,
         'T_SURFACE': T_SURFACE_REF, # 計算された基準温度を初期値とする
-        'T1AU': 61728.4,
-        'DT': 5.0,
+        'T1AU': 61728.4, #電離寿命 [s]
+        'DT': 5.0, # 時間ステップ [s]
         'STICKING_COEFFICIENT': 0.0
     }
     N_PARTICLES = 1000
 
     # --- 物理定数 ---
     constants = {
-        'C': 299792.458, 'PI': np.pi, 'H': 6.626068e-34 * 1e4 * 1e3,
-        'MASS_NA': 22.98976928 * 1.6605402e-27 * 1e3, 'RM': 2439.7,
-        'GM_MERCURY': 2.2032e4, 'K_BOLTZMANN': 1.380649e-16
+        'C': 299792.458, # 光速 [km/s]
+        'PI': np.pi,
+        'H': 6.626068e-34 * 1e4 * 1e3, # プランク定数 [cm2*g/s]
+        'MASS_NA': 22.98976928 * 1.6605402e-27 * 1e3,  # Na原子の質量 [g]
+        'RM': 2439.7, # 水星の半径 [km]
+        'GM_MERCURY': 2.2032e4,  # G * M_mercury [km^3/s^2] (万有引力定数 * 水星の質量)
+        'K_BOLTZMANN': 1.380649e-16 #ボルツマン定数[erg/K]
     }
 
     # --- データファイルの読み込み ---
@@ -188,12 +192,15 @@ def run_main_simulation():
     if not np.all(np.diff(wl) > 0):
         sort_indices = np.argsort(wl)
         wl, gamma = wl[sort_indices], gamma[sort_indices]
-    ME = 9.1093897e-31 * 1e3
-    E_CHARGE = 1.60217733e-19 * 2.99792458e8 * 10.0
+    ME = 9.1093897e-31 * 1e3 ## 電子の質量 [g]
+    E_CHARGE = 1.60217733e-19 * 2.99792458e8 * 10.0  # 電子の電荷 [esu]
     sigma_const = constants['PI'] * E_CHARGE ** 2 / ME / (constants['C'] * 1e5)
     spec_data_dict = {
-        'wl': wl, 'gamma': gamma, 'sigma0_perdnu2': sigma_const * 0.641,
-        'sigma0_perdnu1': sigma_const * 0.320, 'JL': 5.18e14
+        'wl': wl,
+        'gamma': gamma,
+        'sigma0_perdnu2': sigma_const * 0.641,
+        'sigma0_perdnu1': sigma_const * 0.320,
+        'JL': 5.18e14 # 1AUでの太陽フラックス [phs/s/cm2/nm]
     }
 
     print("シミュレーションを開始します...")
