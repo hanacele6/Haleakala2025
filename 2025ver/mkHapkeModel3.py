@@ -21,7 +21,7 @@ def run_hapke_model_corrected():
         #base_path = Path.cwd()
         base_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
         # パラメータを読み込む基準の日付を指定
-        date = "20250828"
+        date = "20250823"
         out_dir = base_path / 'output' / date
         out_dir.mkdir(parents=True, exist_ok=True)
         print(f"出力ディレクトリ: {out_dir.resolve()}")

@@ -238,7 +238,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20250827"
+    day = "20250825"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -256,7 +256,7 @@ if __name__ == "__main__":
         'd2_exclusion_half_width_pix': 20,
 
         # --- 全体のフィッティング波長範囲の手動指定 ---
-        'wavelength_range_nm': None,
+        'wavelength_range_nm': [589.15,590.0],
 
         # --- 特定の波長領域をフィットから除外するリスト ---
         'exclusion_wavelength_ranges_nm': None,
@@ -265,11 +265,11 @@ if __name__ == "__main__":
         # 指定した太陽光と観測スペクトルの波長が一致するようにsft値を自動計算します。
         # この設定を有効にすると、下の `sft_values_to_test` は無視されます。
         # 不要な場合は None に設定します。
-        'force_align_wavelengths': {
-            'solar_nm': 590.182,     # 太陽光スペクトルでの基準となる波長 (例: Fraunhofer D2線)
-            'observed_nm': 590.119,  # 観測スペクトルでの基準となる波長 (例: Na輝線)
-        },
-        # 'force_align_wavelengths': None, # 無効にする場合
+        #'force_align_wavelengths': {
+        #    'solar_nm': 590.182,     # 太陽光スペクトルでの基準となる波長 (例: Fraunhofer D2線)
+        #    'observed_nm': 590.119,  # 観測スペクトルでの基準となる波長 (例: Na輝線)
+        #},
+         'force_align_wavelengths': None, # 無効にする場合
 
         # --- その他 ---
         'create_debug_plot': False,

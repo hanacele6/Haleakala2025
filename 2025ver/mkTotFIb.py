@@ -112,7 +112,7 @@ if __name__ == "__main__":
     # --- 基本設定（ユーザーが環境に合わせて変更する部分） ---
 
     # 1. & 2. & 3.
-    day = "20250827"
+    day = "20250825"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
@@ -121,8 +121,8 @@ if __name__ == "__main__":
     fiber_defs = {
         'NFIBX': 10,
         'NFIBY': 12,
-        'target_rows': [  2,3, 4, 5, 6,7,8],#水星あるとこ
-        'background_rows': [0, 1 , 9, 10, 11]#水星ないとこ
+        'target_rows': [  3, 4, 5],#水星あるとこ
+        'background_rows': [0, 1,2 ,6,7,8, 9, 10, 11]#水星ないとこ
         #'target_rows': [2,3, 4, 5, 6, 7,8,9,10],  # 水星あるとこ
         #'background_rows': [0, 1, 11]  # 水星ないとこ
     }
