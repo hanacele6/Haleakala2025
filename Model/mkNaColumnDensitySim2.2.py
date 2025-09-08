@@ -166,8 +166,16 @@ def main():
     }
     # --- 設定はここまで ---
 
-    os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
-    print(f"結果は '{OUTPUT_DIRECTORY}' に保存されます。")
+    # 1. 保存先となるサブフォルダの名前をパラメータから決定
+    #    ユーザーの希望に合わせて beta は小数点以下1桁で表示
+    sub_folder_name = f"density_map_beta{settings['BETA']:.2f}_Q0.14"
+
+    # 2. サブフォルダのフルパスを作成
+    target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)
+
+    # 3. サブフォルダをループの「前」に一度だけ作成
+    os.makedirs(target_output_dir, exist_ok=True)
+    print(f"結果は '{target_output_dir}' に保存されます。")
 
     grid_params = {'size': GRID_SIZE, 'max_r': 2439.7 * GRID_RADIUS_RM}
     constants = {
@@ -209,9 +217,9 @@ def main():
 
         # 1. 論文で使われている物理定数を定義
         F_UV_at_1AU_per_cm2 = 1.5e14  # 1天文単位での紫外線光子フラックス [photons/cm^2/s] (論文 Source [223] より)
-        Q_PSD_cm2 = 2.0e-20  # 光脱離断面積 [cm^2] (論文 より)
+        #Q_PSD_cm2 = 2.0e-20  # 光脱離断面積 [cm^2] (論文 より)
         #Q_PSD_cm2 = 3.0e-20  #YakshinskiyとMadey（1999）
-        #Q_PSD_cm2 = 1.4e-21  #Killenら（2004）
+        Q_PSD_cm2 = 1.4e-21  #Killenら（2004）
         RM_km = constants['RM']  # 水星半径 [km]
         RM_cm = RM_km * 1e5  # 水星半径 [cm]
         cNa = 1.5e13  # 表面ナトリウム原子数密度 [atoms/cm^2] Leblanc and Johnson (2003)
@@ -241,8 +249,11 @@ def main():
         #column_density_grid = (TOTAL_SOURCE_FLUX / N_PARTICLES) * (master_density_grid / cell_area_cm2)
         column_density_grid = (total_flux_for_this_taa / N_PARTICLES) * (master_density_grid / cell_area_cm2)
 
-        base_filename = f"density_map_taa{TAA:.0f}_beta{settings['BETA']:.2f}_Q2.0"
-        full_path_npy = os.path.join(OUTPUT_DIRECTORY, f"{base_filename}.npy")
+        # 1. TAAごとのサブフォルダ名を決定
+        base_filename = f"density_map_taa{TAA:.0f}_beta{settings['BETA']:.2f}_Q0.14"
+
+        # 2. 保存先のパスを、ループの外で作成したフォルダに指定
+        full_path_npy = os.path.join(target_output_dir, f"{base_filename}.npy")
         np.save(full_path_npy, column_density_grid)
 
         print(f"結果を {full_path_npy} に保存しました。")
