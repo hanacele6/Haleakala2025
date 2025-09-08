@@ -11,7 +11,7 @@ RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\Simulatio
 
 BETA_VALUE = 0.5
 Q_VALUE = 0.14
-TAA_TO_PLOT = 150
+TAA_TO_PLOT = 140
 
 
 # --- 以下のファイル名とフォルダ名は自動生成されます ---

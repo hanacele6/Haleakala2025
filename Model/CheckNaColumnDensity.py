@@ -18,7 +18,7 @@ FILE_PATTERN = "density_map_taa*_beta0.50_Q0.14.npy"
 # (1, 0)   : 太陽直下点 (Subsolar point)
 # (0, 1)   : 北極方向
 # (-1, 0)  : 反太陽点 (Anti-solar point)
-TARGET_COORD_RM = (0.8, 0.8)
+TARGET_COORD_RM = (1.0, 0.0)
 
 # シミュレーションで設定したグリッドの半径（水星半径単位）
 GRID_RADIUS_RM = 5.0

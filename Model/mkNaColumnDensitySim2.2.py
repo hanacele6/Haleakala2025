@@ -6,18 +6,9 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-# --- 物理モデルに基づくヘルパー関数 (新規追加) ---
+# --- 物理モデルに基づく関数---
 
 def calculate_surface_temperature(x, y, AU):
-    """
-    論文の式(1)に基づき、衝突地点の表面温度[K]を計算する。
-    Args:
-        x (float): 衝突地点のX座標 [km] (太陽方向が+X)
-        y (float): 衝突地点のY座標 [km]
-        AU (float): 現在の水星-太陽間の距離 [au]
-    Returns:
-        float: 表面温度 [K]
-    """
     T0 = 100.0
     T1 = 600.0
     if x <= 0:
@@ -45,12 +36,12 @@ def sample_weibull_speed(mass_kg,
                          #U_ev = 0.0098, #Killen et al., 2007
                          beta_shape=0.7):
 
-    E_CHARGE_SI = 1.602176634e-19 # 電子の電荷 [C]
+    E_CHARGE = 1.602176634e-19 # 電子の電荷 [C]
     p = np.random.random()
     E_ev = U_ev * (p ** (-1.0 / (beta_shape + 1.0)) - 1.0)
-    E_joule = E_ev * E_CHARGE_SI
+    E_joule = E_ev * E_CHARGE
     v_ms = np.sqrt(2 * E_joule / mass_kg)
-    return v_ms / 1000.0
+    return v_ms
 
 
 def sample_cosine_angle():
@@ -69,8 +60,18 @@ def simulate_single_particle_for_density(args):
     GRID_SIZE, GRID_MAX_R = grid_params['size'], grid_params['max_r']
     CELL_SIZE = 2 * GRID_MAX_R / GRID_SIZE
     local_density_grid = np.zeros((GRID_SIZE, GRID_SIZE), dtype=np.float32)
+
+    #放出位置
     p = np.random.random()
-    source_angle_rad = np.arcsin(2 * p - 1)
+
+    # 太陽直下点からの角度θを、cos(θ)分布に従ってサンプリングする
+    # CDF: p = sin^2(θ)  =>  θ = arcsin(sqrt(p))
+    source_angle_rad = np.arcsin(np.sqrt(p))
+
+    # Y軸の正負をランダムに割り振る (半球の上下に均等に分布させるため)
+    if np.random.random() < 0.5:
+        source_angle_rad *= -1.0
+
     x = RM * np.cos(source_angle_rad)
     y = RM * np.sin(source_angle_rad)
     ejection_speed = sample_weibull_speed(MASS_NA)
@@ -79,22 +80,22 @@ def simulate_single_particle_for_density(args):
     ejection_angle_rad = surface_normal_angle + random_offset_angle
     vx_ms = ejection_speed * np.cos(ejection_angle_rad)
     vy_ms = ejection_speed * np.sin(ejection_angle_rad)
-    Vms = Vms_ms / 1000.0
+    Vms = Vms_ms
     tau = T1AU * AU ** 2
     itmax = int(tau * 5.0 / DT + 0.5)
     for it in range(itmax):
         velocity_for_doppler = vx_ms + Vms
-        w_na_d2 = 589.1582 * (1.0 - velocity_for_doppler / C)
-        w_na_d1 = 589.7558 * (1.0 - velocity_for_doppler / C)
-        if not (wl[0] <= w_na_d2 < wl[-1] and wl[0] <= w_na_d1 < wl[-1]):
+        w_na_d2 = 589.1582e-9 * (1.0 - velocity_for_doppler / C)
+        w_na_d1 = 589.7558e-9 * (1.0 - velocity_for_doppler / C)
+        if not (wl[0]*1e-9 <= w_na_d2 < wl[-1]*1e-9 and wl[0]*1e-9 <= w_na_d1 < wl[-1]*1e-9):
             break
-        gamma2 = np.interp(w_na_d2, wl, gamma)
-        gamma1 = np.interp(w_na_d1, wl, gamma)
+        gamma2 = np.interp(w_na_d2*1e9, wl, gamma)
+        gamma1 = np.interp(w_na_d1*1e9, wl, gamma)
         m_na_wl = (w_na_d2 + w_na_d1) / 2.0
-        jl_nu = JL * 1e9 * ((m_na_wl * 1e-9) ** 2 / (C * 1e3))
-        J2 = sigma0_perdnu2 * jl_nu / AU ** 2 * gamma2
-        J1 = sigma0_perdnu1 * jl_nu / AU ** 2 * gamma1
-        b = (H / MASS_NA) * (J1 / (w_na_d1 * 1e-7) + J2 / (w_na_d2 * 1e-7))
+        jl_nu = JL * 1e9 * ((m_na_wl) ** 2 / (C)) #[photons/m^2]
+        J2 = sigma0_perdnu2 * jl_nu / AU ** 2 * gamma2 #[photons/s]
+        J1 = sigma0_perdnu1 * jl_nu / AU ** 2 * gamma1 #[photons/s]
+        b = (H / MASS_NA) * (J1 / (w_na_d1) + J2 / (w_na_d2)) #[m/s^2]
         if x < 0 and np.sqrt(y ** 2) < RM:
             b = 0.0
         Nad = np.exp(-DT * it / tau)
@@ -107,7 +108,7 @@ def simulate_single_particle_for_density(args):
                 accel_gx = -grav_accel_total * (x / r_grav)
                 accel_gy = -grav_accel_total * (y / r_grav)
         vx_ms_prev, vy_ms_prev = vx_ms, vy_ms
-        accel_srp_x = b / 100.0 / 1000.0
+        accel_srp_x = b
         total_accel_x, total_accel_y = accel_srp_x + accel_gx, accel_gy
         vx_ms += total_accel_x * DT
         vy_ms += total_accel_y * DT
@@ -131,10 +132,10 @@ def simulate_single_particle_for_density(args):
                 break
             # 4. 反射する場合: 局所温度を使って反射エネルギーを計算
             v_in_sq = vx_ms_prev ** 2 + vy_ms_prev ** 2
-            E_in = 0.5 * MASS_NA * (v_in_sq * 1e6)
+            E_in = 0.5 * MASS_NA * (v_in_sq)
             E_T = K_BOLTZMANN * temp_at_impact  # ★ 局所温度を使用
             E_out = BETA * E_T + (1.0 - BETA) * E_in
-            v_out_sq = E_out / (0.5 * MASS_NA) / 1e6
+            v_out_sq = E_out / (0.5 * MASS_NA)
             v_out_speed = np.sqrt(v_out_sq) if v_out_sq > 0 else 0.0
             surface_angle = np.arctan2(y_prev, x_prev)
             rebound_angle_rad = surface_angle + np.random.uniform(-PI / 2.0, PI / 2.0)
@@ -177,16 +178,17 @@ def main():
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
 
-    grid_params = {'size': GRID_SIZE, 'max_r': 2439.7 * GRID_RADIUS_RM}
     constants = {
-        'C': 299792.458, # 光速 [km/s]
+        'C': 299792458.0,  # 光速 [m/s]
         'PI': np.pi,
-        'H': 6.626068e-34 * 1e7, # プランク定数 [cm2*g/s]
+        'H': 6.62607015e-34, # プランク定数 [kg・m^2/s] (J・s)
         'MASS_NA': 22.98976928 * 1.66054e-27, # Na原子の質量 [kg]
-        'RM': 2439.7, # 水星の半径 [km]
-        'GM_MERCURY': 2.2032e4, #G * M_mercury [km^3/s^2] (万有引力定数 * 水星の質量)
+        'RM': 2439.7e3,  # 水星の半径 [m]
+        'GM_MERCURY': 2.2032e13, # G*M_mercury [m^3/s^2]  (万有引力定数 * 水星の質量)
         'K_BOLTZMANN': 1.380649e-23 #ボルツマン定数[J/K]
     }
+
+    grid_params = {'size': GRID_SIZE, 'max_r': constants['RM'] * GRID_RADIUS_RM}
 
     try:
         spec_data_np = np.loadtxt('SolarSpectrum_Na0.txt', usecols=(0, 3))
@@ -201,12 +203,14 @@ def main():
         wl, gamma = wl[sort_indices], gamma[sort_indices]
 
     ME, E_CHARGE = 9.1093897e-31, 1.60217733e-19 #電子の質量 [kg] # 電子の電荷 [C]
-    sigma_const = constants['PI'] * E_CHARGE ** 2 / (ME * constants['C'] * 1e3)
+    epsilon_0 = 8.854187817e-12 #真空の誘電率
+    #sigma_const = constants['PI'] * E_CHARGE ** 2 / (ME * constants['C']) #CGS
+    sigma_const = E_CHARGE ** 2 / (4 * ME * constants['C'] * epsilon_0) #SI [m^2/s]
     spec_data_dict = {
         'wl': wl, 'gamma': gamma,
-        'sigma0_perdnu2': sigma_const * 0.641,
-        'sigma0_perdnu1': sigma_const * 0.320,
-        'JL': 5.18e14 # 1AUでの太陽フラックス [phs/s/cm2/nm]
+        'sigma0_perdnu2': sigma_const * 0.641,# 0.641 = D2線の振動子強度
+        'sigma0_perdnu1': sigma_const * 0.320,# 0.320 = D1線の振動子強度
+        'JL': 5.18e14* 1e4 # 1AUでの太陽フラックス [phs/s/m2/nm]
     }
 
     # --- TAAごとのループ処理 ---
@@ -216,13 +220,12 @@ def main():
         print(f"\n--- TAA = {TAA:.1f}度のシミュレーションを開始 ---")
 
         # 1. 論文で使われている物理定数を定義
-        F_UV_at_1AU_per_cm2 = 1.5e14  # 1天文単位での紫外線光子フラックス [photons/cm^2/s] (論文 Source [223] より)
-        #Q_PSD_cm2 = 2.0e-20  # 光脱離断面積 [cm^2] (論文 より)
-        #Q_PSD_cm2 = 3.0e-20  #YakshinskiyとMadey（1999）
-        Q_PSD_cm2 = 1.4e-21  #Killenら（2004）
-        RM_km = constants['RM']  # 水星半径 [km]
-        RM_cm = RM_km * 1e5  # 水星半径 [cm]
-        cNa = 1.5e13  # 表面ナトリウム原子数密度 [atoms/cm^2] Leblanc and Johnson (2003)
+        F_UV_at_1AU_per_cm2 = 1.5e14 * 1e4  # 1天文単位での紫外線光子フラックス [photons/m^2/s] (論文 Source [223] より)
+        #Q_PSD_cm2 = 2.0e-20 / 1e4 # 光脱離断面積 [m^2] (論文 より)
+        #Q_PSD_cm2 = 3.0e-20 / 1e4 #YakshinskiyとMadey（1999）
+        Q_PSD_cm2 = 1.4e-21 / 1e4 #Killenら（2004）
+        RM_m = constants['RM']  # 水星半径 [m]
+        cNa = 1.5e13 * 1e4  # 表面ナトリウム原子数密度 [atoms/m^2] Leblanc and Johnson (2003)
 
         # 2. 現在の太陽距離(AU)における太陽直下点での最大放出率を計算
         F_UV_current_per_cm2 = F_UV_at_1AU_per_cm2 / (AU ** 2)
@@ -230,8 +233,8 @@ def main():
 
         # 3. 太陽に照らされた半球全体で積分し、総放出量を計算
         # cos分布を半球で積分した際の有効面積は π * R^2 となる
-        effective_area_cm2 = np.pi * (RM_cm ** 2)
-        total_flux_for_this_taa = R_PSD_peak_per_cm2 * effective_area_cm2  # [particles/sec]
+        effective_area_cm2 = np.pi * (RM_m ** 2)
+        total_flux_for_this_taa = R_PSD_peak_per_cm2 * effective_area_cm2 # [particles/sec]
 
         task_args = {
             'consts': constants, 'settings': settings, 'spec': spec_data_dict,
@@ -245,16 +248,21 @@ def main():
 
         print("結果を集計・保存しています...")
         master_density_grid = np.sum(results, axis=0)
-        cell_area_cm2 = (2 * grid_params['max_r'] * 1e5 / GRID_SIZE) ** 2
+        cell_area_m2 = (2 * grid_params['max_r'] / GRID_SIZE) ** 2
         #column_density_grid = (TOTAL_SOURCE_FLUX / N_PARTICLES) * (master_density_grid / cell_area_cm2)
-        column_density_grid = (total_flux_for_this_taa / N_PARTICLES) * (master_density_grid / cell_area_cm2)
+
+        # 柱密度をまず [atoms/m^2] で計算
+        column_density_m2 = (total_flux_for_this_taa / N_PARTICLES) * (master_density_grid / cell_area_m2)
+
+        # 最終出力のために [atoms/cm^2] に変換
+        column_density_cm2 = column_density_m2 / 1e4
 
         # 1. TAAごとのサブフォルダ名を決定
         base_filename = f"density_map_taa{TAA:.0f}_beta{settings['BETA']:.2f}_Q0.14"
 
         # 2. 保存先のパスを、ループの外で作成したフォルダに指定
         full_path_npy = os.path.join(target_output_dir, f"{base_filename}.npy")
-        np.save(full_path_npy, column_density_grid)
+        np.save(full_path_npy, column_density_cm2)
 
         print(f"結果を {full_path_npy} に保存しました。")
 
