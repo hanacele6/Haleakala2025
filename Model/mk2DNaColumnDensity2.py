@@ -10,7 +10,7 @@ import sys
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult"
 
 # 2. プロットしたいTAAの値を指定
-TAA_TO_PLOT = 180
+TAA_TO_PLOT = 90
 
 # 3. シミュレーションで設定したグリッドの半径（水星半径単位）
 GRID_RADIUS_RM = 5.0
@@ -18,29 +18,47 @@ GRID_RADIUS_RM = 5.0
 
 # --- 設定はここまで ---
 
-
-def visualize_density_map(filepath, grid_radius_rm, taa):
+# <--- 変更点: 極座標データをプロットするための新しい関数 ---
+def visualize_density_map_polar(filepath, grid_radius_rm, taa):
     """
-    指定された.npyファイルのパスを元に、2次元の密度マップを可視化する。
+    指定された.npyファイル（極座標データ）を元に、2次元の密度マップを正しく可視化する。
     """
-    # .npyファイルを読み込む
     print(f"ファイルを読み込んでいます: {filepath}")
     density_grid = np.load(filepath)
 
-    # 描画処理
+    # グリッドの形状から半径・角度の分割数を取得
+    N_R, N_THETA = density_grid.shape
+
+    # 1. pcolormesh用の座標グリッドを生成
+    #    各セルの「角」の座標が必要なため、分割数+1の大きさの配列を作る
+
+    # 半径方向の区切り (0 から最大半径まで)
+    r_edges = np.linspace(0, grid_radius_rm, N_R + 1)
+
+    # 角度方向の区切り (-pi から +pi まで。円を正しく描画するため)
+    theta_edges = np.linspace(-np.pi, np.pi, N_THETA + 1)
+
+    # 2. メッシュグリッドを作成
+    #    1次元の半径・角度配列から、2次元のグリッド座標を生成
+    theta_grid, r_grid = np.meshgrid(theta_edges, r_edges)
+
+    # 3. 極座標グリッドをデカルト座標(x, y)に変換
+    x_grid = r_grid * np.cos(theta_grid)
+    y_grid = r_grid * np.sin(theta_grid)
+
+    # --- 描画処理 ---
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.set_facecolor('black')
 
-    # データの最小値が0の場合、対数スケールでエラーになるため、0より大きい最小値をクリップ値として使用
-    positive_min = np.min(density_grid[density_grid > 0]) if np.any(density_grid > 0) else 1e-10
+    # 0や負の値をマスクして対数スケールエラーを回避
+    masked_density = np.ma.masked_where(density_grid <= 0, density_grid)
 
-    # imshowで2次元配列を画像として表示
-    im = ax.imshow(density_grid,
-                   cmap='inferno',
-                   norm=LogNorm(vmin=positive_min, vmax=np.max(density_grid)),
-                   extent=[-grid_radius_rm, grid_radius_rm, -grid_radius_rm, grid_radius_rm],
-                   origin='lower'
-                   )
+    # 4. pcolormeshでプロット
+    #    imshowの代わりにpcolormeshを使い、X, Y座標と色(密度)を指定する
+    im = ax.pcolormesh(x_grid, y_grid, masked_density,
+                       cmap='inferno',
+                       norm=LogNorm(vmin=masked_density.min(), vmax=masked_density.max()),
+                       shading='auto')
 
     # グラフの装飾
     mercury_circle = plt.Circle((0, 0), 1, color='white', fill=False, linestyle='--', linewidth=1.2,
@@ -50,12 +68,17 @@ def visualize_density_map(filepath, grid_radius_rm, taa):
     cbar = fig.colorbar(im, ax=ax, extend='min')
     cbar.set_label('Column Density [atoms/cm$^2$]', fontsize=12)
 
-    ax.set_title(f'Sodium Column Density Map at TAA = {taa}°', fontsize=16)
-    ax.set_xlabel('X-axis [$R_M$] (Sun is to the right)', fontsize=12)
+    ax.set_title(f'Sodium Column Density Map at TAA = {taa}° (Polar)', fontsize=16)
+    # <--- 変更点: X軸ラベルの修正
+    ax.set_xlabel('X-axis [$R_M$] (Sun is at +X)', fontsize=12)
     ax.set_ylabel('Y-axis [$R_M$]', fontsize=12)
     ax.set_aspect('equal')
     ax.grid(True, linestyle=':', color='white', alpha=0.5)
     ax.legend(handles=[mercury_circle], loc='upper right')
+
+    # プロット範囲をグリッド半径に合わせる
+    ax.set_xlim(-grid_radius_rm, grid_radius_rm)
+    ax.set_ylim(-grid_radius_rm, grid_radius_rm)
 
     plt.tight_layout()
     plt.show()
@@ -66,7 +89,6 @@ def find_and_plot_results(results_dir, taa_to_plot, grid_radius_rm):
     結果フォルダを自動で検索し、ユーザーが選択したフォルダから
     指定されたTAAのファイルをプロットする。
     """
-    # 1. results_dir 内のサブフォルダをリストアップ
     try:
         sub_folders = [d for d in os.listdir(results_dir) if os.path.isdir(os.path.join(results_dir, d))]
     except FileNotFoundError:
@@ -77,7 +99,6 @@ def find_and_plot_results(results_dir, taa_to_plot, grid_radius_rm):
         print(f"エラー: '{results_dir}' 内にシミュレーション結果のフォルダが見つかりません。")
         return
 
-    # 2. プロット対象のフォルダを決定
     target_sub_folder = ""
     if len(sub_folders) == 1:
         target_sub_folder = sub_folders[0]
@@ -97,11 +118,8 @@ def find_and_plot_results(results_dir, taa_to_plot, grid_radius_rm):
             print("エラー: 数値を入力してください。")
             return
 
-    # 3. 選択されたフォルダ内で、指定されたTAAのファイルを探す
     full_folder_path = os.path.join(results_dir, target_sub_folder)
     target_filepath = None
-
-    # ファイル名の形式 `...taa{TAA}_...` にマッチするものを探す
     search_pattern = f"taa{taa_to_plot}_"
 
     for filename in os.listdir(full_folder_path):
@@ -110,7 +128,8 @@ def find_and_plot_results(results_dir, taa_to_plot, grid_radius_rm):
             break
 
     if target_filepath:
-        visualize_density_map(target_filepath, grid_radius_rm, taa_to_plot)
+        # <--- 変更点: 新しい極座標プロット関数を呼び出す ---
+        visualize_density_map_polar(target_filepath, grid_radius_rm, taa_to_plot)
     else:
         print(f"エラー: フォルダ '{target_sub_folder}' 内に TAA = {taa_to_plot} の .npy ファイルが見つかりません。")
         print("ファイル名が `...taa{TAA}_...` の形式になっているか確認してください。")

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # お手元のファイル名に書き換えてください
 file1 = 'dusk.csv'  # 6列あるCSVファイル
 #file2 = 'dusk_model_output.csv'  # 2列あるCSVファイル
-file2 = 'taa_vs_density_at_0.8_0.8.csv'
+file2 = 'avg_density_at_60deg_from_1.0-1.7RM.csv'
 
 try:
     # ヘッダーがないCSVとしてファイルを読み込む

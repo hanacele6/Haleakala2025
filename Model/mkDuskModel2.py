@@ -11,7 +11,7 @@ def run_dusk_model_final():
 
     # BETAの値は、シミュレーションで使った値と同じにする
     BETA = 0.5
-    migration_time_file = f"MC_FullResults_BETA{BETA}_90.txt"
+    migration_time_file = f"MC_FullResults_BETA{BETA}_60_DT.txt"
     #migration_time_file = f"MC_FullResults_BETA0.5.txt"
     # --------------------------------------------------------------------------
 

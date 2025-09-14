@@ -11,14 +11,14 @@ RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\Simulatio
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
 # .npyファイルを読み込む場合: "density_map_taa*_beta0.50.npy"
 # .csvファイルを読み込む場合: "density_map_taa*_beta0.50_PSD.csv"
-FILE_PATTERN = "density_map_taa*_beta0.50_Q0.14.npy"
+FILE_PATTERN = "density_map_taa*_beta0.50_Q1.0_MW.npy"
 
 # 密度を監視したい特定の座標を水星半径(RM)単位で指定
 # (0, 0)   : 水星の中心
 # (1, 0)   : 太陽直下点 (Subsolar point)
 # (0, 1)   : 北極方向
 # (-1, 0)  : 反太陽点 (Anti-solar point)
-TARGET_COORD_RM = (1.0, 0.0)
+TARGET_COORD_RM = (1.2, 0.0)
 
 # シミュレーションで設定したグリッドの半径（水星半径単位）
 GRID_RADIUS_RM = 5.0
