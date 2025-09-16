@@ -9,7 +9,7 @@ import re
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
-FILE_PATTERN = "density3d_map_taa*_beta0.50_Q1.0_MW_pl24x48.npy"
+FILE_PATTERN = "density3d_map_taa*_beta0.50_RA_pl24x24.npy"
 
 # ★ 柱密度を計算したい水星表面の「地点」を角度で指定
 # 極角 (緯度のようなもの): 0°=北極, 90°=赤道, 180°=南極
@@ -19,8 +19,8 @@ TARGET_PHI_DEG = 60.0
 
 # ★ 柱密度を計算する「高さの範囲」を水星半径単位で指定 (地表からの高さ)
 # 例: 1.0-1.7 は地表(1.0RM)から高度0.7RMまでの範囲
-RADIAL_RANGE_RM_MIN = 1.0
-RADIAL_RANGE_RM_MAX = 2.0
+RADIAL_RANGE_RM_MIN = 1.2
+RADIAL_RANGE_RM_MAX = 3.0
 
 # --- シミュレーションの物理・グリッド定数 ---
 # これらはシミュレーション本体のコードと一致させる必要があります

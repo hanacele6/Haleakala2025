@@ -1,11 +1,18 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
+
 
 # 1. 比較したいCSVファイルのファイル名を設定
+RESULTS_DIR = 'Analysis_Results'
+
 # お手元のファイル名に書き換えてください
 file1 = 'dusk.csv'  # 6列あるCSVファイル
-#file2 = 'dusk_model_output.csv'  # 2列あるCSVファイル
-file2 = 'avg_density_at_60deg_from_1.0-1.7RM.csv'
+#model_filename = 'dusk_model_output.csv'  # 2列あるCSVファイル
+#model_filename = 'column_density_Duskside_from_1.0-3.0RM.csv'
+model_filename = 'column_density_Dayside_from_1.0-3.0RM.csv'
+
+file2 = os.path.join(RESULTS_DIR, model_filename)
 
 try:
     # ヘッダーがないCSVとしてファイルを読み込む
@@ -32,8 +39,8 @@ try:
 
     # グラフのタイトルやラベルを設定
     plt.title('obs_vs_model', fontsize=16)
-    plt.xlabel('TAA', fontsize=12)
-    plt.ylabel('Na_Column_Density', fontsize=12)
+    plt.xlabel('TAA[°]', fontsize=12)
+    plt.ylabel('Na_Column_Density [atoms/$s^2$]', fontsize=12)
     plt.legend()  # 凡例を表示
     plt.grid(True)  # グリッド線を表示
 
