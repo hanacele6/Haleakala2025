@@ -10,7 +10,7 @@ import pandas as pd
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
-FILE_PATTERN = "density3d_map_taa*_beta0.50_Q1.0_MW_ISO_pl24x24.npy"
+FILE_PATTERN = "density3d_map_taa*_beta0.50_Q3.0_MW_ISO_pl24x24.npy"
 
 
 # 解析結果のグラフとCSVを保存するフォルダの名前
@@ -24,7 +24,7 @@ REGIONS_TO_ANALYZE = [
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
 ]
 
-PLOT_TARGET_LABEL = 'Dayside'
+PLOT_TARGET_LABEL = 'Duskside'
 
 # 高さの範囲
 RADIAL_RANGE_RM_MIN = 1.0
@@ -115,7 +115,7 @@ def plot_and_save_regional_column_density(results_dir, file_pattern, regions_to_
 
     print("\n全ファイルの計算が完了しました。結果を統合して保存・プロットします。")
 
-    fig, ax = plt.subplots(figsize=(12, 7))
+    fig, ax = plt.subplots(figsize=(12, 8))
     df = pd.DataFrame()
 
     for label, data_points in results.items():
@@ -131,7 +131,7 @@ def plot_and_save_regional_column_density(results_dir, file_pattern, regions_to_
             df['TAA'] = taas
         df[label] = densities
 
-        ax.plot(taas, densities, marker='o', linestyle='-', label=label)
+        ax.plot(taas, densities, marker='o', linestyle='none', label=label)
 
     r_min, r_max = radial_range_rm
     title = f"Na Column Density on Mercury's Surface Regions\n(Altitude: {r_min:.1f} - {r_max:.1f} $R_M$) vs. TAA"
@@ -139,6 +139,8 @@ def plot_and_save_regional_column_density(results_dir, file_pattern, regions_to_
     ax.set_xlabel("True Anomaly Angle (TAA) [degrees]", fontsize=12)
     ax.set_ylabel("Na Column Density [atoms/cm$^2$]", fontsize=12)
     ax.set_yscale('log')
+    ax.tick_params(axis='both', which='major', labelsize=20)
+    ax.tick_params(axis='both', which='minor', labelsize=15)
     ax.grid(True, which="both", linestyle='--', alpha=0.7)
     ax.legend()
     plt.tight_layout()
