@@ -10,7 +10,7 @@ import pandas as pd
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
-FILE_PATTERN = "density3d_map_taa*_beta0.50_Q3.0_MW_ISO_pl24x24.npy"
+FILE_PATTERN = "density3d_taa*_beta0.50_Q3.0_MW_ISO_PD_pl24x24_test.npy"
 
 
 # 解析結果のグラフとCSVを保存するフォルダの名前
@@ -27,7 +27,7 @@ REGIONS_TO_ANALYZE = [
 PLOT_TARGET_LABEL = 'Duskside'
 
 # 高さの範囲
-RADIAL_RANGE_RM_MIN = 1.0
+RADIAL_RANGE_RM_MIN = 1.1
 RADIAL_RANGE_RM_MAX = 3.0
 
 # シミュレーションの物理・グリッド定数

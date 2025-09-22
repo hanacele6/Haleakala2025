@@ -9,8 +9,8 @@ RESULTS_DIR = 'Analysis_Results'
 # お手元のファイル名に書き換えてください
 file1 = 'dusk.csv'  # 6列あるCSVファイル
 #model_filename = 'dusk_model_output.csv'  # 2列あるCSVファイル
-#model_filename = 'column_density_Duskside_from_1.0-3.0RM.csv'
-model_filename = 'column_density_Dayside_from_1.0-3.0RM.csv'
+model_filename = 'column_density_Duskside_from_1.0-3.0RM.csv'
+#model_filename = 'column_density_Dayside_from_1.0-3.0RM.csv'
 
 file2 = os.path.join(RESULTS_DIR, model_filename)
 

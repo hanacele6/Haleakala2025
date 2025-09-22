@@ -7,7 +7,7 @@ import os
 
 # 1. 視覚化したいシミュレーション結果の.npyファイルを指定
 #    特定のTAAのファイルパスをここに記述してください
-FILE_TO_LOAD = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D\density3d_map_beta0.50_Q1.0_MW_ISO_pl24x24\density3d_map_taa10_beta0.50_Q1.0_MW_ISO_pl24x24.npy"
+FILE_TO_LOAD = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D\density3d_beta0.50_Q2.0_MW_ISO_PD_pl24x24\density3d_taa10_beta0.50_Q2.0_MW_ISO_PD_pl24x24.npy"
 
 # 2. シミュレーションで使用したグリッド設定を以下に記述
 #    (シミュレーション本体のmain()関数内の設定と一致させてください)

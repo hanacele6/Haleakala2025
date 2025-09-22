@@ -56,7 +56,7 @@ def sample_maxwellian_speed(mass_kg, temp_k):
     vy = np.random.normal(0, sigma)
     vz = np.random.normal(0, sigma)
 
-    # 3次元速度ベクトルの大きさ（速さ）を計算して返す
+    # 3次元速度ベクトルの大きさを計算
     speed = np.sqrt(vx ** 2 + vy ** 2 + vz ** 2)
     return speed
 
@@ -149,15 +149,26 @@ def simulate_single_particle_for_density(args):
     # <<< 追加: 粒子消滅法の場合、重みは常に1 >>>
     particle_weight = 1.0
 
-    # 太陽光フラックスに比例した放出(cos則)をシミュレート
-    p1, p2 = np.random.random(), np.random.random()
-    cos_theta_source = np.sqrt(p1)
+    # まず、球の表面積に対して一様なランダム点を生成する
+    phi_source = 2 * PI * np.random.random()
+    cos_theta_source = 2 * np.random.random() - 1.0  # -1から1までの一様分布
     sin_theta_source = np.sqrt(1.0 - cos_theta_source ** 2)
-    phi_source = 2 * PI * p2
 
-    x = RM * cos_theta_source
-    y = RM * sin_theta_source * np.cos(phi_source)
-    z = RM * sin_theta_source * np.sin(phi_source)
+    # 座標に変換
+    x_rand = RM * sin_theta_source * np.cos(phi_source)
+    y_rand = RM * sin_theta_source * np.sin(phi_source)
+    z_rand = RM * cos_theta_source
+
+    # 昼側半球に限定する (太陽は常に+X方向にあると仮定)
+    # x座標が負なら、符号を反転させて昼側に持ってくる
+    x = np.abs(x_rand)
+    y = y_rand
+    z = z_rand
+
+    # 粒子の放出確率が cos(Z) に比例するという物理モデルを「重み」で表現する
+    # 太陽天頂角のコサイン cos(Z) は、位置ベクトルの単位ベクトルと太陽方向ベクトル(1,0,0)の内積に等しい
+    # (x,y,z)は半径RMの球上の点なので、cos(Z) = (x/RM) * 1 = x/RM となる
+    weight_cos_z = x / RM
 
     if SPEED_DISTRIBUTION == 'maxwellian':
         ejection_speed = sample_maxwellian_speed(MASS_NA, 1500.0)
@@ -252,11 +263,14 @@ def simulate_single_particle_for_density(args):
         iphi = int((phi + PI) / D_PHI)
 
         if 0 <= ir < N_R and 0 <= itheta < N_THETA and 0 <= iphi < N_PHI:
-
+            ### 変更点 3: 密度グリッドへの加算方法 ###
+            # 常に初期位置で計算した重み(weight_cos_z)を乗算する
             if IONIZATION_MODEL == 'weight_decay':
-                local_density_grid[ir, itheta, iphi] += Nad * DT
+                # 時間減衰する重み(Nad)と、初期位置の重み(weight_cos_z)の両方を考慮
+                local_density_grid[ir, itheta, iphi] += weight_cos_z * Nad * DT
             else:  # particle_death
-                local_density_grid[ir, itheta, iphi] += particle_weight * DT
+                # 以前は「1」だった重みを、cos(Z)に基づく重みに変更
+                local_density_grid[ir, itheta, iphi] += weight_cos_z * DT
 
         r_current = np.sqrt(x ** 2 + y ** 2 + z ** 2)
         if r_current <= RM:
@@ -316,14 +330,14 @@ def main():
     dist_tag = "CO" if settings['ejection_direction_model'] == 'cosine' else "ISO"
     speed_tag = "MW" if settings['speed_distribution'] == 'maxwellian' else "WB"
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q2.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}"
+    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_test"
 
     sub_folder_name = base_name_template
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
 
-    log_file_path = os.path.join(target_output_dir, "death_statistics_Q2.0.csv")
+    log_file_path = os.path.join(target_output_dir, "death_statistics_Q3.0.csv")
     with open(log_file_path, 'w', newline='') as f:
         f.write("TAA,Ionized_Count,Ionized_Percent,Stuck_Count,Stuck_Percent,Escaped_Count,Escaped_Percent\n")
     print(f"統計情報は {log_file_path} に記録されます。")
@@ -371,8 +385,8 @@ def main():
 
         F_UV_at_1AU_per_m2 = 1.5e14 * 1e4  # 1天文単位での紫外線光子フラックス [photons/m^2/s]
         #Q_PSD_cm2 = 1.0e-20 / 1e4  # 光脱離断面積 [m^2]
-        Q_PSD_cm2 = 2.0e-20 / 1e4 # suzukiが使ってたやつ
-        #Q_PSD_cm2 = 3.0e-20 / 1e4  # YakshinskiyとMadey（1999）
+        #Q_PSD_cm2 = 2.0e-20 / 1e4 # suzukiが使ってたやつ
+        Q_PSD_cm2 = 3.0e-20 / 1e4  # YakshinskiyとMadey（1999）
         # Q_PSD_cm2 = 1.4e-21 / 1e4 # Killenら（2004）
         RM_m = constants['RM']  # 水星半径 [m]
         # cNa = 0.053 * 7.5e14 * 1e4 # Moroni (2023) 水星表面のナトリウム原子の割合
