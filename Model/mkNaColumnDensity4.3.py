@@ -17,7 +17,6 @@ def calculate_surface_temperature(x, y, z, AU):
     T1 = 600.0  # 太陽直下点での最大温度上昇 [K]
     if x <= 0:
         return T0
-    # 太陽方向ベクトル(1,0,0)と位置ベクトルのなす角の余弦を計算
     cos_theta = x / np.sqrt(x ** 2 + y ** 2 + z ** 2)
     if cos_theta < 0:
         return T0
@@ -41,22 +40,13 @@ def calculate_sticking_probability(surface_temp_K):
     return p_stick_eff
 
 
-# --- 物理モデルに基づくサンプリング関数 ---
+# --- サンプリング関数 ---
 def sample_maxwellian_speed(mass_kg, temp_k):
-    """
-    指定された温度のマクスウェル分布に従う速さをサンプリングする。
-    """
     K_BOLTZMANN = 1.380649e-23  # ボルツマン定数 [J/K]
-
-    # 速度の各成分の標準偏差を計算
     sigma = np.sqrt(K_BOLTZMANN * temp_k / mass_kg)
-
-    # 3つの独立した速度成分を正規分布からサンプリング
     vx = np.random.normal(0, sigma)
     vy = np.random.normal(0, sigma)
     vz = np.random.normal(0, sigma)
-
-    # 3次元速度ベクトルの大きさを計算
     speed = np.sqrt(vx ** 2 + vy ** 2 + vz ** 2)
     return speed
 
@@ -69,76 +59,56 @@ def sample_weibull_speed(mass_kg,
     """
     E_CHARGE = 1.602176634e-19  # 電子の電荷 [C]
     p = np.random.random()
-    # 逆関数法を用いてエネルギーをサンプリング
     E_ev = U_ev * (p ** (-1.0 / (beta_shape + 1.0)) - 1.0)
     E_joule = E_ev * E_CHARGE
-    # エネルギーを速度に変換
     v_ms = np.sqrt(2 * E_joule / mass_kg)
     return v_ms
 
 
 def sample_cosine_direction(normal_vector):
-    """
-    指定された法線ベクトル(normal_vector)に対してコサイン則(Lambert則)に従う3D方向ベクトルをサンプリングする。
-    """
-    # 法線ベクトルを正規化
     normal_vector = normal_vector / np.linalg.norm(normal_vector)
 
-    # 法線ベクトルと直交する接ベクトルt1を生成 (簡易的な方法)
     if np.abs(normal_vector[0]) > np.abs(normal_vector[1]):
         inv_len = 1.0 / np.sqrt(normal_vector[0] ** 2 + normal_vector[2] ** 2)
         t1 = np.array([-normal_vector[2] * inv_len, 0, normal_vector[0] * inv_len])
     else:
         inv_len = 1.0 / np.sqrt(normal_vector[1] ** 2 + normal_vector[2] ** 2)
         t1 = np.array([0, normal_vector[2] * inv_len, -normal_vector[1] * inv_len])
-    # もう一つの接ベクトルt2を外積で生成
     t2 = np.cross(normal_vector, t1)
 
-    # コサイン則に従うローカル座標での方向をサンプリング
     p1, p2 = np.random.random(), np.random.random()
     sin_theta_sq = p1
     cos_theta = np.sqrt(1.0 - sin_theta_sq)
     sin_theta = np.sqrt(sin_theta_sq)
     phi = 2 * np.pi * p2
 
-    # ローカル座標系でのベクトルをワールド座標系に変換
     direction = t1 * sin_theta * np.cos(phi) + t2 * sin_theta * np.sin(phi) + normal_vector * cos_theta
     return direction
 
 
 def sample_isotropic_direction(normal_vector):
-    """
-    指定された法線ベクトルの半球方向へ等方的に(Isotropic)な3D方向ベクトルをサンプリングする。
-    """
-    # 空間でランダムな方向ベクトルを生成
     vec = np.random.randn(3)
     vec /= np.linalg.norm(vec)
 
-    # 法線ベクトルとの内積をチェックし、向きを調整
-    # 内積が負ならベクトルが地表を向いているので反転させる
     if np.dot(vec, normal_vector) < 0:
         vec = -vec
 
     return vec
 
 
-# --- シミュレーションのコア関数 (3D改造版) ---
+# --- シミュレーションの本体 ---
 def simulate_single_particle_for_density(args):
-    """
-    一個の粒子を追跡し、その軌跡を球座標密度グリッドに記録する。
-    """
-    # 引数をアンパック
+    # 引数
     constants, settings, spec_data = args['consts'], args['settings'], args['spec']
     TAA, AU, lon, lat, Vms_ms = args['orbit']
     grid_params = args['grid_params']
 
-    # 物理定数と設定をアンパック
+    # 定数と設定
     C, PI, H, MASS_NA, RM, GM_MERCURY, K_BOLTZMANN = constants.values()
-    # <<< 修正: ionization_modelをアンパック >>>
+
     GRAVITY_ENABLED, BETA, T1AU, DT, SPEED_DISTRIBUTION, EJECTION_DIRECTION_MODEL, IONIZATION_MODEL = settings.values()
     wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL = spec_data.values()
 
-    # 球座標グリッドのパラメータをアンパック
     N_R, N_THETA, N_PHI, R_MAX = grid_params['n_r'], grid_params['n_theta'], grid_params['n_phi'], grid_params['max_r']
     DR = R_MAX / N_R
     D_THETA = PI / N_THETA
@@ -149,25 +119,18 @@ def simulate_single_particle_for_density(args):
     # <<< 追加: 粒子消滅法の場合、重みは常に1 >>>
     particle_weight = 1.0
 
-    # まず、球の表面積に対して一様なランダム点を生成する
-    phi_source = 2 * PI * np.random.random()
-    cos_theta_source = 2 * np.random.random() - 1.0  # -1から1までの一様分布
+    # 経度方向(phi)を日照側(-pi/2 から +pi/2)でサンプリング
+    phi_source = PI * np.random.random() - (PI / 2.0)
+
+    # 緯度方向を示すcos(theta)は全球(-1から1)でサンプリング
+    cos_theta_source = 2 * np.random.random() - 1.0
     sin_theta_source = np.sqrt(1.0 - cos_theta_source ** 2)
 
-    # 座標に変換
-    x_rand = RM * sin_theta_source * np.cos(phi_source)
-    y_rand = RM * sin_theta_source * np.sin(phi_source)
-    z_rand = RM * cos_theta_source
+    x = RM * sin_theta_source * np.cos(phi_source)
+    y = RM * sin_theta_source * np.sin(phi_source)
+    z = RM * cos_theta_source
 
-    # 昼側半球に限定する (太陽は常に+X方向にあると仮定)
-    # x座標が負なら、符号を反転させて昼側に持ってくる
-    x = np.abs(x_rand)
-    y = y_rand
-    z = z_rand
-
-    # 粒子の放出確率が cos(Z) に比例するという物理モデルを「重み」で表現する
-    # 太陽天頂角のコサイン cos(Z) は、位置ベクトルの単位ベクトルと太陽方向ベクトル(1,0,0)の内積に等しい
-    # (x,y,z)は半径RMの球上の点なので、cos(Z) = (x/RM) * 1 = x/RM となる
+    #角度依存の重み
     weight_cos_z = x / RM
 
     if SPEED_DISTRIBUTION == 'maxwellian':
@@ -263,13 +226,11 @@ def simulate_single_particle_for_density(args):
         iphi = int((phi + PI) / D_PHI)
 
         if 0 <= ir < N_R and 0 <= itheta < N_THETA and 0 <= iphi < N_PHI:
-            ### 変更点 3: 密度グリッドへの加算方法 ###
             # 常に初期位置で計算した重み(weight_cos_z)を乗算する
             if IONIZATION_MODEL == 'weight_decay':
-                # 時間減衰する重み(Nad)と、初期位置の重み(weight_cos_z)の両方を考慮
+                # 時間減衰する重みと、初期位置の重みの両方を考慮
                 local_density_grid[ir, itheta, iphi] += weight_cos_z * Nad * DT
             else:  # particle_death
-                # 以前は「1」だった重みを、cos(Z)に基づく重みに変更
                 local_density_grid[ir, itheta, iphi] += weight_cos_z * DT
 
         r_current = np.sqrt(x ** 2 + y ** 2 + z ** 2)
@@ -303,9 +264,7 @@ def simulate_single_particle_for_density(args):
     return (local_density_grid, death_reason)
 
 
-# --- メインの制御関数 ---
 def main():
-    # --- ★★★ 設定項目 ★★★ ---
     OUTPUT_DIRECTORY = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
     N_R = 100
@@ -322,7 +281,7 @@ def main():
         # 'T1AU': 168918.0, # 電離寿命 理論値[s]
         'DT': 10.0,  # 時間ステップ [s]
         'speed_distribution': 'maxwellian',  # 'maxwellian' または 'weibull'
-        'ejection_direction_model': 'isotropic',  # 'cosine'(cos則) または 'isotropic'(等方)
+        'ejection_direction_model': 'isotropic',  # 'cosine'　または 'isotropic'
         'ionization_model': 'particle_death'  # 'weight_decay' または 'particle_death'
     }
 
@@ -330,17 +289,17 @@ def main():
     dist_tag = "CO" if settings['ejection_direction_model'] == 'cosine' else "ISO"
     speed_tag = "MW" if settings['speed_distribution'] == 'maxwellian' else "WB"
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_test"
+    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}"
 
     sub_folder_name = base_name_template
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)
     os.makedirs(target_output_dir, exist_ok=True)
-    print(f"結果は '{target_output_dir}' に保存されます。")
+    print(f"結果は '{target_output_dir}' に保存。")
 
     log_file_path = os.path.join(target_output_dir, "death_statistics_Q3.0.csv")
     with open(log_file_path, 'w', newline='') as f:
         f.write("TAA,Ionized_Count,Ionized_Percent,Stuck_Count,Stuck_Percent,Escaped_Count,Escaped_Percent\n")
-    print(f"統計情報は {log_file_path} に記録されます。")
+    print(f"死因は {log_file_path} に記録。")
 
     constants = {
         'C': 299792458.0,  # 光速 [m/s]
@@ -407,7 +366,7 @@ def main():
             results = list(tqdm(pool.imap(simulate_single_particle_for_density, tasks), total=N_PARTICLES,
                                 desc=f"TAA={TAA:.1f}"))
 
-        print("結果を集計・保存しています...")
+        print("結果を集計・保存中...")
         master_density_grid = np.zeros((N_R, N_THETA, N_PHI), dtype=np.float32)
         death_counts = {'ionized': 0, 'stuck': 0, 'escaped': 0}
 
@@ -434,7 +393,7 @@ def main():
                         f"{death_counts['stuck']},{stuck_percent:.2f},"
                         f"{death_counts['escaped']},{escaped_percent:.2f}\n")
             f.write(log_line)
-        print(f"統計情報を {log_file_path} に追記しました。")
+        print(f"死因を {log_file_path} に記録。")
 
         R_MAX = grid_params['max_r']
         D_THETA = constants['PI'] / N_THETA
@@ -452,7 +411,7 @@ def main():
         cell_volumes_m3[cell_volumes_m3 == 0] = 1e-30
 
         # 数密度 [atoms/m^3] を計算
-        # (総放出率 / テスト粒子数) * (グリッド上の延べ時間 / セルの体積)
+        # (総放出率 / テスト粒子数) * (グリッド上の滞在時間 / セルの体積)
         number_density_m3 = (total_flux_for_this_taa / N_PARTICLES) * (master_density_grid / cell_volumes_m3)
 
         # 最終出力のために [atoms/cm^3] に変換
@@ -462,9 +421,9 @@ def main():
         base_filename = f"density3d_taa{TAA:.0f}_{parameter_part}"
         full_path_npy = os.path.join(target_output_dir, f"{base_filename}.npy")
         np.save(full_path_npy, number_density_cm3)
-        print(f"結果を {full_path_npy} に保存しました。")
+        print(f"結果を {full_path_npy} に保存。")
 
-    print("\n★★★ すべてのシミュレーションが完了しました ★★★")
+    print("\nシミュレーション完了")
 
 
 if __name__ == '__main__':

@@ -209,12 +209,15 @@ def main_snapshot_simulation():
     TIME_STEP_SEC = 3600
     TOTAL_SIM_YEARS = 1.0
 
-    SUPERPARTICLES_PER_CELL = 100
+    SUPERPARTICLES_PER_CELL = 1000
 
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
 
     settings = {
-        'BETA': 0.5, 'T1AU': 61728.4, 'DT': 10.0,
+        'BETA': 0.5,
+        #'T1AU': 61728.4,
+        'T1AU': 168918.0, # 電離寿命 理論値[s]
+        'DT': 10.0,
         'N_LON': N_LON, 'N_LAT': N_LAT,
         'GRID_RADIUS_RM': 5.0
     }

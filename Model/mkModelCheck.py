@@ -39,9 +39,12 @@ try:
 
     # グラフのタイトルやラベルを設定
     plt.title('obs_vs_model', fontsize=16)
-    plt.xlabel('TAA[°]', fontsize=12)
-    plt.ylabel('Na_Column_Density [atoms/$cm^2$]', fontsize=12)
+    plt.xlabel('TAA[°]', fontsize=18)
+    plt.ylabel('Na Column Density [atoms/$cm^2$]', fontsize=18)
     plt.tick_params(axis='both', which='major', labelsize=18)
+
+    ax = plt.gca()
+    ax.yaxis.get_offset_text().set_fontsize(18)
 
     plt.legend()  # 凡例を表示
     plt.grid(True)  # グリッド線を表示
