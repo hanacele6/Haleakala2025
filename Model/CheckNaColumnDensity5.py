@@ -9,7 +9,7 @@ import sys
 # --- ★★★ 設定項目 ★★★ ---
 # 実行したシミュレーションの出力フォルダを指定
 # 例: "./SimulationResult3D_snapshot_corrected/snapshot_SPperCell10_Q2.0_corrected"
-RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D_test/snapshot_SPperCell1000_Q2.0"
+RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D_test/snapshot_SPperCell100_Q2.0"
 
 # 読み込むファイルのパターン
 FILE_PATTERN = "snapshot_t*_taa*.npy"

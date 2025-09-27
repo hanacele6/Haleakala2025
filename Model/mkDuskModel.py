@@ -14,6 +14,7 @@ def run_dusk_model_improved():
     # --- 定数と物理パラメータ ---
     # 定数名を分かりやすくし、単位や意味をコメントで明記
     BASE_LIFETIME = 169200.0  # 光脱離の基準タイムスケール τ [s]
+    #BASE_LIFETIME = 60000
     BASE_PHOTON_FLUX = 4.6e7  # 基準光子フラックス Φ₀ [atoms/cm^2/s]
     MERCURY_RADIUS = 2.44e8  # 水星の半径 Rm [cm]
     ECCENTRICITY = 0.2056  # 軌道の離心率 e
@@ -46,10 +47,12 @@ def run_dusk_model_improved():
     # フラックスは距離の2乗に反比例する
     # 0.306 AUは水星の近日点距離に由来する基準距離
     photon_flux = BASE_PHOTON_FLUX * (0.306 / sun_distance_au) ** 2
+    #photon_flux = BASE_PHOTON_FLUX
 
     # 4. 距離に応じた寿命(τ1)を計算
     # 寿命は距離の2乗に比例すると仮定
-    distance_adjusted_lifetime = BASE_LIFETIME * sun_distance_au ** 2
+    distance_adjusted_lifetime = BASE_LIFETIME * ( sun_distance_au ** 2 )
+    #distance_adjusted_lifetime = BASE_LIFETIME
 
     # 5. 粒子が水星表面から脱出するまでの時間(tm)を計算
     migration_time = np.sqrt(2 * MERCURY_RADIUS / srp_values)

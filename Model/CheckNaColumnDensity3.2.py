@@ -10,8 +10,9 @@ import pandas as pd
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
-FILE_PATTERN = "density3d_taa*_beta0.50_Q3.0_MW_ISO_PD_pl24x24.npy"
-#density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24
+#FILE_PATTERN = "density3d_taa*_beta0.50_Q3.0_MW_ISO_PD_pl24x24.npy"
+FILE_PATTERN = "density3d_taa*_test.npy"
+#density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24 density3d_PSD_ISO_TD_COS_beta0.50_pl24x24
 
 
 # 解析結果のグラフとCSVを保存するフォルダの名前
@@ -21,11 +22,12 @@ OUTPUT_DIR = "Analysis_Results"
 REGIONS_TO_ANALYZE = [
     {'label': 'Dayside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, 80)},
     {'label': 'Dawnside', 'theta_range_deg': (10, 170), 'phi_range_deg': (10, 80)},
+    {'label': 'VDuskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-10, 10)},
     {'label': 'Duskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, -10)},
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
 ]
 
-PLOT_TARGET_LABEL = 'Duskside'
+PLOT_TARGET_LABEL = 'VDuskside'
 
 # 高さの範囲
 RADIAL_RANGE_RM_MIN = 1.0

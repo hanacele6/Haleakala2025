@@ -8,11 +8,12 @@ import sys
 
 # --- ★★★ 設定項目 ★★★ ---
 # mercury_na_simulation_taa_sync.py の出力フォルダを指定
-RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D_test/PSD_atm_R50_YEAR1.0_SPperCell10_Q2.0_new"
+#RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_test"
+RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24"
 
 # 読み込むファイルのパターン
-#FILE_PATTERN = "atmospheric_density_*.npy"
-FILE_PATTERN = "atmospheric_density_t*_taa*.npy"
+FILE_PATTERN = "density3d_taa*.npy"
+#FILE_PATTERN = "atmospheric_density_t*_taa*.npy"
 
 # 解析結果のグラフとCSVを保存するフォルダの名前
 OUTPUT_DIR_NAME = "Analysis_Results_ColumnDensity"
@@ -20,7 +21,9 @@ OUTPUT_DIR_NAME = "Analysis_Results_ColumnDensity"
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 # ★ プロットしたい領域を一つだけ指定（'Dayside', 'Nightside'など）。
 # ★ すべてプロットする場合は None にする
-PLOT_TARGET_LABEL = 'Duskside'
+#PLOT_TARGET_LABEL = 'Subsolar_Region'
+#PLOT_TARGET_LABEL = 'Duskside'
+PLOT_TARGET_LABEL = 'Dusk_Terminator'
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 # 解析する領域の定義 [theta: 0-180 (北極-南極), phi: -180-180 (反太陽方向が0)]
@@ -29,13 +32,16 @@ REGIONS_TO_ANALYZE = [
     {'label': 'Nightside', 'theta_range_deg': (10, 170), 'phi_range_deg': (100, -100)},  # 180度をまたぐ例
     {'label': 'Dawnside', 'theta_range_deg': (10, 170), 'phi_range_deg': (10, 80)},  # Y>0
     {'label': 'Duskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, -10)},  # Y<0
+    {'label': 'Subsolar_Region', 'theta_range_deg': (10, 170), 'phi_range_deg': (165, -165)},
+    {'label': 'Dusk_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (84, 96)},
+    {'label': 'Dawn_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (-96, -84)},
     {'label': 'North_Polar', 'theta_range_deg': (0, 30), 'phi_range_deg': (-180, 180)},
     {'label': 'South_Polar', 'theta_range_deg': (150, 180), 'phi_range_deg': (-180, 180)},
 ]
 
 # 柱密度を計算する高さの範囲 (水星半径 RM 単位)
 RADIAL_RANGE_RM_MIN = 1.0
-RADIAL_RANGE_RM_MAX = 5.0
+RADIAL_RANGE_RM_MAX = 4.0
 
 # --- シミュレーション実行時のパラメータ (mercury_na_simulation_taa_sync.py と一致させる) ---
 N_R = 50

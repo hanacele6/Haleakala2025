@@ -138,6 +138,7 @@ def run_sra_simulation():
 
                     # 合計の加速度 [km/s^2]
                     total_accel_x = accel_srp_x + accel_gx
+                    #total_accel_x = accel_gx
                     total_accel_y = accel_gy  # y方向の放射圧は0と仮定
 
                     # 速度を更新

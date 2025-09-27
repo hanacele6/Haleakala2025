@@ -47,11 +47,13 @@ REGIONS_TO_ANALYZE = [
     {'label': 'Dawnside', 'theta_range_deg': (10, 170), 'phi_range_deg': (10, 80)},
     {'label': 'Duskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, -10)},
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
+    {'label': 'Source_Dusk_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (90, 96)},
+    {'label': 'Source_Dawn_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (-96, -90)},
 ]
 
 # --- ★★★ 表示する領域を選択 ★★★ ---
 # 複数の領域を同時に表示することも可能です。例: ['Dayside', 'Nightside']
-LABELS_TO_PLOT = ['Duskside']
+LABELS_TO_PLOT = ['Source_Dusk_Terminator']
 # 全ての領域をプロットする場合: LABELS_TO_PLOT = [r['label'] for r in REGIONS_TO_ANALYZE]
 
 
