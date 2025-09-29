@@ -360,11 +360,11 @@ def simulate_single_particle_for_density(args):
         if r_current <= RM:
             # 衝突点の表面温度と吸着確率を計算
             temp_at_impact = calculate_surface_temperature(pos_prev[0], pos_prev[1], pos_prev[2], AU)
-            stick_prob = calculate_sticking_probability(temp_at_impact)
+            #stick_prob = calculate_sticking_probability(temp_at_impact)
 
-            if np.random.random() < stick_prob:
-                death_reason = 'stuck'
-                break  # 吸着して消滅
+            #if np.random.random() < stick_prob:
+            #    death_reason = 'stuck'
+            #    break  # 吸着して消滅
 
             # 吸着しない場合、熱的に accomodate して再放出される
             E_in = 0.5 * MASS_NA * np.sum(vel ** 2)
@@ -394,14 +394,14 @@ def main():
     N_THETA = 24  # 天頂角方向のグリッド数
     N_PHI = 24  # 方位角方向のグリッド数
     GRID_RADIUS_RM = 5.0  # シミュレーション空間の半径 (水星半径単位)
-    N_PARTICLES = 10000  # 各TAAでシミュレートする粒子数
+    N_PARTICLES = 1000  # 各TAAでシミュレートする粒子数
 
     # シミュレーションの挙動を制御する設定
     settings = {
         'GRAVITY_ENABLED': True,
         'BETA': 0.5,  # 表面衝突時の熱 accomodation 係数 (0:弾性衝突, 1:完全な熱化)
-        #'T1AU': 61728.4,  # 1AUでの電離寿命 [s] (実験値)
-        'T1AU': 1.9*1e5,  # 1AUでの電離寿命 [s] (理論値) Suzuki(2019)
+        'T1AU': 61728.4,  # 1AUでの電離寿命 [s] (実験値)
+        #'T1AU': 1.9*1e5,  # 1AUでの電離寿命 [s] (理論値) Suzuki(2019)
         'DT': 10.0,  # 時間ステップ [s]
         'speed_distribution': 'maxwellian',  # 'maxwellian' or 'weibull'
         'ejection_direction_model': 'isotropic',  # 'cosine' or 'isotropic'
@@ -412,7 +412,7 @@ def main():
     dist_tag = "CO" if settings['ejection_direction_model'] == 'cosine' else "ISO"
     speed_tag = "MW" if settings['speed_distribution'] == 'maxwellian' else "WB"
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}"
+    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_nostick"
 
     sub_folder_name = base_name_template
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)

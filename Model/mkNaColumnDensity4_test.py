@@ -258,11 +258,11 @@ def simulate_single_particle_for_density(args):
         r_current = np.linalg.norm(pos)
         if r_current <= RM:
             temp_at_impact = calculate_surface_temperature(pos_prev[0], pos_prev[1], pos_prev[2], AU)
-            stick_prob = calculate_sticking_probability(temp_at_impact)
+            #stick_prob = calculate_sticking_probability(temp_at_impact)
 
-            if np.random.random() < stick_prob:
-                death_reason = 'stuck'
-                break
+            #if np.random.random() < stick_prob:
+            #    death_reason = 'stuck'
+            #    break
 
             E_in = 0.5 * MASS_NA * np.sum(vel ** 2)
             E_T = K_BOLTZMANN * temp_at_impact
@@ -289,14 +289,14 @@ def main():
     N_THETA = 24
     N_PHI = 24
     GRID_RADIUS_RM = 5.0
-    N_PARTICLES = 10000
+    N_PARTICLES = 1000
 
     # ▼▼▼ 変更・追加箇所 ▼▼▼
     # シミュレーションの挙動を制御する設定
     settings = {
         'GRAVITY_ENABLED': True,
-        'BETA': 0.0,
-        'T1AU': 1.9 * 1e5,
+        'BETA': 0.5,
+        'T1AU': 5.4 * 1e4,
         'DT': 10.0,
         'ejection_direction_model': 'isotropic',  # 'cosine' or 'isotropic'
         'ionization_model': 'particle_death',  # 'weight_decay' or 'particle_death'
@@ -306,7 +306,7 @@ def main():
         # 'weibull'   : ワイブル分布
         # 'constant'  : 以下で指定する固定値
         'ejection_speed_model': 'constant',
-        'constant_speed_ms': 0.0,  # 'constant'モデル使用時の初速 [m/s]
+        'constant_speed_ms': 1000.0,  # 'constant'モデル使用時の初速 [m/s]
 
         # --- 放出位置モデル ---
         # 'dayside_uniform': 昼側表面から均一に放出
@@ -325,7 +325,7 @@ def main():
     speed_tag = settings['ejection_speed_model'][:2].upper()
     loc_tag = settings['ejection_location_model']
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_test"
+    base_name_template = f"density3d_test3"
     # ▲▲▲ 変更・追加ここまで ▲▲▲
 
     sub_folder_name = base_name_template

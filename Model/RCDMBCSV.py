@@ -86,13 +86,19 @@ def recalculate_density_from_csv(input_csv_path, new_phi_0, new_t1au, source_exp
     n_bar_values = [row[1] for row in results_data]
 
     plt.figure(figsize=(12, 7))
-    plt.plot(taa_values, n_bar_values, marker='.', linestyle='-', color='red',
+    #plt.figure(figsize=(7, 12))
+    plt.plot(taa_values, n_bar_values, marker='.', linestyle='none', color='red',
              label=f'phi_0={new_phi_0:.1e}, T1AU={new_t1au:.1e}')
 
     plt.xlabel("True Anomaly Angle (deg)", fontsize=14)
     plt.ylabel("Recalculated Column Density (atoms cm⁻²)", fontsize=14)
     plt.title(f"Recalculated Density from {os.path.basename(input_csv_path)}", fontsize=16)
     plt.yscale('log')
+    y_ticks = [0.1e11, 0.2e11, 0.5e11, 1.0e11, 2e11, 5e11, 10e11]
+    plt.yticks(y_ticks, [f'{tick:.0e}' for tick in y_ticks])
+    #y_min = 0.1e11  # y軸の最小値を設定 (例: 10の8乗)
+    #y_max = 10e11  # y軸の最大値を設定 (例: 10の11乗)
+    #plt.ylim(y_min, y_max)
     plt.xticks(np.arange(0, 361, 30))
     plt.grid(True, which='both', linestyle='--', linewidth=0.5)
     plt.legend()

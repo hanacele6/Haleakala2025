@@ -8,8 +8,8 @@ import sys
 
 # --- ★★★ 設定項目 ★★★ ---
 # mercury_na_simulation_taa_sync.py の出力フォルダを指定
-#RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_test"
-RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24"
+#RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_test2"
+RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24_nostick"
 
 # 読み込むファイルのパターン
 FILE_PATTERN = "density3d_taa*.npy"
@@ -23,7 +23,8 @@ OUTPUT_DIR_NAME = "Analysis_Results_ColumnDensity"
 # ★ すべてプロットする場合は None にする
 #PLOT_TARGET_LABEL = 'Subsolar_Region'
 #PLOT_TARGET_LABEL = 'Duskside'
-PLOT_TARGET_LABEL = 'Dusk_Terminator'
+#PLOT_TARGET_LABEL = 'Dusk_Terminator'
+PLOT_TARGET_LABEL = 'Dayside'
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 # 解析する領域の定義 [theta: 0-180 (北極-南極), phi: -180-180 (反太陽方向が0)]
@@ -44,7 +45,7 @@ RADIAL_RANGE_RM_MIN = 1.0
 RADIAL_RANGE_RM_MAX = 4.0
 
 # --- シミュレーション実行時のパラメータ (mercury_na_simulation_taa_sync.py と一致させる) ---
-N_R = 50
+N_R = 100
 N_THETA = 24
 N_PHI = 24
 GRID_RADIUS_RM = 5.0
@@ -169,7 +170,7 @@ def analyze_and_plot_column_density(results_dir, file_pattern, output_dir_name, 
             df_data['TAA'] = taas
         df_data[label] = densities
 
-        ax.plot(taas, densities, marker='o', linestyle='-', label=label, markersize=5)
+        ax.plot(taas, densities, marker='o', linestyle='none', label=label, markersize=5)
 
     # グラフの装飾
     title = f"Average Na Column Density vs. TAA\n(Altitude: {radial_range_rm[0]:.1f} - {radial_range_rm[1]:.1f} $R_M$)"

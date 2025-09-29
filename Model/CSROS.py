@@ -43,7 +43,7 @@ def plot_spherical_region(ax, theta_range_deg, phi_range_deg, color, label):
 
 # --- ★★★ 解析領域の定義（元のスクリプトからコピー） ★★★ ---
 REGIONS_TO_ANALYZE = [
-    {'label': 'Dayside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, 80)},
+    {'label': 'Dayside', 'theta_range_deg': (1, 179), 'phi_range_deg': (-89, 89)},
     {'label': 'Dawnside', 'theta_range_deg': (10, 170), 'phi_range_deg': (10, 80)},
     {'label': 'Duskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, -10)},
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
@@ -53,7 +53,7 @@ REGIONS_TO_ANALYZE = [
 
 # --- ★★★ 表示する領域を選択 ★★★ ---
 # 複数の領域を同時に表示することも可能です。例: ['Dayside', 'Nightside']
-LABELS_TO_PLOT = ['Source_Dusk_Terminator']
+LABELS_TO_PLOT = ['Dayside']
 # 全ての領域をプロットする場合: LABELS_TO_PLOT = [r['label'] for r in REGIONS_TO_ANALYZE]
 
 

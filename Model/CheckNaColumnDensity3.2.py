@@ -10,8 +10,8 @@ import pandas as pd
 RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
 
 # 読み込むファイルの命名規則（ワイルドカード * を使用）
-#FILE_PATTERN = "density3d_taa*_beta0.50_Q3.0_MW_ISO_PD_pl24x24.npy"
-FILE_PATTERN = "density3d_taa*_test.npy"
+FILE_PATTERN = "density3d_taa*_beta0.50_Q3.0_MW_ISO_PD_pl24x24.npy"
+#FILE_PATTERN = "density3d_taa*_test.npy"
 #density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24 density3d_PSD_ISO_TD_COS_beta0.50_pl24x24
 
 
@@ -27,10 +27,10 @@ REGIONS_TO_ANALYZE = [
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
 ]
 
-PLOT_TARGET_LABEL = 'VDuskside'
+PLOT_TARGET_LABEL = 'Duskside'
 
 # 高さの範囲
-RADIAL_RANGE_RM_MIN = 1.0
+RADIAL_RANGE_RM_MIN = 1.1
 RADIAL_RANGE_RM_MAX = 3.0
 
 # シミュレーションの物理・グリッド定数
