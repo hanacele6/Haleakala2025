@@ -392,9 +392,9 @@ def main():
     OUTPUT_DIRECTORY = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D"
     N_R = 100  # 半径方向のグリッド数
     N_THETA = 24  # 天頂角方向のグリッド数
-    N_PHI = 24  # 方位角方向のグリッド数
+    N_PHI = 48  # 方位角方向のグリッド数
     GRID_RADIUS_RM = 5.0  # シミュレーション空間の半径 (水星半径単位)
-    N_PARTICLES = 1000  # 各TAAでシミュレートする粒子数
+    N_PARTICLES = 10000  # 各TAAでシミュレートする粒子数
 
     # シミュレーションの挙動を制御する設定
     settings = {
@@ -412,7 +412,7 @@ def main():
     dist_tag = "CO" if settings['ejection_direction_model'] == 'cosine' else "ISO"
     speed_tag = "MW" if settings['speed_distribution'] == 'maxwellian' else "WB"
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q3.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_nostick"
+    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q1.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_nostick"
 
     sub_folder_name = base_name_template
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)
@@ -461,11 +461,11 @@ def main():
 
         # --- このTAAにおける総放出率の計算 ---
         F_UV_at_1AU_per_m2 = 1.5e14 * 1e4  # 1AUでの紫外線光子フラックス [photons/m^2/s]
-        Q_PSD_m2 = 3.0e-20 / 1e4  # 光脱離断面積 [m^2]
-        # Q_PSD_cm2 = 1.0e-20 / 1e4  # 光脱離断面積 [m^2]
-        # Q_PSD_cm2 = 2.0e-20 / 1e4 # suzukiが使ってたやつ
-        # Q_PSD_cm2 = 3.0e-20 / 1e4  # YakshinskiyとMadey（1999）
-        # Q_PSD_cm2 = 1.4e-21 / 1e4 # Killenら（2004）
+        # Q_PSD_m2 = 3.0e-20 / 1e4  # 光脱離断面積 [m^2]
+        Q_PSD_m2 = 1.0e-20 / 1e4  # 光脱離断面積 [m^2]
+        # Q_PSD_m2 = 2.0e-20 / 1e4 # suzukiが使ってたやつ
+        # Q_PSD_m2 = 3.0e-20 / 1e4  # YakshinskiyとMadey（1999）
+        # Q_PSD_m2 = 1.4e-21 / 1e4 # Killenら（2004）
         # cNa = 0.053 * 7.5e14 * 1e4 # Moroni (2023) 水星表面のナトリウム原子の割合
         cNa_per_m2 = 1.5e13 * 1e4  # 表面のナトリウム原子のカラム密度 [atoms/m^2]
 

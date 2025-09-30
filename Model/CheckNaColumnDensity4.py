@@ -47,7 +47,8 @@ RADIAL_RANGE_RM_MAX = 4.0
 # --- シミュレーション実行時のパラメータ (mercury_na_simulation_taa_sync.py と一致させる) ---
 N_R = 100
 N_THETA = 24
-N_PHI = 24
+N_PHI =48
+#N_PHI = 24
 GRID_RADIUS_RM = 5.0
 RM_m = 2439.7e3
 
