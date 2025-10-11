@@ -9,7 +9,8 @@ import sys
 # --- ★★★ 設定項目 ★★★ ---
 # mercury_na_simulation_taa_sync.py の出力フォルダを指定
 #RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_test2"
-RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24_nostick"
+#RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q3.0_MW_ISO_PD_pl24x24"
+RESULTS_DIR = r"C:\Users\hanac\University\Senior\Mercury\Haleakala2025\SimulationResult3D/density3d_beta0.50_Q0.14_MW_ISO_PD_pl24x48_nostick"
 
 # 読み込むファイルのパターン
 FILE_PATTERN = "density3d_taa*.npy"
@@ -22,9 +23,10 @@ OUTPUT_DIR_NAME = "Analysis_Results_ColumnDensity"
 # ★ プロットしたい領域を一つだけ指定（'Dayside', 'Nightside'など）。
 # ★ すべてプロットする場合は None にする
 #PLOT_TARGET_LABEL = 'Subsolar_Region'
-#PLOT_TARGET_LABEL = 'Duskside'
+PLOT_TARGET_LABEL = 'Duskside'
 #PLOT_TARGET_LABEL = 'Dusk_Terminator'
-PLOT_TARGET_LABEL = 'Dayside'
+#PLOT_TARGET_LABEL = 'Dawn_Terminator'
+#PLOT_TARGET_LABEL = 'Dayside'
 # ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
 
 # 解析する領域の定義 [theta: 0-180 (北極-南極), phi: -180-180 (反太陽方向が0)]

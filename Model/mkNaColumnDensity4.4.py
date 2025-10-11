@@ -358,13 +358,29 @@ def simulate_single_particle_for_density(args):
         # --- 表面との衝突判定と処理 ---
         r_current = np.linalg.norm(pos)
         if r_current <= RM:
-            # 衝突点の表面温度と吸着確率を計算
+            stick_prob = 0.0  # デフォルトは吸着しない
+            # 最初に必ず衝突点の表面温度を計算する
             temp_at_impact = calculate_surface_temperature(pos_prev[0], pos_prev[1], pos_prev[2], AU)
-            #stick_prob = calculate_sticking_probability(temp_at_impact)
 
-            #if np.random.random() < stick_prob:
-            #    death_reason = 'stuck'
-            #    break  # 吸着して消滅
+            # settings辞書からモデルを取得。存在しない場合は'realistic'をデフォルトとする
+            sticking_model_type = settings.get('sticking_model', 'realistic')
+
+            if sticking_model_type == 'day0_night1':
+                # 昼夜判定モデルの場合
+                # 衝突前の位置ベクトル pos_prev のX成分で昼夜を判定
+                is_nightside = (pos_prev[0] < 0)
+                if is_nightside:
+                    stick_prob = 1.0  # 夜側なら100%吸着
+                else:
+                    stick_prob = 0.0  # 昼側なら吸着しない
+
+            else:  # 'realistic' または未設定の場合
+                # これまで通りの物理モデルに基づく吸着確率計算
+                stick_prob = calculate_sticking_probability(temp_at_impact)
+
+            if np.random.random() < stick_prob:
+                death_reason = 'stuck'
+                break  # 吸着して消滅
 
             # 吸着しない場合、熱的に accomodate して再放出される
             E_in = 0.5 * MASS_NA * np.sum(vel ** 2)
@@ -405,21 +421,22 @@ def main():
         'DT': 10.0,  # 時間ステップ [s]
         'speed_distribution': 'maxwellian',  # 'maxwellian' or 'weibull'
         'ejection_direction_model': 'isotropic',  # 'cosine' or 'isotropic'
-        'ionization_model': 'particle_death'  # 'weight_decay' or 'particle_death'
+        'ionization_model': 'particle_death',  # 'weight_decay' or 'particle_death'
+        'sticking_model': 'day0_night1'  # 'realistic' または 'day0_night1'
     }
 
     # --- ファイル名とディレクトリ設定 ---
     dist_tag = "CO" if settings['ejection_direction_model'] == 'cosine' else "ISO"
     speed_tag = "MW" if settings['speed_distribution'] == 'maxwellian' else "WB"
     ion_tag = "WD" if settings['ionization_model'] == 'weight_decay' else "PD"
-    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q1.0_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_nostick"
+    base_name_template = f"density3d_beta{settings['BETA']:.2f}_Q0.14_{speed_tag}_{dist_tag}_{ion_tag}_pl{N_THETA}x{N_PHI}_nostick"
 
     sub_folder_name = base_name_template
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, sub_folder_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
 
-    log_file_path = os.path.join(target_output_dir, "death_statistics_Q3.0.csv")
+    log_file_path = os.path.join(target_output_dir, "death_statistics.csv")
     with open(log_file_path, 'w', newline='') as f:
         f.write("TAA,Ionized_Count,Ionized_Percent,Stuck_Count,Stuck_Percent,Escaped_Count,Escaped_Percent\n")
     print(f"死因統計は {log_file_path} に記録されます。")
@@ -462,10 +479,10 @@ def main():
         # --- このTAAにおける総放出率の計算 ---
         F_UV_at_1AU_per_m2 = 1.5e14 * 1e4  # 1AUでの紫外線光子フラックス [photons/m^2/s]
         # Q_PSD_m2 = 3.0e-20 / 1e4  # 光脱離断面積 [m^2]
-        Q_PSD_m2 = 1.0e-20 / 1e4  # 光脱離断面積 [m^2]
+        # Q_PSD_m2 = 1.0e-20 / 1e4  # 光脱離断面積 [m^2]
         # Q_PSD_m2 = 2.0e-20 / 1e4 # suzukiが使ってたやつ
         # Q_PSD_m2 = 3.0e-20 / 1e4  # YakshinskiyとMadey（1999）
-        # Q_PSD_m2 = 1.4e-21 / 1e4 # Killenら（2004）
+        Q_PSD_m2 = 1.4e-21 / 1e4 # Killenら（2004）
         # cNa = 0.053 * 7.5e14 * 1e4 # Moroni (2023) 水星表面のナトリウム原子の割合
         cNa_per_m2 = 1.5e13 * 1e4  # 表面のナトリウム原子のカラム密度 [atoms/m^2]
 

@@ -299,15 +299,13 @@ def simulate_single_particle_for_density(args):
         if r <= RM:
             temp_impact = calculate_surface_temperature(pos_prev[0], pos_prev[1], pos_prev[2], AU)
             if np.random.random() < calculate_sticking_probability(temp_impact):
-                death_reason = 'stuck';
+                death_reason = 'stuck'
                 break
-            E_in = 0.5 * MASS_NA * np.sum(vel_prev ** 2)
-            E_T = PHYSICAL_CONSTANTS['K_BOLTZMANN'] * temp_impact
-            E_out = settings['BETA'] * E_T + (1.0 - settings['BETA']) * E_in
-            v_out = np.sqrt(2 * E_out / MASS_NA) if E_out > 0 else 0.0
-            impact_normal = pos_prev / np.linalg.norm(pos_prev)
-            vel = v_out * sample_isotropic_direction(impact_normal)
-            pos = RM * impact_normal
+            else:
+                # 論文の記述に基づき、熱脱離として再放出させる
+                impact_normal = pos_prev / np.linalg.norm(pos_prev)
+                vel = sample_td_velocity(MASS_NA, temp_impact, impact_normal, settings['td_direction_model'])
+                pos = RM * impact_normal
 
     return local_density_grid, death_reason
 

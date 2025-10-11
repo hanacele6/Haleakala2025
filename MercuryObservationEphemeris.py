@@ -108,7 +108,7 @@ def calculate_mercury_visibility_detailed(start_date_str, end_date_str, observer
 
         is_visible_now = (sun_alt_deg <= -1.5 and
                           sot_deg >= 15 and
-                          mercury_alt_deg >= 10)
+                          mercury_alt_deg >= 0)
 
         if is_visible_now:
             current_time_jst = current_loop_time_utc.astimezone(JST)
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     print("条件:")
     print("  1. 太陽の高度 <= -1.5 度")
     print("  2. 太陽と水星の離角 (SOT) >= 15 度")
-    print("  3. 水星の高度 >= 10 度")
+    print("  3. 水星の高度 >= 0 度")
 
     results = calculate_mercury_visibility_detailed(start_input, end_input, observer_location, step_minutes=1)
 
