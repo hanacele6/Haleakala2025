@@ -1,45 +1,62 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
-# --- Lambertian (Cosine) Distribution Sampling ---
-N_SAMPLES = 100000
+# --- Simulation Parameters ---
+N_SAMPLES = 500000  # Number of samples
 
-# Generate two sets of uniform random numbers
-u1 = np.random.random(N_SAMPLES)
+# --- Generate samples following a Lambertian distribution ---
+# Generate zenith angle θ
+# Sampled such that the PDF is P(θ) = sin(2θ)/2
 u2 = np.random.random(N_SAMPLES)
-
-# Sample cos(θ) according to the Lambertian distribution
 sin_theta = np.sqrt(u2)
-cos_theta_lambert = np.sqrt(1-sin_theta**2)
+cos_theta = np.sqrt(1 - sin_theta**2)
 
-# Convert the sampled cos(θ) values to θ in degrees
-theta_lambert_rad = np.arccos(cos_theta_lambert)
-theta_lambert_deg = np.degrees(theta_lambert_rad)
+# Generate azimuthal angle φ (uniformly distributed from 0 to 2π)
+phi_rad = 2 * np.pi * np.random.random(N_SAMPLES)
 
-# Sample the azimuthal angle φ and convert to degrees
-phi_rad_lambert = 2 * np.pi * u1
-phi_lambert_deg = np.degrees(phi_rad_lambert) - 180.0
+# --- Convert to 3D Cartesian coordinates ---
+# Conversion from spherical to Cartesian coordinates
+x = sin_theta * np.cos(phi_rad)
+y = sin_theta * np.sin(phi_rad)
+z = cos_theta
 
-# --- Plotting the Results ---
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5), tight_layout=True)
-fig.suptitle('Lambertian (Cosine) Distribution', fontsize=16)
+# ==============================================================================
+# Graph: 3D Scatter Plot of Lambertian Distribution
+# ==============================================================================
+print("--- Displaying 3D Scatter Plot of Lambertian Distribution ---")
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+fig.suptitle('3D Scatter Plot of Lambertian Distribution', fontsize=16)
 
-# 1. Histogram of θ (Zenith Angle)
-ax1.hist(theta_lambert_deg, bins=50, density=True, range=(0, 90), label='Sampled Data')
+# Plot a subset of points because plotting all is slow (e.g., first 5000)
+n_plot = 5000
+ax.scatter(x[:n_plot], y[:n_plot], z[:n_plot], s=5, alpha=0.6, label=f'Sampled Points (first {n_plot})')
 
-# Theoretical PDF for θ is P(θ) = sin(2θ)
-x_theory_deg = np.linspace(0, 90, 100)
-x_theory_rad = np.radians(x_theory_deg)
-y_theory_theta = np.sin(2 * x_theory_rad)
-ax1.set_xlabel('Zenith Angle θ [degrees]', fontsize="12")
-ax1.set_ylabel('Probability Density', fontsize="12")
-ax1.grid(True)
-ax1.legend()
+# Draw a wireframe of a hemisphere to make the shape clear
+u_sphere = np.linspace(0, 2 * np.pi, 100)
+v_sphere = np.linspace(0, np.pi / 2, 50)
+sphere_x = np.outer(np.cos(u_sphere), np.sin(v_sphere))
+sphere_y = np.outer(np.sin(u_sphere), np.sin(v_sphere))
+sphere_z = np.outer(np.ones(np.size(u_sphere)), np.cos(v_sphere))
+ax.plot_wireframe(sphere_x, sphere_y, sphere_z, color='gray', alpha=0.2, rstride=5, cstride=5)
 
-# 2. Histogram of the azimuthal angle φ (unchanged)
-ax2.hist(phi_lambert_deg, bins=50, density=True, range=(-180, 180))
-ax2.set_xlabel('Azimuthal Angle φ [degrees]', fontsize="12")
-ax2.set_ylabel('Probability Density', fontsize="12")
-ax2.grid(True)
+# --- Formatting the plot ---
+ax.set_title('Distribution of points on a hemisphere', fontsize=14)
+ax.set_xlabel('X axis', fontsize=12)
+ax.set_ylabel('Y axis', fontsize=12)
+ax.set_zlabel('Z axis (Normal)', fontsize=12)
+ax.set_xlim([-1, 1])
+ax.set_ylim([-1, 1])
+ax.set_zlim([0, 1])
 
+# Adjust the aspect ratio to make it look better
+ax.set_box_aspect((1, 1, 0.5))
+
+# Adjust the viewing angle
+ax.view_init(elev=20, azim=45)
+ax.legend()
+ax.grid(True)
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.show()

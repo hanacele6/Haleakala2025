@@ -1,57 +1,70 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
-# --- Lambertian (Cosine) Distribution Sampling ---
-# Number of samples (reduced for better 3D visualization)
-N_SAMPLES = 5000
+# --- シミュレーションのパラメータ ---
+N_SAMPLES = 500000  # サンプル数を多くすると結果が理論値に近づく
 
-# Generate two sets of uniform random numbers between 0 and 1
-u1 = np.random.rand(N_SAMPLES)
-u2 = np.random.rand(N_SAMPLES)
+# --- 1. ランバート分布に従うサンプルを生成 ---
+u2 = np.random.random(N_SAMPLES)
+sin_theta = np.sqrt(u2)
+cos_theta = np.sqrt(1 - sin_theta**2)
+theta_rad = np.arccos(cos_theta)
 
-# For a Lambertian distribution, the probability of emission is proportional to cos(θ).
-# Using the inverse transform sampling method:
-# 1. The azimuthal angle φ is uniformly distributed from 0 to 2π.
-phi = 2 * np.pi * u1
+# ==============================================================================
+# グラフ1: P(θ) = sin(2θ) の検証
+# ==============================================================================
+print("--- Displaying PDF of θ ---")
+fig1, ax1 = plt.subplots(figsize=(8, 6))
+fig1.suptitle('Verification of P(θ) = sin(2θ)', fontsize=16)
 
-# 2. The polar angle θ is sampled such that cos(θ) = sqrt(U2).
-#    This makes samples more likely to be near the normal (θ=0).
-cos_theta = np.sqrt(u2)
-sin_theta = np.sqrt(1 - cos_theta**2)
+# P(θ) = sin(2θ) の検証
+ax1.hist(theta_rad, bins=50, density=True, range=(0, np.pi/2), label='Sampled Data')
+x_theory_rad = np.linspace(0, np.pi/2, 100)
+y_theory_rad = np.sin(2 * x_theory_rad)
+ax1.plot(x_theory_rad, y_theory_rad, 'r-', lw=2, label='Theory: P(θ) = sin(2θ)')
+ax1.set_title('PDF of θ (in Radians)', fontsize=14)
+ax1.set_xlabel('Zenith Angle θ [radians]', fontsize=12)
+ax1.set_ylabel('Probability Density', fontsize=12)
+ax1.grid(True)
+ax1.legend()
 
-# --- Convert Spherical Coordinates to 3D Cartesian Coordinates ---
-# x = r * sin(θ) * cos(φ)
-# y = r * sin(θ) * sin(φ)
-# z = r * cos(θ)
-# Assuming a unit hemisphere (r=1)
-x = sin_theta * np.cos(phi)
-y = sin_theta * np.sin(phi)
-z = cos_theta
-
-# --- Plotting the Result in 3D ---
-fig = plt.figure(figsize=(8, 8))
-ax = fig.add_subplot(111, projection='3d')
-fig.suptitle('3D Visualization of Lambertian Distribution', fontsize=16)
-
-# Scatter plot of the sampled points
-ax.scatter(x, y, z, s=5, alpha=0.6)
-
-# Draw an arrow representing the surface normal vector
-#ax.quiver(0, 0, 0, 0, 0, 1.2, color='red', arrow_length_ratio=0.1, label='Surface Normal')
-
-# Set plot limits and labels
-ax.set_xlim([-1, 1])
-ax.set_ylim([-1, 1])
-ax.set_zlim([0, 1.3])
-ax.set_xlabel('X axis')
-ax.set_ylabel('Y axis')
-ax.set_zlabel('Z axis')
-ax.legend()
-ax.set_aspect('equal') # Ensure the hemisphere is not distorted
-ax.grid(True)
-
-# Set the viewing angle
-ax.view_init(elev=30, azim=45)
-
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 plt.show()
+
+# ==============================================================================
+# グラフ2: P(cosθ) = 2cosθ の検証
+# ==============================================================================
+print("\n--- Displaying PDF of cos(θ) ---")
+fig2, ax2 = plt.subplots(figsize=(8, 6))
+fig2.suptitle('Verification of P(cosθ) = 2cosθ', fontsize=16)
+
+# P(cosθ) = 2cosθ の検証
+ax2.hist(cos_theta, bins=50, density=True, range=(0, 1), label='Sampled Data')
+x_theory_cos = np.linspace(0, 1, 100)
+y_theory_cos = 2 * x_theory_cos
+ax2.plot(x_theory_cos, y_theory_cos, 'r-', lw=2, label='Theory: P(cosθ) = 2cosθ')
+ax2.set_title('PDF of cos(θ)', fontsize=14)
+ax2.set_xlabel('cos(θ)', fontsize=12)
+ax2.set_ylabel('Probability Density', fontsize=12)
+ax2.grid(True)
+ax2.legend()
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+
+
+# ==============================================================================
+# Part 2: 数値積分による確認 (変更なし)
+# ==============================================================================
+print("\n--- Part 2: Numerical Verification for p(Ω) = cosθ/π ---")
+
+f_values = 1.0 / cos_theta
+monte_carlo_result = np.mean(f_values)
+
+print(f"Theoretical expectation value of (1/cosθ): 2.0")
+print(f"Monte Carlo result from {N_SAMPLES} samples: {monte_carlo_result:.6f}")
+
+if np.isclose(monte_carlo_result, 2.0, atol=0.01):
+    print("✅ The result is very close to the theoretical value.")
+else:
+    print("❌ The result is not close to the theoretical value. Check the code or increase N_SAMPLES.")

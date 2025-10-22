@@ -22,16 +22,16 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), tight_layout=True)
 # 1. 経度(phi)の分布
 ax1.hist(phi_samples, bins=50, density=True)
 
-ax1.set_xlabel('Longitude [degrees]' , fontsize = "12")
-ax1.set_ylabel('Probability Density' , fontsize = "12")
+ax1.set_xlabel('Longitude [degrees]' , fontsize = "16")
+ax1.set_ylabel('Probability Density' , fontsize = "16")
 ax1.grid(True)
 ax1.set_xlim(-90, 90)
 
 # 2. cos(緯度)の分布
 ax2.hist(cos_theta_samples, bins=50, density=True)
 
-ax2.set_xlabel('cos(theta)' , fontsize = "12")
-ax2.set_ylabel('Probability Density' , fontsize = "12")
+ax2.set_xlabel('cos(theta)' , fontsize = "16")
+ax2.set_ylabel('Probability Density' , fontsize = "16")
 ax2.grid(True)
 ax2.set_xlim(-1, 1)
 
