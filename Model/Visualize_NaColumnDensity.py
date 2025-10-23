@@ -26,11 +26,11 @@ import glob  # ファイル検索用
 
 # 1. シミュレーション結果が保存されているディレクトリ
 # (シミュレーションコードの 'target_output_dir' と一致させる)
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+24_3"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+24_4"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 90  # 例: 90度のファイルを探す
+TARGET_TAA = 60  # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
@@ -133,8 +133,8 @@ def plot_column_density(density_grid_m3, taa):
 
     # 軸ラベルとタイトル
     # (シミュレーション座標系に基づき、+Xが太陽方向)
-    ax.set_xlabel("X (Sun-Mercury line) [$R_M$]")
-    ax.set_ylabel("Y (Orbit direction) [$R_M$]")
+    ax.set_xlabel("X  [$R_M$]",fontsize = 14)
+    ax.set_ylabel("Y  [$R_M$]",fontsize = 14)
     ax.set_title(f"Mercury Na Exosphere Column Density (Viewed from +Z)\n"
                  f"TAA = {taa}° (File: {os.path.basename(filepath)})",
                  fontsize=12)
@@ -144,7 +144,7 @@ def plot_column_density(density_grid_m3, taa):
 
     # カラーバー
     cbar = fig.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label(cbar_label)
+    cbar.set_label(cbar_label ,fontsize=14)
 
     ax.legend()
     plt.tight_layout()

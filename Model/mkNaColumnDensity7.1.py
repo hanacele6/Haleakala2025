@@ -591,20 +591,23 @@ def main_snapshot_simulation():
     # 表面密度 [atoms/m^2] (無限供給源モデル)
     # CONSTANT_SURFACE_DENSITY = 1.5e17  # [atoms/m^2] (suzuki et al., 2019)
     CONSTANT_SURFACE_DENSITY = 7.5e17 * 0.053 # [atoms/m^2] (killen et al., 2001)
+
+    #スピンアップ（助走）期間 [水星年]
+    SPIN_UP_YEARS = 1.0
     # メインループの時間刻み [s]
     TIME_STEP_SEC = 1000
     # 総シミュレーション時間 [水星年]
-    TOTAL_SIM_YEARS = 1.0
+    TOTAL_SIM_YEARS = 0.1
     # スナップショットを保存するTAA [度] (0, 1, 2, ..., 359度)
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
     # 超粒子1個が表す現実の原子数
-    ATOMS_PER_SUPERPARTICLE = 1e24
+    ATOMS_PER_SUPERPARTICLE = 1e23
 
     # --- 粒子生成モデル (PSD) のパラメータ ---
     # 1AUでの紫外線光子フラックス [photons/m^2/s]
     F_UV_1AU_PER_M2 = 1.5e14 * (100) ** 2
     # 光刺激脱離の断面積 [m^2]
-    # Q_PSD_M2 = 2.0e-20 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (suzuki et al., 2019)
+    #Q_PSD_M2 = 2.0e-20 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (suzuki et al., 2019)
     Q_PSD_M2 = 1.4e-21 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (killen et al., 2004)
     # 光刺激脱離で放出される粒子のマクスウェル分布温度 [K]
     SOURCE_TEMPERATURE = 1500.0
@@ -632,7 +635,7 @@ def main_snapshot_simulation():
     }
 
     # 出力ディレクトリの準備
-    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_3"
+    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_2"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
@@ -646,7 +649,10 @@ def main_snapshot_simulation():
     # 水星の1年の秒数
     MERCURY_YEAR_SEC = 87.97 * 24 * 3600
     # メインループで回す時間ステップの配列
-    time_steps = np.arange(0, TOTAL_SIM_YEARS * MERCURY_YEAR_SEC, TIME_STEP_SEC)
+    #time_steps = np.arange(0, TOTAL_SIM_YEARS * MERCURY_YEAR_SEC, TIME_STEP_SEC)
+    spin_up_start_time = -SPIN_UP_YEARS * MERCURY_YEAR_SEC
+    total_end_time = TOTAL_SIM_YEARS * MERCURY_YEAR_SEC
+    time_steps = np.arange(spin_up_start_time, total_end_time, TIME_STEP_SEC)
 
     # 表面グリッドの定義（粒子生成用）
     lon_edges = np.linspace(-np.pi, np.pi, N_LON + 1)  # 経度境界
@@ -700,7 +706,9 @@ def main_snapshot_simulation():
             TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad = get_orbital_params(
                 t_sec, orbit_data, MERCURY_YEAR_SEC
             )
-            pbar.set_description(f"TAA={TAA:.1f} | N_particles={len(active_particles)}")
+            #pbar.set_description(f"TAA={TAA:.1f} | N_particles={len(active_particles)}")
+            run_phase = "Spin-up" if t_sec < 0 else "Run"
+            pbar.set_description(f"[{run_phase}] TAA={TAA:.1f} | N_particles={len(active_particles)}")
 
             # --- 4b. 表面から新しい粒子を生成 (PSD) ---
             newly_launched_particles = []
@@ -799,8 +807,12 @@ def main_snapshot_simulation():
                     target_taa_idx += 1  # 次のターゲットへ
 
             # --- 4e. 立方体グリッドに集計して保存 ---
-            if save_this_step:
-                pbar.write(f"\n>>> Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
+            #if save_this_step:
+            if save_this_step and t_sec >= 0:
+                # どのフェーズ（スピンアップか本番か）か分かりやすくする
+                run_phase = "Spin-up" if t_sec < 0 else "Run"
+                pbar.write(f"\n>>> [{run_phase}] Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
+                #pbar.write(f"\n>>> Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
 
                 # 3Dグリッドをゼロで初期化
                 density_grid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
