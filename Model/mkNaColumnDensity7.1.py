@@ -590,14 +590,14 @@ def main_snapshot_simulation():
     N_LON, N_LAT = 48, 24
     # 表面密度 [atoms/m^2] (無限供給源モデル)
     # CONSTANT_SURFACE_DENSITY = 1.5e17  # [atoms/m^2] (suzuki et al., 2019)
-    CONSTANT_SURFACE_DENSITY = 7.5e17 * 0.053 # [atoms/m^2] (killen et al., 2001)
+    CONSTANT_SURFACE_DENSITY = 7.5e17 * 0.053  # [atoms/m^2] (killen et al., 2001)
 
-    #スピンアップ（助走）期間 [水星年]
-    SPIN_UP_YEARS = 1.0
+    # スピンアップ（助走）期間 [水星年]
+    SPIN_UP_YEARS = 0.1
     # メインループの時間刻み [s]
     TIME_STEP_SEC = 1000
     # 総シミュレーション時間 [水星年]
-    TOTAL_SIM_YEARS = 0.1
+    TOTAL_SIM_YEARS = 1.0
     # スナップショットを保存するTAA [度] (0, 1, 2, ..., 359度)
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
     # 超粒子1個が表す現実の原子数
@@ -607,7 +607,7 @@ def main_snapshot_simulation():
     # 1AUでの紫外線光子フラックス [photons/m^2/s]
     F_UV_1AU_PER_M2 = 1.5e14 * (100) ** 2
     # 光刺激脱離の断面積 [m^2]
-    #Q_PSD_M2 = 2.0e-20 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (suzuki et al., 2019)
+    # Q_PSD_M2 = 2.0e-20 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (suzuki et al., 2019)
     Q_PSD_M2 = 1.4e-21 / (100) ** 2  # 光刺激脱離の断面積 [m^2] (killen et al., 2004)
     # 光刺激脱離で放出される粒子のマクスウェル分布温度 [K]
     SOURCE_TEMPERATURE = 1500.0
@@ -648,11 +648,6 @@ def main_snapshot_simulation():
 
     # 水星の1年の秒数
     MERCURY_YEAR_SEC = 87.97 * 24 * 3600
-    # メインループで回す時間ステップの配列
-    #time_steps = np.arange(0, TOTAL_SIM_YEARS * MERCURY_YEAR_SEC, TIME_STEP_SEC)
-    spin_up_start_time = -SPIN_UP_YEARS * MERCURY_YEAR_SEC
-    total_end_time = TOTAL_SIM_YEARS * MERCURY_YEAR_SEC
-    time_steps = np.arange(spin_up_start_time, total_end_time, TIME_STEP_SEC)
 
     # 表面グリッドの定義（粒子生成用）
     lon_edges = np.linspace(-np.pi, np.pi, N_LON + 1)  # 経度境界
@@ -677,6 +672,36 @@ def main_snapshot_simulation():
         print(f"TAA, AU, Time, V_radial, V_tangential の5列が必要です。")
         sys.exit()
 
+    # --- ★★★ 修正箇所 1: RUN開始時刻 (TAA=0) の調整 ★★★ ---
+
+    # 軌道ファイルから、TAA=0度 (近日点) に最も近い時刻 [s] を見つける
+    taa_col = orbit_data[:, 0]
+    time_col = orbit_data[:, 2]
+
+    # TAAが最小値(ほぼ0度)をとるインデックスを見つける
+    idx_perihelion = np.argmin(np.abs(taa_col))
+    # その時刻 [s] を「RUN開始の基準時刻」とする
+    t_start_run = time_col[idx_perihelion]
+
+    # 本番の終了時刻 [s]
+    t_end_run = t_start_run + (TOTAL_SIM_YEARS * MERCURY_YEAR_SEC)
+
+    # スピンアップの開始時刻 [s]
+    # (RUN開始時刻から、指定されたスピンアップ年数だけ遡る)
+    t_start_spinup = t_start_run - (SPIN_UP_YEARS * MERCURY_YEAR_SEC)
+
+    # メインループで回す時間ステップの配列
+    # (元のコードの time_steps 生成ロジックをこちらに置き換え)
+    time_steps = np.arange(t_start_spinup, t_end_run, TIME_STEP_SEC)
+
+    print(f"--- 時間設定 ---")
+    print(f"軌道ファイル上のTAA=0 (近日点) 時刻: {t_start_run:.1f} s")
+    print(f"スピンアップ開始時刻: {t_start_spinup:.1f} s ({-SPIN_UP_YEARS} 年前)")
+    print(f"RUN開始時刻 (TAA=0): {t_start_run:.1f} s")
+    print(f"RUN終了時刻: {t_end_run:.1f} s (+{TOTAL_SIM_YEARS} 年後)")
+    print(f"------------------")
+    # --- ★★★ 修正 1 ここまで ★★★ ---
+
     # スペクトルデータの前処理 (波長でソートされていることを保証)
     wl, gamma = spec_data_np[:, 0], spec_data_np[:, 1]
     if not np.all(np.diff(wl) > 0):  # もしソートされていなければ
@@ -699,120 +724,97 @@ def main_snapshot_simulation():
 
     # tqdmで進捗バーを表示
     with tqdm(total=len(time_steps), desc="Time Evolution") as pbar:
-        # t_sec は 0, 1000, 2000, ... と進む
+        # t_sec は t_start_spinup から t_end_run まで進む
         for t_sec in time_steps:
 
             # --- 4a. 現在時刻の軌道パラメータを取得 ---
             TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad = get_orbital_params(
                 t_sec, orbit_data, MERCURY_YEAR_SEC
             )
-            #pbar.set_description(f"TAA={TAA:.1f} | N_particles={len(active_particles)}")
-            run_phase = "Spin-up" if t_sec < 0 else "Run"
+
+            # ★★★ 修正箇所 2: pbarの表示を t_start_run 基準に変更 ★★★
+            run_phase = "Spin-up" if t_sec < t_start_run else "Run"
             pbar.set_description(f"[{run_phase}] TAA={TAA:.1f} | N_particles={len(active_particles)}")
 
             # --- 4b. 表面から新しい粒子を生成 (PSD) ---
+            # (変更なし)
             newly_launched_particles = []
             for i_lon in range(N_LON):
                 for i_lat in range(N_LAT):
-                    # グリッドセルの中心経度・緯度
                     lon_center_rad = (lon_edges[i_lon] + lon_edges[i_lon + 1]) / 2
                     lat_center_rad = (lat_edges[i_lat] + lat_edges[i_lat + 1]) / 2
-
-                    # 太陽天頂角の余弦を計算
                     cos_Z = np.cos(lat_center_rad) * np.cos(lon_center_rad - 0.0)
-                    if cos_Z <= 0: continue  # 夜側なので生成なし
-
-                    # このセルからの原子放出率 [atoms/m^2/s]
+                    if cos_Z <= 0: continue
                     F_UV_current_per_m2 = F_UV_1AU_PER_M2 / (AU ** 2)
                     desorption_rate_per_m2_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z * CONSTANT_SURFACE_DENSITY
-
-                    # この時間ステップ(TIME_STEP_SEC)で、このセル(cell_areas_m2)から
-                    # 放出されるべき現実の原子数
                     n_atoms_to_desorb = desorption_rate_per_m2_s * cell_areas_m2[i_lat] * TIME_STEP_SEC
                     if n_atoms_to_desorb <= 0: continue
-
-                    # 放出すべき超粒子(SP)の数（小数点以下も考慮）
                     num_sps_to_launch_float = n_atoms_to_desorb / ATOMS_PER_SUPERPARTICLE
-
-                    # 確率的に小数点以下を切り上げる
                     num_to_launch_int = int(num_sps_to_launch_float)
                     if np.random.random() < (num_sps_to_launch_float - num_to_launch_int):
                         num_to_launch_int += 1
                     if num_to_launch_int == 0: continue
-
-                    # 決定した数の超粒子を生成
                     for _ in range(num_to_launch_int):
-                        # セル内でランダムな位置から放出
-                        # (緯度は sin(lat) が一様になるようにサンプリング)
                         random_lon_rad = np.random.uniform(lon_edges[i_lon], lon_edges[i_lon + 1])
                         sin_lat_min, sin_lat_max = np.sin(lat_edges[i_lat]), np.sin(lat_edges[i_lat + 1])
                         random_lat_rad = np.arcsin(np.random.uniform(sin_lat_min, sin_lat_max))
-
-                        # 初期位置 (ワールド座標)
                         initial_pos = lonlat_to_xyz(random_lon_rad, random_lat_rad, PHYSICAL_CONSTANTS['RM'])
                         surface_normal = initial_pos / np.linalg.norm(initial_pos)
-
-                        # 初期速度 (ワールド座標)
                         speed = sample_maxwellian_speed(PHYSICAL_CONSTANTS['MASS_NA'], SOURCE_TEMPERATURE)
                         initial_vel = speed * transform_local_to_world(sample_lambertian_direction_local(),
                                                                        surface_normal)
-
-                        # 新しい粒子をリストに追加
                         newly_launched_particles.append({
                             'pos': initial_pos,
                             'vel': initial_vel,
                             'weight': ATOMS_PER_SUPERPARTICLE
                         })
-
-            # 現在の粒子リストに、新しく生成された粒子を追加
             active_particles.extend(newly_launched_particles)
 
             # --- 4c. 全ての粒子を1ステップ進める (並列処理) ---
-
-            # 並列処理タスクのリストを作成
+            # (変更なし)
             tasks = [{'settings': settings, 'spec': spec_data_dict, 'particle_state': p,
                       'orbit': (TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad),
                       'duration': TIME_STEP_SEC} for p in
                      active_particles]
-
-            next_active_particles = []  # 次のステップで生き残る粒子リスト
+            next_active_particles = []
             if tasks:
-                # CPUコア数-1を上限として並列処理プールを作成
                 with Pool(processes=max(1, cpu_count() - 1)) as pool:
-                    # pool.imap を使い、タスクをワーカーに分配
-                    # chunksize: 一度にワーカーに送るタスク数（調整可能）
                     results = list(pool.imap(simulate_particle_for_one_step, tasks, chunksize=100))
-
-                # 結果を集計
                 for res in results:
                     if res['status'] == 'alive':
                         next_active_particles.append(res['final_state'])
+            active_particles = next_active_particles
 
-            active_particles = next_active_particles  # 粒子リストを更新
+            # --- ★★★ 修正箇所 3: スナップショット保存判定 (バグ修正) ★★★ ---
 
-            # --- 4d. スナップショット保存判定 ---
+            save_this_step = False  # 1. 毎ステップ必ず変数を初期化する
 
             # TAAが 359 -> 0 のようにリセットされた場合、ターゲットをリセット
             if TAA < previous_taa:
                 target_taa_idx = 0
 
-            save_this_step = False
             # まだ保存すべきTAAが残っているか？
             if target_taa_idx < len(TARGET_TAA_DEGREES):
                 current_target_taa = TARGET_TAA_DEGREES[target_taa_idx]
-                # 現在のTAAが、ターゲットTAAを「またいだ」か？
-                # (例: prev=8.9, target=9.0, current=9.1)
-                if previous_taa < current_target_taa <= TAA:
+
+                # 2. TAA=0 をまたぐ判定ロジックの修正
+                # (previous_taa < 0 は、-1 で初期化された初回ステップも考慮)
+                is_crossing_zero = (current_target_taa == 0) and \
+                                   ((TAA < previous_taa) or (TAA >= 0 and previous_taa < 0))
+
+                # 3. 通常のターゲット(>0)の判定
+                is_crossing_normal = (previous_taa < current_target_taa <= TAA)
+
+                if is_crossing_normal or is_crossing_zero:
                     save_this_step = True
                     target_taa_idx += 1  # 次のターゲットへ
 
             # --- 4e. 立方体グリッドに集計して保存 ---
-            #if save_this_step:
-            if save_this_step and t_sec >= 0:
-                # どのフェーズ（スピンアップか本番か）か分かりやすくする
-                run_phase = "Spin-up" if t_sec < 0 else "Run"
-                pbar.write(f"\n>>> [{run_phase}] Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
-                #pbar.write(f"\n>>> Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
+
+            # ★★★ 修正箇所 4: 保存判定を t_sec >= t_start_run に変更 ★★★
+            if save_this_step and t_sec >= t_start_run:
+                # この時点では run_phase は必ず "Run" のはず
+                pbar.write(f"\n>>> [Run] Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
 
                 # 3Dグリッドをゼロで初期化
                 density_grid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
@@ -826,22 +828,20 @@ def main_snapshot_simulation():
                 # 粒子をグリッドに割り当てる (ヒストグラム作成)
                 for p in active_particles:
                     pos = p['pos']
-                    # 座標値からグリッドのインデックスを計算
                     ix = int((pos[0] - grid_min) / cell_size)
                     iy = int((pos[1] - grid_min) / cell_size)
                     iz = int((pos[2] - grid_min) / cell_size)
-
-                    # グリッド範囲内かチェック
                     if 0 <= ix < GRID_RESOLUTION and 0 <= iy < GRID_RESOLUTION and 0 <= iz < GRID_RESOLUTION:
-                        # グリッドセルに粒子の重み(原子数)を加算
                         density_grid[ix, iy, iz] += p['weight']
 
                 # グリッドセルの値(原子数)を体積で割って、数密度 [atoms/m^3] に変換
                 density_grid /= cell_volume_m3
 
                 # ファイルに保存
-                save_time_h = t_sec / 3600
-                filename = f"density_grid_t{int(save_time_h):05d}_taa{int(TAA):03d}.npy"
+                # ★★★ 修正箇所 5: 保存ファイル名の時刻を t_start_run からの相対時刻に変更 ★★★
+                relative_time_sec = t_sec - t_start_run
+                save_time_h = relative_time_sec / 3600
+                filename = f"density_grid_t{int(save_time_h):05d}_taa{int(round(TAA)):03d}.npy"
                 np.save(os.path.join(target_output_dir, filename), density_grid)
 
             previous_taa = TAA  # TAAを更新
@@ -864,4 +864,6 @@ if __name__ == '__main__':
             sys.exit()  # ファイルがない場合は終了
 
     print("ファイルOK。シミュレーションを開始します。")
+
+    # この呼び出しでシミュレーションが開始される
     main_snapshot_simulation()

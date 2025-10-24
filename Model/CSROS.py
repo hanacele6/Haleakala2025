@@ -45,7 +45,7 @@ def plot_spherical_region(ax, theta_range_deg, phi_range_deg, color, label):
 REGIONS_TO_ANALYZE = [
     {'label': 'Dayside', 'theta_range_deg': (1, 179), 'phi_range_deg': (-89, 89)},
     {'label': 'Dawnside', 'theta_range_deg': (10, 170), 'phi_range_deg': (10, 80)},
-    {'label': 'Duskside', 'theta_range_deg': (10, 170), 'phi_range_deg': (-80, -10)},
+    {'label': 'Duskside', 'theta_range_deg': (1, 179), 'phi_range_deg': (-89, -1)},
     {'label': 'Nightside', 'theta_range_deg': (30, 150), 'phi_range_deg': (135, -135)},
     {'label': 'Source_Dusk_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (90, 96)},
     {'label': 'Source_Dawn_Terminator', 'theta_range_deg': (10, 170), 'phi_range_deg': (-96, -90)},
@@ -53,7 +53,7 @@ REGIONS_TO_ANALYZE = [
 
 # --- ★★★ 表示する領域を選択 ★★★ ---
 # 複数の領域を同時に表示することも可能です。例: ['Dayside', 'Nightside']
-LABELS_TO_PLOT = ['Dayside']
+LABELS_TO_PLOT = ['Duskside']
 # 全ての領域をプロットする場合: LABELS_TO_PLOT = [r['label'] for r in REGIONS_TO_ANALYZE]
 
 
@@ -84,9 +84,9 @@ if __name__ == '__main__':
         legend_patches.append(Patch(color=color, label=label))
 
     # 3. プロットのラベルと外観を設定
-    ax.set_xlabel('X (Sun direction)')
+    ax.set_xlabel('X')
     ax.set_ylabel('Y')
-    ax.set_zlabel('Z (North)')
+    ax.set_zlabel('Z')
     ax.set_title('Visualization of Analysis Regions', fontsize=16)
 
     # アスペクト比を固定して真球に見せる
