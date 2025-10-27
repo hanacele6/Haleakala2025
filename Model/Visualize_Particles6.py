@@ -317,6 +317,19 @@ def get_total_acceleration(pos: np.ndarray, vel: np.ndarray) -> np.ndarray:
         # v_t = V_MERCURY_TANGENTIAL (接線速度), r = r0 (太陽距離)
         omega_val = V_MERCURY_TANGENTIAL / r0
 
+        # 水星（原点）が太陽に引かれる重力と釣り合う、反太陽方向（-X）の力
+        # a_trans = - (G * M_SUN / r0^2) = - (ω^2 * r0) = - (V_t^2 / r0)
+        # omega_val = V_t / r0 なので、 -omega_val^2 * r0 ではないことに注意
+        # 正しくは a_trans = - (V_MERCURY_TANGENTIAL**2 / r0)
+
+        # V_MERCURY_TANGENTIAL は V_t なので、 V_t^2 / r0 が正しい加速度
+        #accel_translational = np.array([
+        #    -(V_MERCURY_TANGENTIAL ** 2) / r0,
+        #    0.0,
+        #    0.0
+        #])
+        #accel += accel_translational
+
         # Z軸周りの回転 (ω = [0, 0, ω]) を仮定
         # r = [x, y, z], v = [vx, vy, vz]
 
@@ -325,19 +338,25 @@ def get_total_acceleration(pos: np.ndarray, vel: np.ndarray) -> np.ndarray:
         # -ω x (ω x r) = -[0, 0, ω] x [-ω*y, ω*x, 0]
         #             = -[ -ω*(ω*x), -ω*(-ω*y), 0 ]
         #             = [ω^2 * x, ω^2 * y, 0]
-        accel_centrifugal = np.array([
-            omega_val ** 2 * pos[0],  # ω^2 * x
-            omega_val ** 2 * pos[1],  # ω^2 * y
+        #accel_centrifugal = np.array([
+        #    omega_val ** 2 * pos[0],  # ω^2 * x
+        #    omega_val ** 2 * pos[1],  # ω^2 * y
+        #    0.0
+        #])
+        #accel += accel_centrifugal
+        accel_combined_centrifugal = np.array([
+            omega_val ** 2 * (pos[0] - r0),  # X成分を (pos[0] - r0) で計算
+            omega_val ** 2 * pos[1],  # Y成分は pos[1] のまま
             0.0
         ])
-        accel += accel_centrifugal
+        accel += accel_combined_centrifugal
 
         # (4b) コリオリ力: a_cor = -2 * (ω x v)
         # ω x v = [-ω*vy, ω*vx, 0]
         # -2 * (ω x v) = -2 * [-ω*vy, ω*vx, 0]
         #              = [2*ω*vy, -2*ω*vx, 0]
         accel_coriolis = np.array([
-            2 * omega_val * vel[1],  # +2ω * v_y
+            2 * omega_val * (vel[1] - V_MERCURY_TANGENTIAL),  # +2ω * v_y
             -2 * omega_val * vel[0],  # -2ω * v_x
             0.0
         ])

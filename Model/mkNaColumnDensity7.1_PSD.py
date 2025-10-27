@@ -369,8 +369,8 @@ def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_dat
     velocity_for_doppler = vel[0] + V_radial_ms
 
     # ドップラーシフト後の波長を計算
-    w_na_d2 = 589.1582e-9 * (1.0 - velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
-    w_na_d1 = 589.7558e-9 * (1.0 - velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
+    w_na_d2 = 589.1582e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
+    w_na_d1 = 589.7558e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
 
     b = 0.0  # 放射圧による加速度 [m/s^2]
     wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL = spec_data.values()
@@ -433,7 +433,8 @@ def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_dat
             # (a) 遠心力: a_cen = -ω x (ω x r)
             # a_cen = [ω^2*x, ω^2*y, 0]
             accel_centrifugal = np.array([
-                omega_sq * pos[0],
+                #omega_sq * pos[0],
+                omega_val ** 2 * (pos[0] - r0),
                 omega_sq * pos[1],
                 0.0
             ])
@@ -635,7 +636,7 @@ def main_snapshot_simulation():
     }
 
     # 出力ディレクトリの準備
-    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_2"
+    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_PSD"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")

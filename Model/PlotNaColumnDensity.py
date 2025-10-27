@@ -23,7 +23,7 @@ print(f"正規化面積 (半球の半分): {NORMALIZATION_AREA_HALF_CM2:.4e} cm^
 GRID_RESOLUTION = 101  # グリッド解像度
 GRID_MAX_RM = 5.0  # グリッドの最大範囲 (水星半径単位)
 # ★★★ .npy ファイルが保存されているディレクトリパス
-output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+24_3"
+output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_2"
 
 # ★ 変更点 2: プロット選択
 # "DAYSIDE_TOTAL", "DAWN", "DUSK" のいずれかを指定

@@ -340,8 +340,8 @@ def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_dat
     x, y, z = pos
     r0 = AU * PHYSICAL_CONSTANTS['AU']
     velocity_for_doppler = vel[0] + V_radial_ms
-    w_na_d2 = 589.1582e-9 * (1.0 - velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
-    w_na_d1 = 589.7558e-9 * (1.0 - velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
+    w_na_d2 = 589.1582e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
+    w_na_d1 = 589.7558e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
     b = 0.0
     wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL = spec_data.values()
     if (wl[0] * 1e-9 <= w_na_d2 < wl[-1] * 1e-9) and \
@@ -376,7 +376,11 @@ def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_dat
         if r0 > 0:
             omega_val = V_tangential_ms / r0
             omega_sq = omega_val ** 2
-            accel_centrifugal = np.array([omega_sq * pos[0], omega_sq * pos[1], 0.0])
+            accel_centrifugal = np.array([
+                #omega_sq * pos[0],
+                omega_val ** 2 * (pos[0] - r0),
+                omega_sq * pos[1],
+                0.0])
             two_omega = 2 * omega_val
             accel_coriolis = np.array([two_omega * vel[1], -two_omega * vel[0], 0.0])
     return accel_srp + accel_g + accel_sun + accel_centrifugal + accel_coriolis
