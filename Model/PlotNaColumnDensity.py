@@ -23,7 +23,7 @@ print(f"正規化面積 (半球の半分): {NORMALIZATION_AREA_HALF_CM2:.4e} cm^
 GRID_RESOLUTION = 101  # グリッド解像度
 GRID_MAX_RM = 5.0  # グリッドの最大範囲 (水星半径単位)
 # ★★★ .npy ファイルが保存されているディレクトリパス
-output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_2"
+output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_MIV"
 
 # ★ 変更点 2: プロット選択
 # "DAYSIDE_TOTAL", "DAWN", "DUSK" のいずれかを指定
@@ -139,7 +139,7 @@ if sim_results_taa:
 
     elif PLOT_MODE == "DAYSIDE_TOTAL":
         plt.scatter(plot_taa, plot_dayside, label='Simulation: Total Dayside (X>0)', color='green', alpha=0.7, s=30)
-        plot_title = 'Simulation (Normalized by Full Dayside Area) vs. TAA'
+        plot_title = 'Simulation vs. TAA'
         print("プロットモード: 昼側全体 (DAYSIDE_TOTAL)")
 
     else:
@@ -152,6 +152,10 @@ if sim_results_taa:
     plt.title(plot_title, fontsize=16)
     plt.legend()
     plt.grid(True, linestyle='--', alpha=0.6)
+    # 横軸の範囲を 0 から 360 に固定
+    plt.xlim(0, 360)
+    # 横軸の目盛りを 60 刻みに設定 (0, 60, 120, ..., 360)
+    plt.xticks(np.arange(0, 361, 60))
     plt.tight_layout()
 
     print("グラフを表示します...")

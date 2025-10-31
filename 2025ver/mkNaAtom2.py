@@ -155,15 +155,15 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250824"
+    day = "20251021"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # sftの値（ファイル名から探すために使用）
     #sft_map = {'main': '002','minus': '001','plus': '003'}
-    #sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
-    sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
+    sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
+    #sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
     #sft_map = {'main': '000', 'minus': '-10', 'plus': '010'}#tese
 
     # --- フィッティングとプロットに関する設定 ---

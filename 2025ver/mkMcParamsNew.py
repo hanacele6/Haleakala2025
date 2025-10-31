@@ -7,7 +7,7 @@ import os
 # --- 設定項目 ---
 # ご自身の環境に合わせて、SPICEカーネルをまとめたフォルダのパスに変更してください
 SPICE_KERNEL_DIR = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/kernels"
-CSV_FILE = "mcparams20250828.csv"
+CSV_FILE = "mcparams20251021.csv"
 
 
 # ▼▼▼【拡張機能】明け方/夕方を判断するための関数 ▼▼▼

@@ -26,11 +26,11 @@ import glob  # ファイル検索用
 
 # 1. シミュレーション結果が保存されているディレクトリ
 # (シミュレーションコードの 'target_output_dir' と一致させる)
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_PSD"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_MIV_2"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 10 # 例: 90度のファイルを探す
+TARGET_TAA = 0 # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)

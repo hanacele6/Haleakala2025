@@ -76,6 +76,19 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, flgPause=True, save
     wavstep1 = params['wavstep1']
     calwav1 = params['calwav1'];
     dltFibY = params['dltFibY']
+
+    # paramsからスキップリストを取得 (キーが存在しない場合はデフォルトの空リスト[])
+    fibers_to_skip = params.get('fibers_to_skip', [])
+
+    if fibers_to_skip:
+        original_count = len(iFibAct)
+        # np.setdiff1d を使い、iFibAct(処理対象) から fibers_to_skip(除外対象) を
+        # 引いた差集合（含まれていないもの）を、新しい iFibAct にする
+        iFibAct = np.setdiff1d(iFibAct, fibers_to_skip)
+
+        print(f"  -> NOTE: Skipping {original_count - len(iFibAct)} fibers as requested: {fibers_to_skip}")
+        print(f"  -> Now processing {len(iFibAct)} fibers.")
+
     pxlinesD0 = pxlinesD0_base + pixdwavs_val
     xpix = np.arange(nx)
 
@@ -302,13 +315,13 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, flgPause=True, save
 # ==============================================================================
 if __name__ == "__main__":
     base_dir = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/"
-    master_sky_filepath = os.path.join(base_dir, "output/20250825/master_sky.fits")#変えるのはここ
+    master_sky_filepath = os.path.join(base_dir, "output/20251021/master_sky.fits")#変えるのはここ
     solar_spectrum_directory = os.path.join(base_dir, "psg/")
     calibration_params = {
         #'wlinesM': np.array([588.544, 589.157, 589.449, 589.756, 590.732, 591.580, 591.789]),
         #'wlinesM' : np.array([588.39, 588.995, 589.3, 589.592, 590.560, 591.002, 591.417]),
         'wlinesM': np.array([588.39, 588.995, 589.3, 589.592, 590.560,591.002, 591.417]),#7波長
-        'wlinesM': np.array([588.39, 588.995, 589.3, 589.592,  591.002, 591.417]),  # 6波長1
+        #'wlinesM': np.array([588.39, 588.995, 589.3, 589.592,  591.002, 591.417]),  # 6波長1
         #'wlinesM': np.array([588.39, 588.995, 589.3, 589.592, 590.560, 591.002, 591.417]),#6波長2
         #'wlinesM': np.array([588.39, 588.995, 589.592, 590.560, 591.002, 591.417]),  #202508
         #'wlinesM': np.array([588.995, 589.592,]),#2波長
@@ -316,14 +329,21 @@ if __name__ == "__main__":
         #'pxlinesD0_base': np.array([852, 1034, 1119, 1220, 1507, 1637 ,1769]),#202506
         #'pxlinesD0_base': np.array([1012, 1198, 1289, 1380, 1811,1942,  2006]),#202507
         #'pxlinesD0_base': np.array([1012, 1198, 1380, 1811, 1942, 2006]),  #202508
-        #'pxlinesD0_base': np.array([1012, 1192, 1280, 1374, 1712, 1942, 2003]), #202508
-        'pxlinesD0_base': np.array([1012, 1192, 1280, 1374, 1942, 2003]),  # 202508 2
+        'pxlinesD0_base': np.array([1012, 1192, 1280, 1374, 1712, 1942, 2003]), #202508
+        #'pxlinesD0_base': np.array([1003, 1195, 1281, 1373, 1712, 1942, 2003]),
+        #'pxlinesD0_base': np.array([1012, 1192, 1280, 1374, 1942, 2003]),  # 202508 2
         #'pxlinesD0_base': np.array([790, 1139]),#20150223
         'pixdwavs_val': 0.0,
         'wavstep1': 0.00293,
         #'wavstep1': 0.00293080868,
         'calwav1': 588.9,
-        'dltFibY': -12.5,
+        #'dltFibY': -12.5,#基本はこっち
+        'dltFibY': +12.5,#ファイバ番号０がうまくいかない時こっち
+
+    # 'fibers_to_skip': []  # スキップしない場合
+    'fibers_to_skip': [0],  # ファイバー0だけをスキップする場合
+    # 'fibers_to_skip': [0, 10, 103], # 0, 10, 103番をスキップする場合
+
     }
 
     if not os.path.exists(master_sky_filepath):

@@ -209,7 +209,7 @@ def run_particle_test(taa_target, orbit_data, spec_data, settings, pos0, vel0, d
 
 def plot_results(results_60, results_300):
     """
-    Plots the simulation results.
+    Plots the simulation results in separate windows.
     """
     time_60, srp_60, vel_60, dop_60 = results_60
     time_300, srp_300, vel_300, dop_300 = results_300
@@ -224,42 +224,47 @@ def plot_results(results_60, results_300):
     dop_km_60 = np.array(dop_60) / 1000.0
     dop_km_300 = np.array(dop_300) / 1000.0
 
-    fig, axes = plt.subplots(3, 1, figsize=(10, 15), sharex=True)
-    fig.suptitle("SRP Comparison: TAA 60 deg vs TAA 300 deg (Particle from v=0)", fontsize=16)
-
     # --- 1. SRP Acceleration Plot ---
-    ax1 = axes[0]
-    ax1.plot(time_h_60, srp_60, 'b-', label='TAA 60 deg (Receding)')
-    ax1.plot(time_h_300, srp_300, 'r-', label='TAA 300 deg (Approaching)')
-    ax1.set_ylabel("SRP Acceleration [m/s^2]")
-    ax1.legend()
-    ax1.grid(True)
-    ax1.set_title("1. SRP Acceleration vs. Time")
-
-    # --- 2. Particle X-Velocity Plot ---
-    ax2 = axes[1]
-    ax2.plot(time_h_60, vel_km_60, 'b-', label='TAA 60 deg')
-    ax2.plot(time_h_300, vel_km_300, 'r-', label='TAA 300 deg')
-    ax2.set_ylabel("Particle X-Velocity [km/s]\n(Anti-Sunward is Negative)")
-    ax2.legend()
-    ax2.grid(True)
-    ax2.set_title("2. Particle Velocity vs. Time (Mercury Frame)")
-
-    # --- 3. Doppler Velocity Plot ---
-    ax3 = axes[2]
-    ax3.plot(time_h_60, dop_km_60, 'b-', label='TAA 60 deg (V_particle + V_orbit)')
-    ax3.plot(time_h_300, dop_km_300, 'r-', label='TAA 300 deg (V_particle + V_orbit)')
-    ax3.set_xlabel("Simulation Time [Hours]")
-    ax3.set_ylabel("Doppler Velocity [km/s]\n(Sunward is Positive)")
-    ax3.legend()
-    ax3.grid(True)
-    ax3.set_title("3. Total Velocity for Doppler Shift")
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
-    plt.savefig("srp_doppler_test_en.png")
-    print("\nGraph saved as 'srp_doppler_test_en.png'.")
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_h_60, srp_60, 'b-', label='TAA 60 deg (Receding)')
+    plt.plot(time_h_300, srp_300, 'r-', label='TAA 300 deg (Approaching)')
+    plt.ylabel("SRP Acceleration [m/s^2]")
+    plt.xlabel("Simulation Time [Hours]")
+    plt.legend()
+    plt.grid(True)
+    plt.title("1. SRP Acceleration vs. Time")
+    plt.tight_layout()
+    plt.savefig("srp_doppler_test_en_1_accel.png")
+    print("\nGraph 1 saved as 'srp_doppler_test_en_1_accel.png'.")
     plt.show()
 
+    # --- 2. Particle X-Velocity Plot ---
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_h_60, vel_km_60, 'b-', label='TAA 60 deg')
+    plt.plot(time_h_300, vel_km_300, 'r-', label='TAA 300 deg')
+    plt.ylabel("Particle X-Velocity [km/s]\n(Anti-Sunward is Negative)")
+    plt.xlabel("Simulation Time [Hours]")
+    plt.legend()
+    plt.grid(True)
+    plt.title("2. Particle Velocity vs. Time (Mercury Frame)")
+    plt.tight_layout()
+    plt.savefig("srp_doppler_test_en_2_velocity.png")
+    print("Graph 2 saved as 'srp_doppler_test_en_2_velocity.png'.")
+    plt.show()
+
+    # --- 3. Doppler Velocity Plot ---
+    plt.figure(figsize=(10, 5))
+    plt.plot(time_h_60, dop_km_60, 'b-', label='TAA 60 deg (V_particle + V_orbit)')
+    plt.plot(time_h_300, dop_km_300, 'r-', label='TAA 300 deg (V_particle + V_orbit)')
+    plt.xlabel("Simulation Time [Hours]")
+    plt.ylabel("Doppler Velocity [km/s]\n(Sunward is Positive)")
+    plt.legend()
+    plt.grid(True)
+    plt.title("3. Total Velocity for Doppler Shift")
+    plt.tight_layout()
+    plt.savefig("srp_doppler_test_en_3_doppler.png")
+    print("Graph 3 saved as 'srp_doppler_test_en_3_doppler.png'.")
+    plt.show()
 
 # ==============================================================================
 # Main execution

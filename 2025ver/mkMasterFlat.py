@@ -15,12 +15,12 @@ from datetime import datetime
 # ルートディレクトリ
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 # 日付フォルダ
-date = "20250828"
+date = "20251021"
 # 観測ログのCSVファイル
 csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
 
 # --- 変更点 1: 処理したいデータ種類をリストで指定 ---
-TYPES_TO_PROCESS = ['LED', 'SKY']
+TYPES_TO_PROCESS = ['LED', 'SKY', 'HLG']
 # --------------------------------------------------------------------------
 
 # --- ディレクトリ設定 ---

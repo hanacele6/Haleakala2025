@@ -21,7 +21,7 @@ Leblanc (2003) に基づき、粒子生成源として
 
 -   **原点 (0, 0, 0)**: 水星の中心
 -   **+X 軸**: 常に太陽の方向を指します (Sun-Mercury line)
--   **+Y 軸**: 水星の公転軌道面に含まれ、公転の進行方向を指します
+-   **-Y 軸**: 水星の公転軌道面に含まれ、公転の進行方向を指します
 -   **+Z 軸**: 軌道面に垂直な方向（公転の角運動量ベクトル方向）
 
 ==============================================================================
@@ -336,14 +336,14 @@ def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_dat
 
     座標系: 水星中心・太陽固定回転座標系
     - 太陽は +X 方向 (距離 r0)
-    - 公転は +Y 方向
+    - 公転は -Y 方向
     - 回転軸は +Z 方向 (角速度 ω = V_tan / r0)
 
     Args:
         pos (np.ndarray): 粒子の位置ベクトル [x, y, z] [m]
         vel (np.ndarray): 粒子の速度ベクトル [vx, vy, vz] [m/s]
         V_radial_ms (float): 水星の太陽への視線速度 [m/s] (近づく方向が正)
-        V_tangential_ms (float): 水星の公転接線速度 [m/s] (+Y方向が正)
+        V_tangential_ms (float): 水星の公転接線速度 [m/s]
         AU (float): 太陽距離 [天文単位]
         spec_data (dict): 太陽スペクトルデータ
         settings (dict): シミュレーション設定フラグ
@@ -625,7 +625,7 @@ def main_snapshot_simulation():
 
     # 出力ディレクトリの準備
     # --- 変更 (MIV) ---
-    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_MIV_Only_1"
+    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_MIV_2"
     # --- 変更 (MIV) ここまで ---
 
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
@@ -767,8 +767,8 @@ def main_snapshot_simulation():
                         random_lon_rad = np.random.uniform(-PHYSICAL_CONSTANTS['PI'], PHYSICAL_CONSTANTS['PI'])
 
                         # 2. 棄却判定用の確率 P(phi) / (M * g(phi)) を計算
-                        #    = (1 + (1/3)sin(phi)) / (4/3)
-                        prob_accept = (1.0 + (1.0 / 3.0) * np.sin(random_lon_rad)) / M_rejection
+                        #    = (1 - (1/3)sin(phi)) / (4/3)
+                        prob_accept = (1.0 - (1.0 / 3.0) * np.sin(random_lon_rad)) / M_rejection
 
                         # 3. 0-1の一様乱数がこの確率より小さければ採択
                         if np.random.random() < prob_accept:

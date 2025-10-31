@@ -1,54 +1,55 @@
-# -*- coding: utf-8 -*-
 """
 ==============================================================================
 概要
 ==============================================================================
 このスクリプトは、水星のナトリウム大気のふるまいを、時間発展を考慮して
-シミュレートする3次元モンテカルロ法に基づいたプログラムです。
+3次元モンテカルロ法に基づいてシミュレーションを行うことを目的にしたコードです。
 
 Leblanc (2003) の論文に基づき、以下の特徴を持ちます。
 
-1.  **動的表面密度**:
+1.  動的表面密度:
     - 水星表面を惑星固定座標系のグリッドで管理します。
     - 各セルのナトリウム密度は、放出によって減少し、吸着によって増加します。
 
-2.  **複数の生成過程**:
+2.  複数の生成過程:
     - 光刺激脱離 (PSD): 表面密度と太陽光に比例。
     - 熱脱離 (TD): 表面密度と表面温度に比例。
-    - 微小隕石蒸発 (MMV): 表面密度に依存しない補給源。
+    - 微小隕石蒸発 (MIV): 表面密度に依存しない補給源。
+    - 太陽風スパッタリング(SWS): 未実装
 
 ==============================================================================
 座標系
 ==============================================================================
 このシミュレーションは、2つの座標系を併用します。
 
-1.  **惑星固定座標系**:
+1.  惑星固定座標系（水星自転座標系）:
     - 表面グリッド(surface_density_grid)、表面温度計算に使用。
     - 経度 0 は水星の特定の地点に固定。
 
-2.  **水星中心・太陽固定回転座標系**:
+2.  水星中心・太陽固定回転座標系:
     - 粒子の軌道追跡、空間密度グリッドの集計に使用。
-    - +X 軸: 常に太陽の方向。
+    - +X方向: 常に太陽の方向。
+    - -Y方向: 自転の進行方向。
     - メインループで計算される `subsolar_lon_rad`（惑星固定座標系での
       太陽直下点経度）を用いて、2つの座標系をマッピングします。
 
 ==============================================================================
 主な物理モデル (Leblanc 2003 準拠)
 ==============================================================================
-1.  **粒子生成**:
-    - PSD, TD: 表面のナトリウム貯蔵庫を消費します。
+1.  粒子生成:
+    - PSD, TD, SWS: 表面のナトリウム貯蔵庫を消費します。
     - MMV: 外部からの補給源として機能します 。
 
-2.  **初期速度 (フラックス分布)**:
+2.  初期速度:
     - PSD (T=1500K [cite: 269]), TD (T=表面温度 [cite: 246]), MMV (T=3000K [cite: 338])
       それぞれの温度におけるマクスウェル「フラックス」分布
       (f(E) ∝ E * exp(-E/kT)) に従う速度をサンプリングします。
     - 放出角度: ランバート（余弦則）分布。
 
-3.  **軌道計算 (4次ルンゲ＝クッタ法)**:
+3.  軌道計算 (4次ルンゲ＝クッタ法):
     - (変更なし：水星重力、SRP、太陽重力、見かけの力)
 
-4.  **消滅過程**:
+4.  消滅過程:
     - 光電離: (変更なし)
     - 表面衝突: 表面に再衝突し吸着(stick)した場合、
                  衝突地点の惑星固定グリッドセルの密度を増加させます。
@@ -57,8 +58,8 @@ Leblanc (2003) の論文に基づき、以下の特徴を持ちます。
 ==============================================================================
 必要な外部ファイル
 ==============================================================================
-1.  **orbit2025_v5.txt**: (変更なし)
-2.  **SolarSpectrum_Na0.txt**: (変更なし)
+1.  orbit2025_v5.txt: 視線速度、惑星間距離などの情報を計算したもの
+2.  SolarSpectrum_Na0.txt: 放射圧計算用の波長ごとのgammaが記録されたもの　先輩のやつなので出典は不明
 """
 
 import numpy as np
@@ -109,7 +110,7 @@ def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_l
     Returns:
         float: 表面温度 [K]
     """
-    T_night = 100.0  # 夜側の最低温度 [K] [cite: 219]
+    T_night = 100.0  # 夜側の最低温度 [K]
 
     # 太陽天頂角の余弦 (cos(SZA)) を計算
     cos_theta = np.cos(lat_rad) * np.cos(lon_fixed_rad - subsolar_lon_rad)
@@ -127,7 +128,7 @@ def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_l
     AU_peri = 0.307
     AU_aph = 0.467
     T0 = np.interp(AU, [AU_peri, AU_aph], [T0_peri, T0_aph])
-    T1 = 100.0  # [cite: 217]
+    T1 = 100.0  # 
 
     return T0 + T1 * (cos_theta ** 0.25)
 
@@ -135,7 +136,7 @@ def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_l
 def calculate_sticking_probability(surface_temp_K):
     """
     表面温度に基づき、ナトリウム原子が表面に吸着する確率を計算します。
-    (Leblanc 2003, [cite: 165-167, 169] モデル)
+    (Leblanc 2003)
 
     Args:
         surface_temp_K (float): 衝突地点の表面温度 [K]
@@ -143,11 +144,11 @@ def calculate_sticking_probability(surface_temp_K):
     Returns:
         float: 実効的な吸着確率 (0から1の範囲)
     """
-    # 論文 [cite: 166] の実験データにフィットする定数
+    # 論文の実験データにフィットする定数
     # Stick=0.5 at T=250K, Stick=0.2 at T=500K
     A = 0.0804
     B = 458.0
-    porosity = 0.8  # 表面の多孔性 [cite: 169]
+    porosity = 0.8  # 表面の多孔性
 
     if surface_temp_K <= 0:
         return 1.0
@@ -164,7 +165,7 @@ def calculate_sticking_probability(surface_temp_K):
 def calculate_thermal_desorption_rate(surface_temp_K):
     """
     熱脱離の放出率 (1/s) を計算します。
-    Rate = v * exp(-U / k_B * T_s)  (Leblanc 2003, )
+    Rate = v * exp(-U / k_B * T_s)  (Leblanc 2003)
 
     Args:
         surface_temp_K (float): 表面温度 [K]
@@ -172,7 +173,7 @@ def calculate_thermal_desorption_rate(surface_temp_K):
     Returns:
         float: 放出率 [1/s] (この値を表面密度に乗算して使用する)
     """
-    if surface_temp_K < 350.0:  # [cite: 241]
+    if surface_temp_K < 350.0:  #
         return 0.0  # 低温ではほぼゼロ
 
     VIB_FREQ = 1e13  # 表面の振動数 v [1/s]
@@ -192,7 +193,7 @@ def calculate_mmv_flux(AU):
     """
     微小隕石蒸発 (MMV) によるナトリウムのフラックス [atoms/m^2/s] を計算します。
     これは表面密度に依存しない「補給源」です。
-    (Leblanc 2003, [cite: 341-342] モデル)
+    (Leblanc 2003)
 
     Args:
         AU (float): 現在の太陽距離 [AU]
@@ -208,7 +209,7 @@ def calculate_mmv_flux(AU):
     # 近日点での平均フラックス [atoms/m^2/s]
     avg_flux_at_peri = TOTAL_FLUX_AT_PERI_NA_S / MERCURY_SURFACE_AREA_M2
 
-    # 太陽距離に応じて R_Hel^(-1.9) でスケーリング [cite: 341]
+    # 太陽距離に応じて R_Hel^(-1.9) でスケーリング
     # R_Hel は AU 単位
     current_R_Hel = AU / PERIHELION_AU  # (間違い。AUはそのままR_Hel)
     # Flux(AU) = Flux(Peri) * (AU / Peri_AU)^(-1.9)
@@ -224,7 +225,7 @@ def calculate_mmv_flux(AU):
 def sample_speed_from_flux_distribution(mass_kg, temp_k):
     """
     指定された温度の「マクスウェル・フラックス分布」に従う速さをサンプリングします。
-    f(E) ∝ E * exp(-E / kT) [cite: 246]
+    f(E) ∝ E * exp(-E / kT)
     これは形状パラメータ k=2, スケールパラメータ θ=kT のガンマ分布です。
 
     Args:
@@ -244,7 +245,7 @@ def sample_speed_from_flux_distribution(mass_kg, temp_k):
 
 
 def sample_lambertian_direction_local():
-    """ (変更なし) """
+    """ 乱数を生成 """
     u1, u2 = np.random.random(2)
     phi = 2 * PHYSICAL_CONSTANTS['PI'] * u1
     cos_theta = np.sqrt(1 - u2)
@@ -253,7 +254,7 @@ def sample_lambertian_direction_local():
 
 
 def transform_local_to_world(local_vec, normal_vector):
-    """ (変更なし) """
+    """ どこの何か忘れた """
     local_z_axis = normal_vector / np.linalg.norm(normal_vector)
     world_up = np.array([0., 0., 1.])
     if np.allclose(local_z_axis, world_up) or np.allclose(local_z_axis, -world_up):
@@ -267,7 +268,7 @@ def transform_local_to_world(local_vec, normal_vector):
 
 
 def get_orbital_params(time_sec, orbit_data, mercury_year_sec):
-    """ (変更なし) """
+    """ ファイルから補間 """
     ROTATION_PERIOD_SEC = 58.646 * 24 * 3600
     current_time_in_orbit = time_sec % mercury_year_sec
     time_col = orbit_data[:, 2]
@@ -281,7 +282,7 @@ def get_orbital_params(time_sec, orbit_data, mercury_year_sec):
 
 
 def lonlat_to_xyz(lon_rad, lat_rad, radius):
-    """ (変更なし) """
+    """ 直交座標系へ変換  """
     x = radius * np.cos(lat_rad) * np.cos(lon_rad)
     y = radius * np.cos(lat_rad) * np.sin(lon_rad)
     z = radius * np.sin(lat_rad)
@@ -336,7 +337,7 @@ def xyz_to_lonlat_idx(pos_vec, lon_edges_fixed, lat_edges_fixed, N_LON_FIXED, N_
 # ==============================================================================
 
 def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_data, settings):
-    """ (変更なし) """
+    """ 加速度の計算 """
     x, y, z = pos
     r0 = AU * PHYSICAL_CONSTANTS['AU']
     velocity_for_doppler = vel[0] + V_radial_ms
@@ -497,7 +498,7 @@ def main_snapshot_simulation():
     start_time = time.time()
 
     # --- 1. シミュレーション設定 ---
-    OUTPUT_DIRECTORY = r"./SimulationResult_DynamicSurface_202510"
+    OUTPUT_DIRECTORY = r"./SimulationResult_202510"
     # 表面グリッド（惑星固定座標系）
     N_LON_FIXED, N_LAT = 72, 36  # 経度 72 (5度毎), 緯度 36 (5度毎)
 
@@ -576,7 +577,7 @@ def main_snapshot_simulation():
         print(f"エラー: '{orbit_file_name}' の列が不足しています。")
         sys.exit()
 
-    # --- ★★★ 修正箇所 1: RUN開始時刻 (TAA=0) の調整 ★★★ ---
+    # --- RUN開始時刻 (TAA=0) の調整 ---
     taa_col = orbit_data[:, 0]
     time_col = orbit_data[:, 2]
     idx_perihelion = np.argmin(np.abs(taa_col))
@@ -594,7 +595,6 @@ def main_snapshot_simulation():
     print(f"RUN開始時刻 (TAA=0): {t_start_run:.1f} s")
     print(f"RUN終了時刻: {t_end_run:.1f} s (+{TOTAL_SIM_YEARS} 年後)")
     print(f"------------------")
-    # --- ★★★ 修正 1 ここまで ★★★ ---
 
     # (スペクトルデータの前処理)
     wl, gamma = spec_data_np[:, 0], spec_data_np[:, 1]
@@ -621,16 +621,59 @@ def main_snapshot_simulation():
                 t_sec, orbit_data, MERCURY_YEAR_SEC
             )
 
-            # ★★★ 修正箇所 2: pbarの表示を t_start_run 基準に変更 ★★★
+            #pbarの表示を t_start_run 基準に変更
             run_phase = "Spin-up" if t_sec < t_start_run else "Run"
             pbar.set_description(f"[{run_phase}] TAA={TAA:.1f} | N_particles={len(active_particles)}")
 
             # --- 4b. 表面から新しい粒子を生成 (PSD, TD, MMV) ---
-            # (変更なし)
+
             newly_launched_particles = []
             atoms_lost_grid = np.zeros_like(surface_density_grid)
-            F_UV_current_per_m2 = F_UV_1AU_PER_M2 / (AU ** 2)
+
+            # MMVの生成を (i_lon, i_lat) ループから分離し、
+            # 「回転座標系」で非対称に生成するロジックに戻す。
+
             flux_mmv_per_m2_s = calculate_mmv_flux(AU)
+            MERCURY_SURFACE_AREA_M2 = 4 * PHYSICAL_CONSTANTS['PI'] * (PHYSICAL_CONSTANTS['RM'] ** 2)
+            total_mmv_atoms = flux_mmv_per_m2_s * MERCURY_SURFACE_AREA_M2 * TIME_STEP_SEC
+
+            num_sps_mmv_float = total_mmv_atoms / ATOMS_PER_SUPERPARTICLE
+            num_sps_mmv_int = int(num_sps_mmv_float)
+            if np.random.random() < (num_sps_mmv_float - num_sps_mmv_int):
+                num_sps_mmv_int += 1
+
+            if num_sps_mmv_int > 0:
+                M_rejection = 4.0 / 3.0  # 棄却法のための定数
+
+                for _ in range(num_sps_mmv_int):
+                    # 2:1 の非対称性を持つ「回転座標系」の経度をサンプリング
+                    while True:
+                        # lon_rot_rad は「回転座標系」での経度
+                        lon_rot_rad = np.random.uniform(-np.pi, np.pi)
+                        prob_accept = (1.0 - (1.0 / 3.0) * np.sin(lon_rot_rad)) / M_rejection
+                        if np.random.random() < prob_accept:
+                            break  # 採択
+
+                    # 緯度は均等にサンプリング (回転座標系)
+                    lat_rot_rad = np.arcsin(np.random.uniform(-1.0, 1.0))
+
+                    # 回転座標系で位置と速度を決定
+                    initial_pos_rot = lonlat_to_xyz(lon_rot_rad, lat_rot_rad, PHYSICAL_CONSTANTS['RM'])
+                    surface_normal_rot = initial_pos_rot / PHYSICAL_CONSTANTS['RM']
+                    speed = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], TEMP_MMV)
+                    initial_vel_rot = speed * transform_local_to_world(sample_lambertian_direction_local(),
+                                                                       surface_normal_rot)
+
+                    newly_launched_particles.append({
+                        'pos': initial_pos_rot,
+                        'vel': initial_vel_rot,
+                        'weight': ATOMS_PER_SUPERPARTICLE
+                    })
+
+            # === PSD と TD の生成 (ロジックは変更なし) ===
+            # これは「惑星固定グリッド」をループし、
+            # 太陽の向き(subsolar_lon_rad_fixed)に応じて生成する
+            F_UV_current_per_m2 = F_UV_1AU_PER_M2 / (AU ** 2)
 
             for i_lon in range(N_LON_FIXED):
                 for i_lat in range(N_LAT):
@@ -638,39 +681,53 @@ def main_snapshot_simulation():
                     lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
                     area_m2 = cell_areas_m2[i_lat]
                     current_density_per_m2 = surface_density_grid[i_lon, i_lat]
+
+                    # 表面密度が枯渇していたらPSD, TDは生成しない
+                    if current_density_per_m2 <= 0:
+                        continue
+
+                    # 惑星固定グリッドに対する太陽天頂角(SZA)と温度を計算 (ここは正しい)
                     cos_Z = np.cos(lat_rad) * np.cos(lon_fixed_rad - subsolar_lon_rad_fixed)
                     temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_lon_rad_fixed)
 
-                    n_atoms_psd, n_atoms_td, n_atoms_mmv = 0.0, 0.0, 0.0
-                    n_atoms_mmv = flux_mmv_per_m2_s * area_m2 * TIME_STEP_SEC
+                    n_atoms_psd, n_atoms_td = 0.0, 0.0
 
-                    if current_density_per_m2 > 0:
-                        if cos_Z > 0:
-                            rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
-                            n_atoms_psd = rate_psd_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
-                        rate_td_per_s = calculate_thermal_desorption_rate(temp_k)
-                        n_atoms_td = rate_td_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
+                    # PSD (日照側のみ)
+                    if cos_Z > 0:
+                        rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
+                        n_atoms_psd = rate_psd_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
+
+                    # TD (温度が十分高ければ)
+                    rate_td_per_s = calculate_thermal_desorption_rate(temp_k)
+                    n_atoms_td = rate_td_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
+
 
                     procs = {
                         'PSD': {'n_atoms': n_atoms_psd, 'temp': TEMP_PSD},
-                        'TD': {'n_atoms': n_atoms_td, 'temp': temp_k},
-                        'MMV': {'n_atoms': n_atoms_mmv, 'temp': TEMP_MMV}
+                        'TD': {'n_atoms': n_atoms_td, 'temp': temp_k}
+                        # 'MMV' は削除
                     }
 
                     for proc_name, p in procs.items():
                         if p['n_atoms'] <= 0: continue
+
                         num_sps_float = p['n_atoms'] / ATOMS_PER_SUPERPARTICLE
                         num_sps_int = int(num_sps_float)
                         if np.random.random() < (num_sps_float - num_sps_int):
                             num_sps_int += 1
                         if num_sps_int == 0: continue
 
-                        if proc_name != 'MMV':
-                            atoms_lost_grid[i_lon, i_lat] += num_sps_int * ATOMS_PER_SUPERPARTICLE
+                        # MMVではない(PSD, TD)ので、表面密度を減らす
+                        # (proc_name != 'MMV' のチェックは不要になった)
+                        atoms_lost_grid[i_lon, i_lat] += num_sps_int * ATOMS_PER_SUPERPARTICLE
 
+                        # 粒子を生成
                         for _ in range(num_sps_int):
+                            # 固定座標系の経緯度 -> 回転座標系の経緯度 に変換
                             lon_rot_rad = lon_fixed_rad - subsolar_lon_rad_fixed
                             lat_rot_rad = lat_rad
+
+                            # 回転座標系で位置と速度を決定 (ここは正しい)
                             initial_pos_rot = lonlat_to_xyz(lon_rot_rad, lat_rot_rad, PHYSICAL_CONSTANTS['RM'])
                             surface_normal_rot = initial_pos_rot / PHYSICAL_CONSTANTS['RM']
                             speed = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], p['temp'])
@@ -682,12 +739,15 @@ def main_snapshot_simulation():
                                 'weight': ATOMS_PER_SUPERPARTICLE
                             })
 
+            # PSD/TDによって失われた密度を表面グリッドから減算
             surface_density_grid -= atoms_lost_grid / cell_areas_m2
-            np.clip(surface_density_grid, 0, None, out=surface_density_grid)
+            np.clip(surface_density_grid, 0, None, out=surface_density_grid)  # 0未満にならないように
+
+            # アクティブ粒子リストに新粒子を追加
             active_particles.extend(newly_launched_particles)
 
             # --- 4c. 全ての粒子を1ステップ進め、結果を集計 ---
-            # (変更なし)
+
             tasks = [{'settings': settings, 'spec': spec_data_dict, 'particle_state': p,
                       'orbit': (TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad_fixed),
                       'duration': TIME_STEP_SEC} for p in
@@ -720,7 +780,7 @@ def main_snapshot_simulation():
             active_particles = next_active_particles
             surface_density_grid += atoms_gained_grid / cell_areas_m2
 
-            # --- ★★★ 修正箇所 3: スナップショット保存判定 (バグ修正) ★★★ ---
+            # --- スナップショット保存判定 ---
 
             save_this_step = False  # 1. 毎ステップ必ず変数を初期化する
 
@@ -743,7 +803,7 @@ def main_snapshot_simulation():
 
             # --- 4e. 立方体グリッドに集計して保存 ---
 
-            # ★★★ 修正箇所 4: 保存判定を t_sec >= t_start_run に変更 ★★★
+            #保存判定を t_sec >= t_start_run
             if save_this_step and t_sec >= t_start_run:
                 pbar.write(f"\n>>> [Run] Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
 
@@ -763,7 +823,7 @@ def main_snapshot_simulation():
                         density_grid[ix, iy, iz] += p['weight']
                 density_grid /= cell_volume_m3
 
-                # ★★★ 修正箇所 5: 保存ファイル名の時刻を t_start_run からの相対時刻に変更 ★★★
+                #保存ファイル名の時刻を t_start_run からの相対時刻に
                 relative_time_sec = t_sec - t_start_run
                 save_time_h = relative_time_sec / 3600
 

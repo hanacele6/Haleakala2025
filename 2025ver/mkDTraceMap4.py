@@ -259,12 +259,12 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
 
 
 if __name__ == "__main__":
-    date = '20250828'
+    date = '20251021'
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     base_output_dir = Path(f"C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
     output_dir = base_output_dir / date
     csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"
-    TRACE_TARGET_DESCRIPTION = 'LED'
+    TRACE_TARGET_DESCRIPTIONS = ['LED', 'HLG']
     dark_file = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/dk01h_20s.sp.fits")
     config = {
         'nFibX': 10, 'nFibY': 12,
@@ -281,9 +281,9 @@ if __name__ == "__main__":
     try:
         df = pd.read_csv(csv_file_path)
         fits_col, desc_col = df.columns[0], df.columns[1]
-        target_rows = df[df[desc_col] == TRACE_TARGET_DESCRIPTION]
+        target_rows = df[df[desc_col].isin(TRACE_TARGET_DESCRIPTIONS)]
         if target_rows.empty:
-            print(f"エラー: CSV内に説明が '{TRACE_TARGET_DESCRIPTION}' のファイルが見つかりません。")
+            print(f"エラー: CSV内に説明が '{TRACE_TARGET_DESCRIPTIONS}' のファイルが見つかりません。")
         else:
             original_fits_path_str = target_rows.iloc[0][fits_col]
             original_fits_path = Path(original_fits_path_str)

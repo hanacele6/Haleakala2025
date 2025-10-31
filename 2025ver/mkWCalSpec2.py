@@ -478,7 +478,7 @@ if __name__ == "__main__":
     #600 to 600
 
     # 1. ベースディレクトリとCSVファイルのパス
-    day = "20250825"
+    day = "20251021"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
@@ -487,7 +487,8 @@ if __name__ == "__main__":
     data_dir2 = base_dir / "output/20250511/"  # skyがないとき用
 
     # 3. 使用するマスターフラットファイル（拡張子なし）
-    master_wl_flat_name = ("master_led")
+    #master_wl_flat_name = ("master_led")
+    master_wl_flat_name = ("master_hlg")
     master_sky_flat_name = "master_sky" #問題あり
     #master_sky_flat_name = "master_sky_f" #問題なし
 

@@ -9,7 +9,7 @@ import time
 import re  # 番号を抽出するためにインポート
 
 # --- 設定値 (Setting Values) ---
-date = '20250828' #7mada
+date = '20251021' #7mada
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 output_dir = base_dir / f"output/{date}"
 csv_file_path = base_dir / "2025ver" / f"mcparams{date}.csv"  # 基準となるCSVファイル
@@ -23,13 +23,27 @@ try:
     fits_col, desc_col = df.columns[0], df.columns[1]
 
     # トレース情報の基準となるfppolyファイルを特定 (LEDファイルから名前を推測)
-    led_rows = df[df[desc_col] == 'LED']
-    if led_rows.empty:
-        raise FileNotFoundError("CSVに 'LED' のエントリが見つかりません。fppolyファイルを特定できません。")
+    # トレース情報の基準となるfppolyファイルを特定 (LEDまたはHLGファイルから名前を推測)
+    # led_rows = df[df[desc_col] == 'LED'] # 元のコード
 
-    # LEDの最初のファイル名からfppolyファイル名を生成
-    led_path_str = led_rows.iloc[0][fits_col]
-    fppoly_filename = Path(led_path_str).stem + ".fppoly.fits"
+    # 検索するキーワードをリストで指定
+    TRACE_DESCRIPTIONS = ['LED', 'HLG']
+    # 'LED' または 'HLG' のいずれかに一致する行を検索
+    trace_reference_rows = df[df[desc_col].isin(TRACE_DESCRIPTIONS)]
+
+    # if led_rows.empty: # 元のコード
+    if trace_reference_rows.empty:
+        # エラーメッセージも変更
+        raise FileNotFoundError(
+            f"CSVに {TRACE_DESCRIPTIONS} のいずれかのエントリが見つかりません。fppolyファイルを特定できません。")
+
+    # 'LED'または'HLG'の "最初" のファイル名からfppolyファイル名を生成
+    # led_path_str = led_rows.iloc[0][fits_col] # 元のコード
+    reference_path_str = trace_reference_rows.iloc[0][fits_col]
+
+    # fppoly_filename = Path(led_path_str).stem + ".fppoly.fits" # 元のコード
+    fppoly_filename = Path(reference_path_str).stem + ".fppoly.fits"
+
     fppoly_path = output_dir / fppoly_filename
 
     with fits.open(fppoly_path) as hdul:
