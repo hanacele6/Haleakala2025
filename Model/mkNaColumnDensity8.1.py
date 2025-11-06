@@ -435,7 +435,7 @@ def main_snapshot_simulation():
     }
 
     # 出力ディレクトリの準備
-    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_HybridWeight_PSD_TD_MMV_SWS"
+    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_1.0"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
