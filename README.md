@@ -28,6 +28,6 @@
 
 ## 使い方 / サンプル
 * **解析デモ:**
-    `analysis_demo.ipynb` にて、簡単な解析プロットのデモが行えます。
+   [analysis_demo.ipynb](analysis_demo.ipynb) にて、簡単な解析プロットのデモが行えます。
 * **各コード詳細:**
     `2025ver/` および `Model/` 内の各READMEを参照してください。
