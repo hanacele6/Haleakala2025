@@ -14,14 +14,13 @@ Modelに入っているコードは水星の大気をモンテカルロシミュ
 ---
 
 ## 環境
-言語: Python 3.9.21
-ライブラリ:
-     NumPy
-     Matplotlib
-     Astropy
-ツール:
-　　 Jupyter Notebook
-
+* **言語:** Python 3.9.21
+* **ライブラリ:**
+    * NumPy
+    * Matplotlib
+    * Astropy
+* **ツール:** 
+    * Jupyter Notebook
 ---
 
 ## プロジェクトの背景
