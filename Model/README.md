@@ -26,4 +26,4 @@
 シミュレーションを実行するには、`mkNacolumnDensity8.1.py` を呼び出します。
 main関数に定数などの設定があるため、適宜設定を行います。
 
-なお、mkNaColumnDenssity8.1.pyは現段階では未完成です。
+なお、`mkNaColumnDensity8.1.py`は現段階では未完成です。
