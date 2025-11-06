@@ -36,7 +36,7 @@ PHYSICAL_CONSTANTS = {
 
 def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_lon_rad):
     """
-    水星表面の局所的な温度を計算します (Leblanc 2003, モデル)。
+    水星表面の局所的な温度を計算します (シミュレーションコードのモデル)。
 
     Args:
         lon_fixed_rad (float): 計算対象地点の経度 (惑星固定座標系) [rad]
@@ -47,28 +47,25 @@ def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_l
     Returns:
         float: 表面温度 [K]
     """
-    T_night = 100.0  # 夜側の最低温度 [K] [cite: 219]
+    T_night = 100.0  # 夜側の最低温度 [K]
 
     # 太陽天頂角の余弦 (cos(SZA)) を計算
-    # (lon_fixed_rad - subsolar_lon_rad) が太陽直下点からの経度差
     cos_theta = np.cos(lat_rad) * np.cos(lon_fixed_rad - 0)
 
     if cos_theta <= 0:
         return T_night  # 夜側
 
-    # 日照側の温度 [cite: 217]
-    # T0 は近日点(perihelion)で 600K、遠日点(aphelion)で 475K
-    T0_peri = 600.0
-    T0_aph = 475.0
-    AU_peri = 0.307  # 水星の近日点距離
-    AU_aph = 0.467  # 水星の遠日点距離
+    # --- ここからがシミュレーションコードの計算式 ---
 
-    # 現在のAUに基づいてT0を線形補間する
-    T0 = np.interp(AU, [AU_peri, AU_aph], [T0_peri, T0_aph])
-    T1 = 100.0  # [cite: 217]
+    # 論文の T0, T1 とは異なる、シミュレーションコード内の係数設定
+    T0 = 100.0  # (シミュレーションコードでの T0)
+    T1 = 600.0  # (シミュレーションコードでの T1)
 
-    # [cite: 217] の式
-    return T0 + T1 * (cos_theta ** 0.25)
+    # 要求された (0.306 / AU)**2 のスケーリングファクター
+    scaling_factor = (0.306 / AU) ** 2
+
+    # シミュレーションコードの計算式
+    return T0 + T1 * (cos_theta ** 0.25) * scaling_factor
 
 
 # ==============================================================================

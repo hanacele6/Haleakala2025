@@ -289,7 +289,7 @@ def generate_particles_sws(current_time_sec, orbital_params, SWS_PARAMS, grid_pa
     temporal_variation_factor = (1.0 + np.cos(2 * np.pi * current_time_sec / period_sec)) / 2.0
 
     # 実効的な太陽風フラックス
-    effective_flux_sw = current_flux_sw * temporal_variation_factor
+    effective_flux_sw = current_flux_sw #* temporal_variation_factor
 
     # SWSの生成率 [atoms / m^2 / s]
     concentration_ratio = CONSTANT_SURFACE_DENSITY / DENSITY_REF_M2
@@ -523,7 +523,7 @@ def main_snapshot_simulation():
     TIME_STEP_SEC = 1000
     TOTAL_SIM_YEARS = 1.0
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
-    ATOMS_PER_SUPERPARTICLE = 1e23
+    ATOMS_PER_SUPERPARTICLE = 5e21
 
     # --- (PSDのパラメータはSWS単体版では不要) ---
 
@@ -540,12 +540,12 @@ def main_snapshot_simulation():
         # 表面密度の基準値 [atoms/m^2] (7.5e14 atoms/cm^2)
         'DENSITY_REF_M2': 7.5e14 * (100.0) ** 2,
         # --- スパッタリング発生領域 (太陽固定座標系, 経度=0が太陽直下点) ---
-        'LON_MIN_DEG': -70.0,  # (論文では 20-70 deg SZA)
-        'LON_MAX_DEG': 70.0,
-        'LAT_N_MIN_DEG': 20.0,  # 北半球の帯
+        'LON_MIN_DEG': -40.0,  # (論文では 20-70 deg SZA)
+        'LON_MAX_DEG': 40.0,
+        'LAT_N_MIN_DEG': 30.0,  # 北半球の帯
         'LAT_N_MAX_DEG': 60.0,
         'LAT_S_MIN_DEG': -60.0,  # 南半球の帯
-        'LAT_S_MAX_DEG': -20.0,
+        'LAT_S_MAX_DEG': -30.0,
     }
 
     # --- 出力グリッドの設定 ---
@@ -568,7 +568,7 @@ def main_snapshot_simulation():
     }
 
     # 出力ディレクトリの準備 (★run_name を変更)
-    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_SWS_only"
+    run_name = f"Grid{GRID_RESOLUTION}_Range{int(GRID_MAX_RM)}RM_SP{ATOMS_PER_SUPERPARTICLE:.0e}_SWS_COSOFF"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")

@@ -7,7 +7,7 @@
     特定のTAA (真近点離角) の.npyファイルを探します。
 
     ファイルを読み込み、3Dの数密度グリッド (atoms/m^3) を
-    Z軸方向（視線方向）に積分（合計）し、
+    指定された軸方向（視線方向）に積分（合計）し、
     2Dの柱密度 (atoms/m^2) を計算します。
 
     結果を matplotlib を使って2Dカラーマップとして表示します。
@@ -26,11 +26,12 @@ import glob  # ファイル検索用
 
 # 1. シミュレーション結果が保存されているディレクトリ
 # (シミュレーションコードの 'target_output_dir' と一致させる)
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP1e+23_MIV_2"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS"
+# SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\Grid101_Budget5000_TD"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 0 # 例: 90度のファイルを探す
+TARGET_TAA = 180  # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
@@ -43,6 +44,11 @@ RM_METERS = 2.440e6  # 水星の半径 [m]
 # 5. プロット単位
 # Trueにすると、天文学で一般的な [atoms/cm^2] でプロットします
 PLOT_IN_CM2 = True
+
+# 6. 視点 (どの方向から見るか) ★ 変更点
+# 'Z': +Z軸方向から (X-Y平面, 'Face-on')
+# 'Y': -Y軸方向から (X-Z平面, 'Side-on')
+VIEW_FROM = 'Y'  # ★ ここを 'Z' または 'Y' に設定してください
 
 
 # ==============================================================================
@@ -68,11 +74,12 @@ def find_simulation_file(directory, taa):
     return files[-1]  # 最後のファイル（=最新のシミュレーション結果）を返す
 
 
-def plot_column_density(density_grid_m3, taa):
+def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
     """
-    3D密度グリッドをZ軸方向に積分し、2D柱密度マップをプロットします。
+    3D密度グリッドを指定された軸方向に積分し、2D柱密度マップをプロットします。
+    view_from: 'Z' (Z-View) または 'Y' (Y-View)
     """
-    print("Z軸方向に積分し、柱密度を計算中...")
+    print(f"視点 '{view_from}' に基づき、柱密度を計算中...")  # ★ 変更点
 
     # --- 1. 物理スケールの計算 ---
     # グリッドのセルのサイズ [m]
@@ -80,10 +87,27 @@ def plot_column_density(density_grid_m3, taa):
     grid_max_m = GRID_MAX_RM * RM_METERS
     cell_size_m = (grid_max_m - grid_min_m) / GRID_RESOLUTION
 
-    # --- 2. 柱密度の計算 ---
-    # 柱密度 N [atoms/m^2] = Σ (数密度 n [atoms/m^3] * セルの厚み dz [m])
-    # Z軸 (axis=2) に沿って合計する
-    column_density_m2 = np.sum(density_grid_m3, axis=2) * cell_size_m
+    # --- 2. 柱密度の計算 --- ★ 変更点
+    if view_from == 'Z':
+        # 従来通り: Z軸 (axis=2) に沿って合計する -> X-Y平面
+        integration_axis = 2
+        xlabel = "X [$R_M$]"
+        ylabel = "Y [$R_M$]"
+        title_view = "Viewed from +Z (X-Y Plane)"
+
+    elif view_from == 'Y':
+        # 新規: Y軸 (axis=1) に沿って合計する -> X-Z平面
+        integration_axis = 1
+        xlabel = "X [$R_M$]"
+        ylabel = "Z [$R_M$]"  # Y軸がZ軸になる
+        title_view = "Viewed from -Y (X-Z Plane)"
+
+    else:
+        print(f"エラー: 不明な視点 '{view_from}' です。'Z' または 'Y' を指定してください。")
+        return
+
+    # 柱密度 N [atoms/m^2] = Σ (数密度 n [atoms/m^3] * セルの厚み [m])
+    column_density_m2 = np.sum(density_grid_m3, axis=integration_axis) * cell_size_m
 
     # --- 3. プロット単位の変換 ---
     if PLOT_IN_CM2:
@@ -103,11 +127,11 @@ def plot_column_density(density_grid_m3, taa):
 
     # ゼロ以下の値はプロットしない（Logスケールのため）
     min_val = np.min(column_density_plot[column_density_plot > 0])
-    if min_val is np.nan:
-        print("警告: プロットするデータがすべてゼロです。")
+    if not np.isfinite(min_val):  # ★ 変更点 (np.nan -> not np.isfinite)
+        print("警告: プロットするデータがすべてゼロまたはNaNです。")
         min_val = 1e-1  # とりあえずの値
 
-    print(f"プロットを作成中... (TAA={taa})")
+    print(f"プロットを作成中... (TAA={taa}, View={view_from})")  # ★ 変更点
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
@@ -116,6 +140,7 @@ def plot_column_density(density_grid_m3, taa):
     # extent: 軸の物理単位を設定
     # .T (転置): [ix, iy] 配列を [iy, ix] としてプロットするため、
     #            X軸にix, Y軸にiyが来るように転置する
+    #            (Y-Viewの場合 [ix, iz] -> .T -> [iz, ix] となり同様に機能する)
     im = ax.imshow(
         column_density_plot.T,
         origin='lower',
@@ -131,11 +156,11 @@ def plot_column_density(density_grid_m3, taa):
                             linestyle='--', linewidth=1, label='Mercury (1 RM)')
     ax.add_patch(mercury_circle)
 
-    # 軸ラベルとタイトル
+    # 軸ラベルとタイトル (★ 変更点)
     # (シミュレーション座標系に基づき、+Xが太陽方向)
-    ax.set_xlabel("X  [$R_M$]",fontsize = 14)
-    ax.set_ylabel("Y  [$R_M$]",fontsize = 14)
-    ax.set_title(f"Mercury Na Exosphere Column Density (Viewed from +Z)\n"
+    ax.set_xlabel(xlabel, fontsize=14)
+    ax.set_ylabel(ylabel, fontsize=14)
+    ax.set_title(f"Mercury Na Exosphere Column Density ({title_view})\n"
                  f"TAA = {taa}° (File: {os.path.basename(filepath)})",
                  fontsize=12)
 
@@ -144,7 +169,7 @@ def plot_column_density(density_grid_m3, taa):
 
     # カラーバー
     cbar = fig.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label(cbar_label ,fontsize=14)
+    cbar.set_label(cbar_label, fontsize=14)
 
     ax.legend()
     plt.tight_layout()
@@ -167,8 +192,8 @@ if __name__ == "__main__":
             density_grid = np.load(filepath)
             print(f"グリッドデータをロードしました。Shape: {density_grid.shape}")
 
-            # 3. プロット関数を呼び出し
-            plot_column_density(density_grid, TARGET_TAA)
+            # 3. プロット関数を呼び出し (★ 変更点)
+            plot_column_density(density_grid, TARGET_TAA, view_from=VIEW_FROM)
 
         except Exception as e:
             print(f"ファイルのロードまたはプロット中にエラーが発生しました: {e}")
