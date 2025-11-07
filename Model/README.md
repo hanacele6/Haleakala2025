@@ -11,7 +11,7 @@
 ---
 
 ## ファイル構成
-* `mkNacolumnDensity8.1.py`
+* `mkNacolumnDensity8.2.py`
     * シミュレーションを実行するメインスクリプトです。複数の物理プロセスを統合したものです。
 * `mkNacolumDensity7.1_〇〇.py` 
     * 個別の物理プロセスでの粒子のシミュレーションを行うコードです。
