@@ -121,7 +121,7 @@ def calculate_sticking_probability(surface_temp_K):
 
 
 def calculate_thermal_desorption_rate(surface_temp_K):
-    """ (ベースコードから変更なし) """
+    """ (変更なし: 論文のパラメータ 1e13 を維持) """
     if surface_temp_K < 350.0:
         return 0.0
     VIB_FREQ = 1e13
@@ -167,21 +167,12 @@ def sample_thompson_sigmund_energy(U_eV, E_max_eV=5.0):
     Returns:
         float: サンプリングされたエネルギー [eV]
     """
-    # f(E) = E / (E + U)^3
-    # f(E) は E = U/2 で最大値 f_max = (U/2) / (U/2 + U)^3 = 0.148 / U^2 をとる
     f_max = (U_eV / 2.0) / (U_eV / 2.0 + U_eV) ** 3
 
     while True:
-        # 1. 0からE_maxの範囲でランダムなエネルギー E を試行
         E_try = np.random.uniform(0, E_max_eV)
-
-        # 2. E_try における分布の値を計算
         f_E_try = E_try / (E_try + U_eV) ** 3
-
-        # 3. 0からf_maxの間の乱数 y を生成
         y_try = np.random.uniform(0, f_max)
-
-        # 4. y が f(E) より小さければ、そのEを採用 (Accept)
         if y_try <= f_E_try:
             return E_try
 
@@ -368,7 +359,7 @@ def main_snapshot_simulation():
     # --- 1. シミュレーション設定 ---
     OUTPUT_DIRECTORY = r"./SimulationResult_202510"
     N_LON_FIXED, N_LAT = 72, 36  # 経度 72 (5度毎), 緯度 36 (5度毎)
-    # 初期表面密度 [atoms/m^2]
+    # 初期表面密度 [atoms/m^2] (Leblanc 2003, ~4e12 Na/cm2)
     INITIAL_SURFACE_DENSITY_PER_M2 = 7.5e14 * (100.0 ** 2) * 0.0053
 
     SPIN_UP_YEARS = 1.0
@@ -376,12 +367,11 @@ def main_snapshot_simulation():
     TOTAL_SIM_YEARS = 1.0
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
 
-    # --- ★★★ 変更点 1: 全て可変重み（予算配分方式）に変更 ---
-    # 各プロセスで毎ステップに生成する目標SP(スーパーパーティクル)数を設定
-    TARGET_SPS_TD = 3000  # (例: TDに毎ステップ1000個割り当て)
-    TARGET_SPS_PSD = 3000  # (例: PSDに毎ステップ1000個割り当て)
-    TARGET_SPS_SWS = 3000  # (例: SWSに毎ステップ1000個割り当て)
-    TARGET_SPS_MMV = 3000  # (例: MMVに毎ステップ1000個割り当て)
+    # --- ★★★ 全て可変重み（予算配分方式） ★★★
+    TARGET_SPS_TD = 8000
+    TARGET_SPS_PSD = 3000
+    TARGET_SPS_SWS = 3000
+    TARGET_SPS_MMV = 3000
     # --- ★★★ 変更ここまで ---
 
     # --- 粒子生成モデル (Leblanc 2003 準拠) ---
@@ -391,22 +381,14 @@ def main_snapshot_simulation():
     TEMP_PSD = 1500.0  # [K]
     # (MMV)
     TEMP_MMV = 3000.0  # [K]
-    # (TD)
-    # (関数 'calculate_thermal_desorption_rate' 内で定義)
 
-    # --- ★ SWS (CPS) 用のパラメータ辞書 (SWSコードより) ★ ---
+    # --- SWS (CPS) 用のパラメータ辞書 ---
     SWS_PARAMS = {
-        # 1AUでの太陽風平均密度 [particles/m^3] (10 /cm^3)
         'SW_DENSITY_1AU': 10.0 * (100.0) ** 3,
-        # 太陽風平均速度 [m/s] (400 km/s)
         'SW_VELOCITY': 400.0 * 1000.0,
-        # 実効スパッタリング収率 (多孔性を考慮) [atoms/ion]
         'YIELD_EFF': 0.06,
-        # 表面束縛エネルギー (Thompson-Sigmund分布用) [eV]
         'U_eV': 0.27,
-        # 表面密度の基準値 [atoms/m^2] (7.5e14 atoms/cm^2)
         'DENSITY_REF_M2': 7.5e14 * (100.0) ** 2,
-        # --- スパッタリング発生領域 (太陽固定座標系, 経度=0が太陽直下点) ---
         'LON_MIN_RAD': np.deg2rad(-40.0),
         'LON_MAX_RAD': np.deg2rad(40.0),
         'LAT_N_MIN_RAD': np.deg2rad(30.0),
@@ -438,7 +420,6 @@ def main_snapshot_simulation():
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
 
-    # --- ★★★ print文の修正 ---
     print(f"--- 物理モデル設定 (完全・可変重み方式) ---")
     print(f"Dynamic Surface Grid: {N_LON_FIXED}x{N_LAT}")
     print(f"Processes: PSD, Thermal Desorption, Micrometeoroid Vaporization, SWS")
@@ -451,7 +432,6 @@ def main_snapshot_simulation():
     print(f"Solar Gravity: {USE_SOLAR_GRAVITY}")
     print(f"Coriolis/Centrifugal: {USE_CORIOLIS_FORCES}")
     print(f"----------------------")
-    # --- ★★★ 変更ここまで ---
 
     # --- 2. シミュレーションの初期化 ---
     MERCURY_YEAR_SEC = 87.97 * 24 * 3600
@@ -507,12 +487,10 @@ def main_snapshot_simulation():
     previous_taa = -1
     target_taa_idx = 0
 
-    # --- ★★★ 全プロセスの可変重み変数を初期化 ---
     current_step_weight_td = 1.0
     current_step_weight_psd = 1.0
     current_step_weight_sws = 1.0
     current_step_weight_mmv = 1.0
-    # --- ★★★ 変更ここまで ---
 
     with tqdm(total=len(time_steps), desc="Time Evolution") as pbar:
         for t_sec in time_steps:
@@ -523,24 +501,19 @@ def main_snapshot_simulation():
 
             run_phase = "Spin-up" if t_sec < t_start_run else "Run"
 
-            # --- ★★★ 変更点: pbarの表示を修正 (全重みを表示) ---
             pbar.set_description(
                 f"[{run_phase}] TAA={TAA:.1f} | N_act={len(active_particles)} | "
                 f"W_TD={current_step_weight_td:.1e} W_PSD={current_step_weight_psd:.1e} "
                 f"W_SWS={current_step_weight_sws:.1e} W_MMV={current_step_weight_mmv:.1e}"
             )
-            # --- ★★★ 変更ここまで ---
 
             # --- 4b. 表面から新しい粒子を生成 ---
 
             # (A) 事前ループ: 惑星全体の「総放出原子数」をプロセスごとに計算する
-
-            # --- ★★★ 全プロセスの総原子数を計算する変数を準備 ---
             total_atoms_td_this_step = 0.0
             total_atoms_psd_this_step = 0.0
             total_atoms_sws_this_step = 0.0
-            # --- ★★★ 変更ここまで ---
-            n_atoms_mmv = 0.0  # (MMVは n_atoms_mmv がそのまま総原子数)
+            n_atoms_mmv = 0.0
 
             n_atoms_psd_grid = np.zeros_like(surface_density_grid)
             n_atoms_td_grid = np.zeros_like(surface_density_grid)
@@ -557,7 +530,7 @@ def main_snapshot_simulation():
             current_flux_sw = flux_sw_1au / (AU ** 2)
             period_sec = 1800.0
             temporal_variation_factor = (1.0 + np.cos(2 * np.pi * t_sec / period_sec)) / 2.0
-            effective_flux_sw = current_flux_sw  # * temporal_variation_factor
+            effective_flux_sw = current_flux_sw
 
             base_sputtering_rate_per_m2_s = effective_flux_sw * SWS_PARAMS['YIELD_EFF']
             DENSITY_REF_M2 = SWS_PARAMS['DENSITY_REF_M2']
@@ -572,23 +545,38 @@ def main_snapshot_simulation():
                     lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
                     area_m2 = cell_areas_m2[i_lat]
 
+                    # ★★★ 修正点 1: このセルで利用可能な原子数を計算 ★★★
+                    atoms_available_in_cell = current_density_per_m2 * area_m2
+
                     cos_Z = np.cos(lat_rad) * np.cos(lon_fixed_rad - subsolar_lon_rad_fixed)
 
                     # (1) PSD
                     if cos_Z > 0:
                         rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
-                        n_atoms_psd = rate_psd_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
+
+                        # ★★★ 修正点 2: 正しい枯渇計算 (線形近似 -> 指数関数) ★★★
+                        prob_ejection_psd = rate_psd_per_s * TIME_STEP_SEC
+                        # (旧) n_atoms_psd = rate_psd_per_s * atoms_available_in_cell * TIME_STEP_SEC
+                        n_atoms_psd = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_psd))
+
                         if n_atoms_psd > 0:
                             n_atoms_psd_grid[i_lon, i_lat] = n_atoms_psd
-                            total_atoms_psd_this_step += n_atoms_psd  # ★ 総数を集計
+                            total_atoms_psd_this_step += n_atoms_psd
 
                     # (2) TD
                     temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_lon_rad_fixed)
-                    rate_td_per_s = calculate_thermal_desorption_rate(temp_k)
-                    n_atoms_td = rate_td_per_s * current_density_per_m2 * area_m2 * TIME_STEP_SEC
-                    if n_atoms_td > 0:
-                        n_atoms_td_grid[i_lon, i_lat] = n_atoms_td
-                        total_atoms_td_this_step += n_atoms_td
+                    rate_td_per_s = calculate_thermal_desorption_rate(temp_k)  # これが v * exp(...)
+
+                    if rate_td_per_s > 0:
+                        # ★★★ 修正点 3: 正しい枯渇計算 (線形近似 -> 指数関数) ★★★
+                        prob_ejection_td = rate_td_per_s * TIME_STEP_SEC  # これが 56 のような値になる
+                        # (旧) n_atoms_td = rate_td_per_s * atoms_available_in_cell * TIME_STEP_SEC
+                        n_atoms_td = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_td))
+                        # これで n_atoms_td は atoms_available_in_cell を超えなくなる
+
+                        if n_atoms_td > 0:
+                            n_atoms_td_grid[i_lon, i_lat] = n_atoms_td
+                            total_atoms_td_this_step += n_atoms_td
 
                     # (3) SWS
                     lon_sun_fixed_rad = (lon_fixed_rad - subsolar_lon_rad_fixed)
@@ -601,15 +589,23 @@ def main_snapshot_simulation():
                     is_in_lat_s_band = (SWS_PARAMS['LAT_S_MIN_RAD'] <= lat_sun_fixed_rad <= SWS_PARAMS['LAT_S_MAX_RAD'])
 
                     if is_in_lon_band and (is_in_lat_n_band or is_in_lat_s_band):
-                        current_concentration_ratio = current_density_per_m2 / DENSITY_REF_M2
-                        current_sputtering_rate_per_m2_s = base_sputtering_rate_per_m2_s * current_concentration_ratio
-                        n_atoms_sws = current_sputtering_rate_per_m2_s * area_m2 * TIME_STEP_SEC
+
+                        # ★★★ 修正点 4: SWSの計算ロジックをTD/PSDと統一 ★★★
+                        # Leblanc(2003)[cite: 322]は SWS Rate ∝ c_Na (濃度) としている
+                        # あなたのコードの rate_per_m2_s は (Y * F_sw) * (density / DENSITY_REF)
+                        # これを (Y * F_sw / DENSITY_REF) * density と読み替える
+
+                        # (Y * F_sw / DENSITY_REF) は、原子1個あたりの放出確率[1/s]とみなせる
+                        rate_sws_per_s = (base_sputtering_rate_per_m2_s / DENSITY_REF_M2)
+
+                        prob_ejection_sws = rate_sws_per_s * TIME_STEP_SEC
+                        n_atoms_sws = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_sws))
 
                         if n_atoms_sws > 0:
                             n_atoms_sws_grid[i_lon, i_lat] = n_atoms_sws
-                            total_atoms_sws_this_step += n_atoms_sws  # ★ 総数を集計
+                            total_atoms_sws_this_step += n_atoms_sws
 
-            # --- ★★★ (B) 重みの決定 (全プロセスを可変に) ---
+            # (B) 重みの決定 (全プロセスを可変に) (変更なし)
             current_step_weight_td = 1.0
             if total_atoms_td_this_step > 0 and TARGET_SPS_TD > 0:
                 current_step_weight_td = total_atoms_td_this_step / TARGET_SPS_TD
@@ -625,21 +621,17 @@ def main_snapshot_simulation():
             current_step_weight_mmv = 1.0
             if n_atoms_mmv > 0 and TARGET_SPS_MMV > 0:
                 current_step_weight_mmv = n_atoms_mmv / TARGET_SPS_MMV
-            # --- ★★★ 変更ここまで ---
 
             # (C) メインループ: 粒子を生成
             newly_launched_particles = []
             atoms_lost_grid = np.zeros_like(surface_density_grid)
 
-            # --- ★★★ (C-1) MMV の粒子を生成 (可変重み) ---
+            # (C-1) MMV の粒子を生成 (可変重み) (変更なし)
             if n_atoms_mmv > 0 and TARGET_SPS_MMV > 0:
-                # ターゲットSP数（予算）をそのままSP数として使用
                 num_sps_float_mmv = TARGET_SPS_MMV
                 num_sps_int_mmv = int(num_sps_float_mmv)
                 if np.random.random() < (num_sps_float_mmv - num_sps_int_mmv):
                     num_sps_int_mmv += 1
-
-                # MMVは枯渇させない
 
                 if num_sps_int_mmv > 0:
                     M_rejection = 4.0 / 3.0
@@ -658,9 +650,8 @@ def main_snapshot_simulation():
                                                                            surface_normal_rot)
                         newly_launched_particles.append({
                             'pos': initial_pos_rot, 'vel': initial_vel_rot,
-                            'weight': current_step_weight_mmv  # ★ 可変重み
+                            'weight': current_step_weight_mmv
                         })
-            # --- ★★★ 変更ここまで ---
 
             # (C-2) PSD, TD, SWS の粒子を生成 (グリッドをループ)
             for i_lon in range(N_LON_FIXED):
@@ -678,27 +669,40 @@ def main_snapshot_simulation():
                     temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU,
                                                                    subsolar_lon_rad_fixed)
 
-                    # --- ★★★ procs 辞書に可変重みを割り当てる ---
                     procs = {
                         'PSD': {'n_atoms': n_atoms_psd, 'temp': TEMP_PSD, 'U_eV': None,
-                                'weight': current_step_weight_psd},  # ★ 可変重み
+                                'weight': current_step_weight_psd},
                         'TD': {'n_atoms': n_atoms_td, 'temp': temp_k, 'U_eV': None, 'weight': current_step_weight_td},
                         'SWS': {'n_atoms': n_atoms_sws, 'temp': None, 'U_eV': SWS_PARAMS['U_eV'],
-                                'weight': current_step_weight_sws}  # ★ 可変重み
+                                'weight': current_step_weight_sws}
                     }
-                    # --- ★★★ 変更ここまで ---
 
                     for proc_name, p in procs.items():
                         if p['n_atoms'] <= 0 or p['weight'] <= 0: continue
 
                         weight_to_use = p['weight']
-                        num_sps_float = p['n_atoms'] / weight_to_use
+
+                        # (安全装置: inf/inf や nan を防止)
+                        if np.isinf(weight_to_use):
+                            num_sps_float = 0.0
+                        else:
+                            num_sps_float = p['n_atoms'] / weight_to_use
+
+                        if np.isnan(num_sps_float):
+                            num_sps_float = 0.0
+
                         num_sps_int = int(num_sps_float)
                         if np.random.random() < (num_sps_float - num_sps_int):
                             num_sps_int += 1
                         if num_sps_int == 0: continue
 
                         atoms_to_launch_and_deplete = num_sps_int * weight_to_use
+
+                        # ★★★ 万が一、計算誤差で枯渇量が利用可能量を超えた場合のための安全装置 ★★★
+                        atoms_available_in_cell_for_proc = p['n_atoms']  # このプロセスが使える原子数
+                        if atoms_to_launch_and_deplete > atoms_available_in_cell_for_proc:
+                            atoms_to_launch_and_deplete = atoms_available_in_cell_for_proc
+
                         atoms_lost_grid[i_lon, i_lat] += atoms_to_launch_and_deplete
 
                         for _ in range(num_sps_int):
@@ -706,7 +710,7 @@ def main_snapshot_simulation():
                                 energy_eV = sample_thompson_sigmund_energy(p['U_eV'])
                                 energy_J = energy_eV * PHYSICAL_CONSTANTS['EV_TO_JOULE']
                                 speed = np.sqrt(2.0 * energy_J / PHYSICAL_CONSTANTS['MASS_NA'])
-                            else:  # PSD or TD
+                            else:
                                 speed = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'],
                                                                             p['temp'])
 
