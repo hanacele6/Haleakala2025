@@ -32,7 +32,7 @@ SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\DynamicGrid72x36_1.0"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 0  # 例: 90度のファイルを探す
+TARGET_TAA = 180  # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
@@ -126,11 +126,17 @@ def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
     # プロットの軸範囲 [-5 RM, +5 RM]
     plot_extent = [-GRID_MAX_RM, GRID_MAX_RM, -GRID_MAX_RM, GRID_MAX_RM]
 
-    # ゼロ以下の値はプロットしない（Logスケールのため）
-    min_val = np.min(column_density_plot[column_density_plot > 0])
-    if not np.isfinite(min_val):  # ★ 変更点 (np.nan -> not np.isfinite)
-        print("警告: プロットするデータがすべてゼロまたはNaNです。")
-        min_val = 1e-1  # とりあえずの値
+    # min_val = np.min(column_density_plot[column_density_plot > 0])
+    # if not np.isfinite(min_val):
+    #     print("警告: プロットするデータがすべてゼロまたはNaNです。")
+    #     min_val = 1e-1  # とりあえずの値
+    # vmax_auto = np.max(column_density_plot) # 最大値も自動だった
+
+    # 新しく固定値を設定 (Logスケールなので 1eX の形式が推奨)
+    # ※ PLOT_IN_CM2 = True の場合、[atoms/cm^2] の単位で指定してください
+
+    VMIN_MANUAL = 1e8  # カラーバーの最小値
+    VMAX_MANUAL = 1e10  # カラーバーの最大値
 
     print(f"プロットを作成中... (TAA={taa}, View={view_from})")  # ★ 変更点
 
@@ -147,7 +153,8 @@ def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
         origin='lower',
         extent=plot_extent,
         cmap='afmhot',  # 密度プロットに適したカラーマップ
-        norm=mcolors.LogNorm(vmin=min_val, vmax=np.max(column_density_plot))  # 対数スケール
+        #norm=mcolors.LogNorm(vmin=min_val, vmax=np.max(column_density_plot))  # 対数スケール
+        norm=mcolors.LogNorm(vmin=VMIN_MANUAL, vmax=VMAX_MANUAL)
     )
 
     # --- 5. プロットの装飾 ---

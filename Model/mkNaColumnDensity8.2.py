@@ -362,9 +362,10 @@ def main_snapshot_simulation():
     # 初期表面密度 [atoms/m^2] (Leblanc 2003, ~4e12 Na/cm2)
     INITIAL_SURFACE_DENSITY_PER_M2 = 7.5e14 * (100.0 ** 2) * 0.0053
 
-    SPIN_UP_YEARS = 1.0
-    TIME_STEP_SEC = 1000
-    TOTAL_SIM_YEARS = 1.0
+    SPIN_UP_YEARS = 1.0 # スピンアップ期間
+    #TIME_STEP_SEC = 1000
+    TIME_STEP_SEC = 1 # 生成のタイムスケールは1.8 s
+    TOTAL_SIM_YEARS = 1.0 #記録する水星年
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)
 
     # --- ★★★ 全て可変重み（予算配分方式） ★★★
@@ -408,14 +409,15 @@ def main_snapshot_simulation():
     settings = {
         'BETA': 0.5,
         'T1AU': 168918.0,
-        'DT': 1000.0,
+        # 'DT': 1000.0,
+        'DT': 1.0, #生成のタイムスケールは1.8 s
         'GRID_RADIUS_RM': GRID_MAX_RM + 1.0,
         'USE_SOLAR_GRAVITY': USE_SOLAR_GRAVITY,
         'USE_CORIOLIS_FORCES': USE_CORIOLIS_FORCES
     }
 
     # 出力ディレクトリの準備
-    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_1.0"
+    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_2.0"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
@@ -554,10 +556,10 @@ def main_snapshot_simulation():
                     if cos_Z > 0:
                         rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
 
-                        # ★★★ 修正点 2: 正しい枯渇計算 (線形近似 -> 指数関数) ★★★
+                        # ★★★ 正しい枯渇計算 (線形近似 or 指数関数) ★★★
                         prob_ejection_psd = rate_psd_per_s * TIME_STEP_SEC
-                        # (旧) n_atoms_psd = rate_psd_per_s * atoms_available_in_cell * TIME_STEP_SEC
-                        n_atoms_psd = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_psd))
+                        n_atoms_psd = rate_psd_per_s * atoms_available_in_cell * TIME_STEP_SEC # (旧)
+                        # n_atoms_psd = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_psd)) #（new）
 
                         if n_atoms_psd > 0:
                             n_atoms_psd_grid[i_lon, i_lat] = n_atoms_psd
@@ -568,10 +570,10 @@ def main_snapshot_simulation():
                     rate_td_per_s = calculate_thermal_desorption_rate(temp_k)  # これが v * exp(...)
 
                     if rate_td_per_s > 0:
-                        # ★★★ 修正点 3: 正しい枯渇計算 (線形近似 -> 指数関数) ★★★
+                        # ★★★ 正しい枯渇計算 (線形近似 or 指数関数) ★★★
                         prob_ejection_td = rate_td_per_s * TIME_STEP_SEC  # これが 56 のような値になる
-                        # (旧) n_atoms_td = rate_td_per_s * atoms_available_in_cell * TIME_STEP_SEC
-                        n_atoms_td = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_td))
+                        n_atoms_td = rate_td_per_s * atoms_available_in_cell * TIME_STEP_SEC # (旧)
+                        # n_atoms_td = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_td)) # (new)
                         # これで n_atoms_td は atoms_available_in_cell を超えなくなる
 
                         if n_atoms_td > 0:
@@ -591,7 +593,7 @@ def main_snapshot_simulation():
                     if is_in_lon_band and (is_in_lat_n_band or is_in_lat_s_band):
 
                         # ★★★ 修正点 4: SWSの計算ロジックをTD/PSDと統一 ★★★
-                        # Leblanc(2003)[cite: 322]は SWS Rate ∝ c_Na (濃度) としている
+                        # Leblanc(2003) SWS Rate ∝ c_Na (濃度) としている
                         # rate_per_m2_s は (Y * F_sw) * (density / DENSITY_REF)
                         # これを (Y * F_sw / DENSITY_REF) * density と読み替える
 
@@ -599,7 +601,8 @@ def main_snapshot_simulation():
                         rate_sws_per_s = (base_sputtering_rate_per_m2_s / DENSITY_REF_M2)
 
                         prob_ejection_sws = rate_sws_per_s * TIME_STEP_SEC
-                        n_atoms_sws = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_sws))
+                        n_atoms_sws = rate_sws_per_s * atoms_available_in_cell * TIME_STEP_SEC # (OLD)
+                        # n_atoms_sws = atoms_available_in_cell * (1.0 - np.exp(-prob_ejection_sws)) # (new)
 
                         if n_atoms_sws > 0:
                             n_atoms_sws_grid[i_lon, i_lat] = n_atoms_sws
