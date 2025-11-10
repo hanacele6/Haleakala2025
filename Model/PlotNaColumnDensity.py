@@ -23,8 +23,9 @@ print(f"正規化面積 (半球の半分): {NORMALIZATION_AREA_HALF_CM2:.4e} cm^
 GRID_RESOLUTION = 101  # グリッド解像度
 GRID_MAX_RM = 5.0  # グリッドの最大範囲 (水星半径単位)
 # ★★★ .npy ファイルが保存されているディレクトリパス
-output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS_COSOFF"
+#output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS_COSOFF"
 #output_dir = r"./SimulationResult_202510\Grid101_Budget5000_TD"
+output_dir = r"./SimulationResult_202510\DynamicGrid72x36_1.0"
 
 # ★ 変更点 2: プロット選択
 # "DAYSIDE_TOTAL", "DAWN", "DUSK" のいずれかを指定
@@ -47,7 +48,8 @@ sim_results_dayside = []  # ★ 昼側全体のリストを追加
 sim_results_taa = []
 
 try:
-    all_files = sorted([f for f in os.listdir(output_dir) if f.endswith('.npy')])
+    all_files = sorted([f for f in os.listdir(output_dir) if f.endswith('.npy') and f.startswith('density_grid_')])
+
     if not all_files:
         print(f"エラー: ディレクトリ '{output_dir}' に .npy ファイルが見つかりません。")
         sys.exit()

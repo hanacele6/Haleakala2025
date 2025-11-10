@@ -26,12 +26,13 @@ import glob  # ファイル検索用
 
 # 1. シミュレーション結果が保存されているディレクトリ
 # (シミュレーションコードの 'target_output_dir' と一致させる)
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS"
+# SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS"
 # SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\Grid101_Budget5000_TD"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\DynamicGrid72x36_1.0"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 180  # 例: 90度のファイルを探す
+TARGET_TAA = 0  # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
@@ -48,7 +49,7 @@ PLOT_IN_CM2 = True
 # 6. 視点 (どの方向から見るか) ★ 変更点
 # 'Z': +Z軸方向から (X-Y平面, 'Face-on')
 # 'Y': -Y軸方向から (X-Z平面, 'Side-on')
-VIEW_FROM = 'Y'  # ★ ここを 'Z' または 'Y' に設定してください
+VIEW_FROM = 'Z'  # ★ ここを 'Z' または 'Y' に設定してください
 
 
 # ==============================================================================

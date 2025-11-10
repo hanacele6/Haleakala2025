@@ -592,7 +592,7 @@ def main_snapshot_simulation():
 
                         # ★★★ 修正点 4: SWSの計算ロジックをTD/PSDと統一 ★★★
                         # Leblanc(2003)[cite: 322]は SWS Rate ∝ c_Na (濃度) としている
-                        # あなたのコードの rate_per_m2_s は (Y * F_sw) * (density / DENSITY_REF)
+                        # rate_per_m2_s は (Y * F_sw) * (density / DENSITY_REF)
                         # これを (Y * F_sw / DENSITY_REF) * density と読み替える
 
                         # (Y * F_sw / DENSITY_REF) は、原子1個あたりの放出確率[1/s]とみなせる
