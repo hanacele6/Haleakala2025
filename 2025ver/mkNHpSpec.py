@@ -8,7 +8,7 @@ from scipy.ndimage import median_filter
 # --- ユーザー設定 ---
 
 # 処理結果を保存するディレクトリ
-date = "20251021"#
+date = "20251029"#
 base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 output_path = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/")
 output_dir = output_path / date
