@@ -747,7 +747,7 @@ def main_snapshot_simulation():
     try:
         spec_data_np = np.loadtxt('SolarSpectrum_Na0.txt', usecols=(0, 3))
         # ★要件: 軌道ファイル名を v6 -> v (if main のチェック) に合わせる
-        orbit_file_name = 'orbit2025.txt'
+        orbit_file_name = 'orbit2025_v6.txt'
         orbit_data = np.loadtxt(orbit_file_name)
     except FileNotFoundError as e:
         print(f"エラー: データファイル '{e.filename}' が見つかりません。");
@@ -920,10 +920,11 @@ def main_snapshot_simulation():
             base_sputtering_rate_per_m2_s = effective_flux_sw * SWS_PARAMS['YIELD_EFF']
             DENSITY_REF_M2 = SWS_PARAMS['DENSITY_REF_M2']
 
-            # ★★★【要件5】放出に使う密度を決定 ★★★
-            if min_timescale <= 500.0:
-                # タイムスケールが短い時 (平衡状態)
-                # na_eq [atoms/m^2] = F_add [atoms/m^2/s] / R_loss [1/s]
+            # ★★★放出に使う密度を決定 ★★★
+            # ★ 修正: 最初のステップ (t_sec == t_start_spinup) は、
+            # ★ min_timescale が 500s 以下でも必ず初期密度 (na(t)) を使う
+            if min_timescale <= 500.0 and t_sec > t_start_spinup:
+                # タイムスケールが短い時 (平衡状態) (かつ最初のステップではない)
 
                 # F_add [atoms/m^2/s] = (前の吸着量 [atoms] / 面積 [m^2]) / dt [s]
                 F_add_per_m2_s = (previous_atoms_gained_grid / cell_areas_m2) / current_dt_main
@@ -937,14 +938,16 @@ def main_snapshot_simulation():
                 use_equilibrium_density = True
             else:
                 # タイムスケールが長い時 (na(t) を使う)
+                # または、最初のステップの場合
                 na_eq_grid = None  # 使用しない
                 use_equilibrium_density = False
 
             for i_lon in range(N_LON_FIXED):
                 for i_lat in range(N_LAT):
 
-                    # ★★★【要件5】放出に使う密度 (current_density_per_m2) を決定 ★★★
+                    # ★★★放出に使う密度 (current_density_per_m2) を決定 ★★★
                     if use_equilibrium_density:
+                        # (変更なし: t_sec > t_start_spinup かつ min_timescale <= 500.0 の場合)
                         na_eq = na_eq_grid[i_lon, i_lat]
                         # na_eq が計算不能(nan)または負の場合は 0 を使用
                         if np.isnan(na_eq) or na_eq < 0:
@@ -952,12 +955,12 @@ def main_snapshot_simulation():
                         else:
                             current_density_per_m2 = na_eq
                     else:
-                        # 500sより長い時 (dna/dt = 逐一計算されるもの = 現在の密度)
+                        # (変更なし: 500sより長い時、または最初のステップの場合)
                         current_density_per_m2 = surface_density_grid[i_lon, i_lat]
 
                     if current_density_per_m2 <= 0:
                         continue
-                    # ★★★【要件5】ここまで ★★★
+                    # ★★★ここまで ★★★
 
                     lon_fixed_rad = (lon_edges_fixed[i_lon] + lon_edges_fixed[i_lon + 1]) / 2
                     lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
