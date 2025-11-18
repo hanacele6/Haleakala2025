@@ -594,17 +594,17 @@ def main_snapshot_simulation():
 
     # シミュレーション時間設定
     SPIN_UP_YEARS = 1.0  # 表面密度を平衡状態にするためのスピンアップ期間 (水星年)
-    TIME_STEP_SEC = 1.0  # メインループの時間ステップ [s]
+    TIME_STEP_SEC = 1000.0  # メインループの時間ステップ [s]
     TOTAL_SIM_YEARS = 1.0  # 記録対象とするシミュレーション期間 (水星年)
     TARGET_TAA_DEGREES = np.arange(0, 360, 1)  # スナップショットを保存するTAA [度]
 
     # 可変重み法 (予算配分方式) の設定
     # 毎ステップで、各プロセスからこの数だけSPを生成することを目標とする
     # 実際の重み (weight) は (総放出原子数 / TARGET_SPS) で決定される
-    TARGET_SPS_TD = 10  # 熱脱離 (TD) の目標SP数/ステップ
-    TARGET_SPS_PSD = 10  # 光刺激脱離 (PSD) の目標SP数/ステップ
-    TARGET_SPS_SWS = 10  # 太陽風スパッタリング (SWS) の目標SP数/ステップ
-    TARGET_SPS_MMV = 10  # 微小隕石蒸発 (MMV) の目標SP数/ステップ
+    TARGET_SPS_TD = 5000  # 熱脱離 (TD) の目標SP数/ステップ
+    TARGET_SPS_PSD = 5000  # 光刺激脱離 (PSD) の目標SP数/ステップ
+    TARGET_SPS_SWS = 5000  # 太陽風スパッタリング (SWS) の目標SP数/ステップ
+    TARGET_SPS_MMV = 5000  # 微小隕石蒸発 (MMV) の目標SP数/ステップ
 
     # --- 粒子生成モデル (Leblanc 2003 準拠) ---
     # (PSD)
@@ -641,7 +641,7 @@ def main_snapshot_simulation():
     settings = {
         'BETA': 0.5,  # 表面反射時の熱 accomodation 係数
         'T1AU': 168918.0,  # 1AUでのナトリウム光電離寿命 [s]
-        'DT': 1.0,  # 軌道積分 (RK4) の時間ステップ [s]
+        'DT': 1000.0,  # 軌道積分 (RK4) の時間ステップ [s]
         'GRID_RADIUS_RM': GRID_MAX_RM + 1.0,  # 粒子の脱出判定半径
         'USE_SOLAR_GRAVITY': USE_SOLAR_GRAVITY,
         'USE_CORIOLIS_FORCES': USE_CORIOLIS_FORCES

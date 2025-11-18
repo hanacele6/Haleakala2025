@@ -292,28 +292,38 @@ def transform_local_to_world(local_vec, normal_vector):
 def get_orbital_params(time_sec, orbit_data, mercury_year_sec):
     """
     指定された時刻における水星の軌道パラメータと太陽直下点経度を取得します。
-
-    Args:
-        time_sec (float): シミュレーション開始からの経過時間 [s]
-        orbit_data (np.ndarray): 軌道データファイル（orbit2025_v5.txt）
-        mercury_year_sec (float): 水星の1公転周期 [s]
-
-    Returns:
-        tuple: (taa, au, v_radial, v_tangential, subsolar_lon_rad)
+    ★ 修正: 軌道ファイルから正しい太陽直下点経度を読み込む
     """
     # 水星の自転周期
-    ROTATION_PERIOD_SEC = 58.646 * 24 * 3600
+    # ROTATION_PERIOD_SEC = 58.646 * 24 * 3600 # ★ もう不要
+
     # 軌道データは1公転分なので、時刻を公転周期で割った余りを計算
     current_time_in_orbit = time_sec % mercury_year_sec
-    time_col = orbit_data[:, 2]
+    time_col = orbit_data[:, 2]  # 3列目 (インデックス 2) が時刻
+
     # 軌道データから、現在の時刻に対応するパラメータを線形内挿で取得
-    taa = np.interp(current_time_in_orbit, time_col, orbit_data[:, 0])
-    au = np.interp(current_time_in_orbit, time_col, orbit_data[:, 1])
-    v_radial = np.interp(current_time_in_orbit, time_col, orbit_data[:, 3])
-    v_tangential = np.interp(current_time_in_orbit, time_col, orbit_data[:, 4])
-    # 惑星固定座標系における太陽直下点経度を計算
-    # (水星の自転に基づいて計算。t=0での初期位相は考慮が必要な場合がある)
-    subsolar_lon_rad = (2 * np.pi * time_sec / ROTATION_PERIOD_SEC) % (2 * np.pi)
+    taa = np.interp(current_time_in_orbit, time_col, orbit_data[:, 0])  # 1列目 (TAA)
+    au = np.interp(current_time_in_orbit, time_col, orbit_data[:, 1])  # 2列目 (AU)
+    v_radial = np.interp(current_time_in_orbit, time_col, orbit_data[:, 3])  # 4列目 (V_radial)
+    v_tangential = np.interp(current_time_in_orbit, time_col, orbit_data[:, 4])  # 5列目 (V_tangential)
+
+    # ★★★【修正箇所】★★★
+    # 6列目 (インデックス 5) の「太陽直下点経度 [deg]」を読み込む
+    SUBSOLAR_LON_COL_IDX = 5
+
+    subsolar_lon_deg_fixed = np.interp(
+        current_time_in_orbit,
+        time_col,
+        orbit_data[:, SUBSOLAR_LON_COL_IDX]
+    )
+
+    # [deg] から [rad] に変換して戻り値とする
+    subsolar_lon_rad = np.deg2rad(subsolar_lon_deg_fixed)
+
+    # ★★★【削除】★★★
+    # 以前の不正確な計算は削除します
+    # subsolar_lon_rad = (-2 * np.pi * time_sec / ROTATION_PERIOD_SEC) % (2 * np.pi)
+
     return taa, au, v_radial, v_tangential, subsolar_lon_rad
 
 
@@ -366,91 +376,77 @@ def xyz_to_lonlat_idx(pos_vec, lon_edges_fixed, lat_edges_fixed, N_LON_FIXED, N_
         return -1, -1
 
 
-# ★ Numbaラッパー関数 (dictをNumbaに渡すため)
 def _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_data, settings):
     """
-    Pythonラッパー関数。
-    dictを「荷ほどき」して、Numba化された _njit 関数に渡す。
-    """
-    # 1. spec_data (dict) からNumbaが分かる「配列」を取り出す
-    wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL = spec_data['wl'], spec_data['gamma'], \
-        spec_data['sigma0_perdnu2'], spec_data['sigma0_perdnu1'], \
-        spec_data['JL']
+    指定された位置と速度における粒子（ナトリウム原子）の加速度を計算します。
+    (太陽固定回転座標系で計算)
 
-    # 2. settings (dict) からNumbaが分かる「bool」を取り出す
-    USE_SOLAR_GRAVITY = settings['USE_SOLAR_GRAVITY']
-    USE_CORIOLIS_FORCES = settings['USE_CORIOLIS_FORCES']
+    考慮する力:
+    1. 太陽放射圧 (SRP) - ドップラーシフト考慮
+    2. 水星重力
+    3. 太陽重力 (オプション)
+    4. 見かけの力（コリオリ力、遠心力） (オプション)
 
-    # 3. PHYSICAL_CONSTANTS (dict) からNumbaが分かる「float」を取り出す
-    CONST_AU_m = PHYSICAL_CONSTANTS['AU']
-    CONST_MASS_NA_kg = PHYSICAL_CONSTANTS['MASS_NA']
-    CONST_C_ms = PHYSICAL_CONSTANTS['C']
-    CONST_H_Js = PHYSICAL_CONSTANTS['H']
-    CONST_GM_MERCURY_m3s2 = PHYSICAL_CONSTANTS['GM_MERCURY']
-    CONST_RM_m = PHYSICAL_CONSTANTS['RM']
-    CONST_G_mks = PHYSICAL_CONSTANTS['G']
-    CONST_MASS_SUN_kg = PHYSICAL_CONSTANTS['MASS_SUN']
+    Args:
+        pos (np.ndarray): 位置ベクトル [x, y, z] [m]
+        vel (np.ndarray): 速度ベクトル [vx, vy, vz] [m/s]
+        V_radial_ms (float): 水星の視線速度 (太陽に近づく向きが正) [m/s]
+        V_tangential_ms (float): 水星の公転速度 [m/s]
+        AU (float): 日心距離 [AU]
+        spec_data (dict): スペクトルデータ
+        settings (dict): シミュレーション設定
 
-    # 4. Numba化された「本体」を呼び出す
-    return _calculate_acceleration_njit(pos, vel, V_radial_ms, V_tangential_ms, AU,
-                                        wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL,
-                                        USE_SOLAR_GRAVITY, USE_CORIOLIS_FORCES,
-                                        CONST_AU_m, CONST_MASS_NA_kg, CONST_C_ms, CONST_H_Js,
-                                        CONST_GM_MERCURY_m3s2, CONST_RM_m, CONST_G_mks, CONST_MASS_SUN_kg)
-
-
-@njit(cache=True)  # ★ Numba化する
-def _calculate_acceleration_njit(pos, vel, V_radial_ms, V_tangential_ms, AU,
-                                 # spec_data の中身 (配列とfloat)
-                                 wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL,
-                                 # settings の中身 (bool)
-                                 USE_SOLAR_GRAVITY, USE_CORIOLIS_FORCES,
-                                 # CONSTANTS の中身 (float)
-                                 CONST_AU_m, CONST_MASS_NA_kg, CONST_C_ms, CONST_H_Js,
-                                 CONST_GM_MERCURY_m3s2, CONST_RM_m, CONST_G_mks, CONST_MASS_SUN_kg
-                                 ):
-    """
-    Numbaでコンパイルされる加速度計算の「本体」（dict非依存）
+    Returns:
+        np.ndarray: 加速度ベクトル [ax, ay, az] [m/s^2]
     """
     x, y, z = pos
-    r0 = AU * CONST_AU_m  # ★定数に置き換え
+    r0 = AU * PHYSICAL_CONSTANTS['AU']  # 水星-太陽間距離 [m]
 
     # --- 1. 太陽放射圧 (SRP) ---
+    # 粒子の視線速度 (水星の視線速度 + 水星から見た粒子のX軸速度)
     velocity_for_doppler = vel[0] + V_radial_ms
-    w_na_d2 = 589.1582e-9 * (1.0 + velocity_for_doppler / CONST_C_ms)  # ★
-    w_na_d1 = 589.7558e-9 * (1.0 + velocity_for_doppler / CONST_C_ms)  # ★
+    # ドップラーシフト後のD2, D1線の波長
+    w_na_d2 = 589.1582e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
+    w_na_d1 = 589.7558e-9 * (1.0 + velocity_for_doppler / PHYSICAL_CONSTANTS['C'])
 
-    b = 0.0
-    # ★ spec_data (dict) ではなく、渡された配列(wl, gamma) を使う
+    b = 0.0  # 加速度 [m/s^2]
+    wl, gamma, sigma0_perdnu2, sigma0_perdnu1, JL = spec_data.values()
+
+    # 波長がスペクトルデータの範囲内か確認
     if (wl[0] * 1e-9 <= w_na_d2 < wl[-1] * 1e-9) and \
             (wl[0] * 1e-9 <= w_na_d1 < wl[-1] * 1e-9):
+        # 対応するgamma値（太陽スペクトルのフラックス補正係数）を内挿
         gamma2 = np.interp(w_na_d2 * 1e9, wl, gamma)
         gamma1 = np.interp(w_na_d1 * 1e9, wl, gamma)
 
+        # 放射圧の計算 (Leblanc 2003 等の方式)
         F_lambda_1AU_m = JL * 1e4 * 1e9
         F_lambda_d1_at_Mercury = F_lambda_1AU_m / (AU ** 2) * gamma1
-        F_nu_d1 = F_lambda_d1_at_Mercury * (w_na_d1 ** 2) / CONST_C_ms  # ★
+        F_nu_d1 = F_lambda_d1_at_Mercury * (w_na_d1 ** 2) / PHYSICAL_CONSTANTS['C']
         J1 = sigma0_perdnu1 * F_nu_d1
         F_lambda_d2_at_Mercury = F_lambda_1AU_m / (AU ** 2) * gamma2
-        F_nu_d2 = F_lambda_d2_at_Mercury * (w_na_d2 ** 2) / CONST_C_ms  # ★
+        F_nu_d2 = F_lambda_d2_at_Mercury * (w_na_d2 ** 2) / PHYSICAL_CONSTANTS['C']
         J2 = sigma0_perdnu2 * F_nu_d2
 
-        b = 1 / CONST_MASS_NA_kg * (  # ★
-                (CONST_H_Js / w_na_d1) * J1 + (CONST_H_Js / w_na_d2) * J2)
+        b = 1 / PHYSICAL_CONSTANTS['MASS_NA'] * (
+                (PHYSICAL_CONSTANTS['H'] / w_na_d1) * J1 + (PHYSICAL_CONSTANTS['H'] / w_na_d2) * J2)
 
-    if x < 0 and np.sqrt(y ** 2 + z ** 2) < CONST_RM_m:  # ★
-        b = 0.0
-    accel_srp = np.array([-b, 0.0, 0.0])
+    # 水星の影に入った場合 (X < 0 かつ YZ平面での半径がRM未満)
+    if x < 0 and np.sqrt(y ** 2 + z ** 2) < PHYSICAL_CONSTANTS['RM']:
+        b = 0.0  # 放射圧は 0
+
+    accel_srp = np.array([-b, 0.0, 0.0])  # SRPは常に-X方向
 
     # --- 2. 水星重力 ---
     r_sq = np.sum(pos ** 2)
-    accel_g = -CONST_GM_MERCURY_m3s2 * pos / (r_sq ** 1.5) if r_sq > 0 else np.array([0., 0., 0.])  # ★
+    accel_g = -PHYSICAL_CONSTANTS['GM_MERCURY'] * pos / (r_sq ** 1.5) if r_sq > 0 else np.array([0., 0., 0.])
 
     # --- 3. 太陽重力 (オプション) ---
     accel_sun = np.array([0.0, 0.0, 0.0])
-    if USE_SOLAR_GRAVITY:  # ★
-        G = CONST_G_mks  # ★
-        M_SUN = CONST_MASS_SUN_kg  # ★
+    if settings.get('USE_SOLAR_GRAVITY', False):
+        G = PHYSICAL_CONSTANTS['G']
+        M_SUN = PHYSICAL_CONSTANTS['MASS_SUN']
+        # 粒子から太陽へのベクトル (太陽は [r0, 0, 0] にある)
         r_ps_vec = np.array([r0 - pos[0], -pos[1], -pos[2]])
         r_ps_mag_sq = np.sum(r_ps_vec ** 2)
         if r_ps_mag_sq > 0:
@@ -459,21 +455,32 @@ def _calculate_acceleration_njit(pos, vel, V_radial_ms, V_tangential_ms, AU,
     # --- 4. 見かけの力 (オプション) ---
     accel_coriolis = np.array([0.0, 0.0, 0.0])
     accel_centrifugal = np.array([0.0, 0.0, 0.0])
-    if USE_CORIOLIS_FORCES:  # ★
+    if settings.get('USE_CORIOLIS_FORCES', False):
         if r0 > 0:
-            omega_val = V_tangential_ms / r0
+            # 座標系の回転角速度 (Z軸まわり)
+            omega_val = V_tangential_ms / r0  # [rad/s]
             omega_sq = omega_val ** 2
+
+            # 遠心力加速度: a_cen = -ω x (ω x r')
+            # r' = [x-r0, y, z] (回転中心(太陽)から粒子へのベクトル)
+            # ω = [0, 0, ω]
+            # このシミュレーションでは、太陽固定座標系（原点が水星）で運動方程式を
+            # 解いているため、太陽の重力(accel_sun)と、水星の公転運動による
+            # 遠心力(accel_centrifugal)の「合力」を計算する必要がある。
+            # (※ Leblanc 2003 の A_cf の式に基づき実装)
             accel_centrifugal = np.array([
                 omega_val ** 2 * (pos[0] - r0),
                 omega_sq * pos[1],
                 0.0])
+
+            # コリオリ力加速度: a_cor = -2ω x v
             two_omega = 2 * omega_val
             accel_coriolis = np.array([two_omega * vel[1], -two_omega * vel[0], 0.0])
 
+    # 全ての加速度を合計
     return accel_srp + accel_g + accel_sun + accel_centrifugal + accel_coriolis
 
 
-#(dict を扱うため、Python関数として残す)
 def simulate_particle_for_one_step(args):
     """
     1個のスーパーパーティクルを、指定された時間 (duration) だけ進める関数。
@@ -497,10 +504,12 @@ def simulate_particle_for_one_step(args):
     settings, spec_data = args['settings'], args['spec']
     TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad_fixed = args['orbit']
 
-    # ★ DT = duration (メインループのタイムステップ) とする
-    # duration, DT = args['duration'], settings['DT'] # ★ 変更前
+    # --- ★ 修正点 1 ---
+    # メインループのステップ幅 (50s ~ 2000s)
     duration = args['duration']
-    DT = duration  # ★ DT を duration と同一に設定
+    # RK4積分のステップ幅 (settings から 5.0s などを取得)
+    DT = settings['DT']
+    # --- ★ 修正ここまで ---
 
     RM = PHYSICAL_CONSTANTS['RM']
     R_MAX = RM * settings['GRID_RADIUS_RM']  # シミュレーション領域の最大半径
@@ -509,28 +518,29 @@ def simulate_particle_for_one_step(args):
     # 光電離の寿命 (1AUでの値 * AU^2)
     tau_ionization = settings['T1AU'] * AU ** 2
 
-    # ★ num_steps は 1 になる
-    num_steps = int(duration / DT)  # 積分ステップ数 (int(1.0) = 1)
-    if num_steps != 1:
-        # 念のための安全確認 (ほぼ 1 になるはず)
+    # --- ★ 修正点 2 ---
+    # 積分ステップ数を duration / DT で計算
+    num_steps = int(duration / DT)
+    if num_steps < 1:  # duration が DT より小さい場合
         num_steps = 1
+        DT = duration  # DT 自体を duration に合わせる
+    # --- ★ 修正ここまで ---
 
     pos_at_start_of_step = pos.copy()
 
     # 4次ルンゲ＝クッタ法 (RK4) で軌道を積分
-    # ★ このループは1回だけ実行される
+    # ★ このループが num_steps 回 (例: 50s / 5s = 10回) 実行される
     for _ in range(num_steps):
         pos_at_start_of_step = pos.copy()
 
         # --- 光電離判定 ---
-        # ★ DT (50秒など) 全体での電離確率を計算
+        # ★ DT (5秒など) 全体での電離確率を計算
         if pos[0] > 0:  # 昼側 (X > 0) にいる場合のみ
             if np.random.random() < (1.0 - np.exp(-DT / tau_ionization)):
                 return {'status': 'ionized', 'final_state': None}
 
         # --- RK4 積分 ---
-        # ★ DT が 大きな値になる
-        # ★ ここで呼ぶ _calculate_acceleration はラッパー版
+        # ★ DT が 5.0s などの小さな値になる
         k1_vel = DT * _calculate_acceleration(pos, vel, V_radial_ms, V_tangential_ms, AU, spec_data, settings)
         k1_pos = DT * vel
         k2_vel = DT * _calculate_acceleration(pos + 0.5 * k1_pos, vel + 0.5 * k1_vel, V_radial_ms, V_tangential_ms, AU,
@@ -612,16 +622,16 @@ def main_snapshot_simulation():
     INITIAL_SURFACE_DENSITY_PER_M2 = 7.5e14 * (100.0 ** 2) * 0.0053
 
     # --- ★動的タイムステップ設定 ---
-    HOT_TEMP_THRESHOLD_K = 550.0  # [K] この温度以上を「高温時」とする
-    HOT_TEMP_TIME_STEP_SEC = 500.0  # [s] 高温時の固定タイムステップ
-    DEFAULT_MAX_TIME_STEP_SEC = 2000.0  # [s] 低温時の「最大」タイムステップ
-    MIN_TIME_STEP_SEC = 0.1  # [s] 全体の「最小」タイムステップ
+    #HOT_TEMP_THRESHOLD_K = 550.0  # [K] この温度以上を「高温時」とする
+    #HOT_TEMP_TIME_STEP_SEC = 500.0  # [s] 高温時の固定タイムステップ
+    DEFAULT_MAX_TIME_STEP_SEC = 2000.0  # [s] 「最大」タイムステップ
+    MIN_TIME_STEP_SEC = 500.0  # [s] 「最小」タイムステップ
     SAFETY_FACTOR = 0.9  # タイムスケールに対する安全係数 (例: 10%)
     # [atoms/m^2] 枯渇したセルをタイムステップ計算から除外する閾値
     MIN_DENSITY_FOR_TIMESTEP = 1e10
 
-    # --- ★低速粒子の追跡省略(バイパス)設定 ---
-    LOW_SPEED_THRESHOLD_M_S = 900.0  # [m/s] この速度未満の粒子は追跡しない
+    # --- ★低速粒子の追跡省略設定 ---
+    LOW_SPEED_THRESHOLD_M_S = 0.0  # [m/s] この速度未満の粒子は追跡しない
 
     # シミュレーション時間設定
     SPIN_UP_YEARS = 1.0  # 表面密度を平衡状態にするためのスピンアップ期間 (水星年)
@@ -672,14 +682,18 @@ def main_snapshot_simulation():
     settings = {
         'BETA': 0.5,  # 表面反射時の熱 accomodation 係数
         'T1AU': 168918.0,  # 1AUでのナトリウム光電離寿命 [s]
-        # 'DT': 1.0,  # ★ 軌道積分 (RK4) の時間ステップ [s] -> duration と同一にするため削除
+
+        # 軌道積分 (RK4) の時間ステップ [s]
+        # (メインループの DT (500~2000s) とは別)
+        'DT': 100.0,
+
         'GRID_RADIUS_RM': GRID_MAX_RM + 1.0,  # 粒子の脱出判定半径
         'USE_SOLAR_GRAVITY': USE_SOLAR_GRAVITY,
         'USE_CORIOLIS_FORCES': USE_CORIOLIS_FORCES
     }
 
     # --- 2. 出力ディレクトリとシミュレーションの初期化 ---
-    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_2.0"
+    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_3.0"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
@@ -696,10 +710,14 @@ def main_snapshot_simulation():
     print(f"Solar Gravity: {USE_SOLAR_GRAVITY}")
     print(f"Coriolis/Centrifugal: {USE_CORIOLIS_FORCES}")
     print(f"----------------------")
+    #print(
+    #    f"Dynamic Timestep: HOT_T={HOT_TEMP_THRESHOLD_K}K, HOT_DT={HOT_TEMP_TIME_STEP_SEC}s, MAX_DT={DEFAULT_MAX_TIME_STEP_SEC}s")
     print(
-        f"Dynamic Timestep: HOT_T={HOT_TEMP_THRESHOLD_K}K, HOT_DT={HOT_TEMP_TIME_STEP_SEC}s, MAX_DT={DEFAULT_MAX_TIME_STEP_SEC}s")
+        f"Dynamic Timestep: MIN_DT={MIN_TIME_STEP_SEC}s, MAX_DT={DEFAULT_MAX_TIME_STEP_SEC}s (Fixed Range)")
     print(f"Low Speed Bypass: v < {LOW_SPEED_THRESHOLD_M_S} m/s")
-    print(f"★RK4 Integrator: 1 step per main timestep (DT=duration)")
+    # --- ★ 修正点 4 ---
+    print(f"★RK4 Integrator: {settings['DT']}s steps (Fixed)")
+    # --- ★ 修正ここまで ---
 
     # 水星の1公転周期 [s]
     MERCURY_YEAR_SEC = 87.97 * 24 * 3600
@@ -717,12 +735,12 @@ def main_snapshot_simulation():
     # --- 3. 外部ファイルの読み込み ---
     try:
         spec_data_np = np.loadtxt('SolarSpectrum_Na0.txt', usecols=(0, 3))
-        orbit_file_name = 'orbit2025_v5.txt'
+        orbit_file_name = 'orbit2025_v6.txt'
         orbit_data = np.loadtxt(orbit_file_name)
     except FileNotFoundError as e:
         print(f"エラー: データファイル '{e.filename}' が見つかりません。");
         sys.exit()
-    if orbit_data.shape[1] < 5:
+    if orbit_data.shape[1] < 6:
         print(f"エラー: '{orbit_file_name}' の列が不足しています。");
         sys.exit()
 
@@ -783,8 +801,7 @@ def main_snapshot_simulation():
             run_phase = "Spin-up" if t_sec < t_start_run else "Run"
 
             # --- 4b. (新設) 動的タイムステップの決定 ---
-
-            # ★ 温度（subsolar_temp_k）による分岐を削除し、常に動的に計算する
+            # ★温度分岐を削除し、常に全セルのレートから動的にdtを計算する
 
             min_timescale = np.inf
 
@@ -839,18 +856,13 @@ def main_snapshot_simulation():
                         timescale = 1.0 / total_rate_per_s
                         min_timescale = min(min_timescale, timescale)
 
-            # --- ★ここからが新しいロジック ---
-            # 1. 計算上のタイムステップを決定
+            # 最終的な dt を決定 (安全係数と最大/最小値)
             current_dt_main = SAFETY_FACTOR * min_timescale
             if np.isinf(current_dt_main):  # どのセルも枯渇しない場合
                 current_dt_main = DEFAULT_MAX_TIME_STEP_SEC
 
-            # 2. ★ご要望のロジックを適用: 「50s以下だったら50sにする」
-            #    (HOT_TEMP_TIME_STEP_SEC = 50.0s が最小値となる)
-            current_dt_main = max(current_dt_main, HOT_TEMP_TIME_STEP_SEC)
-
-            # 3. ★最終的な最大値(2000s)でクリップする
-            current_dt_main = min(current_dt_main, DEFAULT_MAX_TIME_STEP_SEC)
+            # ★最終クリップ (最小値 500s と、設定で変更した最大値 2000s)
+            current_dt_main = np.clip(current_dt_main, MIN_TIME_STEP_SEC, DEFAULT_MAX_TIME_STEP_SEC)
 
             # --- 4c. (旧 4b.) 表面から新しい粒子を生成 ---
 
@@ -943,7 +955,11 @@ def main_snapshot_simulation():
                     total_rate_per_s = rate_psd_per_s + rate_td_per_s + rate_sws_per_s
 
                     if total_rate_per_s > 0:
-                        # 合計レートと dt から、失われる原子の「総数」を安定に計算
+                        # ★★★【重要】★★★
+                        # ここでの計算は、SPを生成する数（＝重み）を決めるための「見積もり」。
+                        # 最終的な密度の更新は 4d-bis で行うため、
+                        # ここでは元の「線形近似＋クリップ」のままで問題ない。
+
                         # 1. 線形近似で枯渇量を計算
                         n_atoms_total_lost_linear = atoms_available_in_cell * total_rate_per_s * current_dt_main
 
@@ -1121,10 +1137,13 @@ def main_snapshot_simulation():
 
             # --- 4c 終了: 表面密度（枯渇）の更新 ---
             # (atoms_lost_grid は原子数, cell_areas_m2 は面積 [m^2])
-            # total_atoms_lost_grid を使って枯渇させる
-            surface_density_grid -= total_atoms_lost_grid / cell_areas_m2
-            # 密度が負にならないようにクリップ
-            np.clip(surface_density_grid, 0, None, out=surface_density_grid)
+
+            # ★★★【重要】この行をコメントアウト！ (更新は 4d-bis で一括して行う) ★★★
+            # surface_density_grid -= total_atoms_lost_grid / cell_areas_m2
+
+            # ★★★【重要】このクリップもコメントアウト（または削除）
+            # ★★★ (na(t)はまだ更新されていないので、このクリップは無意味) ★★★
+            # np.clip(surface_density_grid, 0, None, out=surface_density_grid)
 
             # 新しく生成された粒子をアクティブリストに追加
             active_particles.extend(newly_launched_particles)
@@ -1174,10 +1193,39 @@ def main_snapshot_simulation():
                     # 'ionized' と 'escaped' は何もしない (リストから消える)
 
             active_particles = next_active_particles
-            # 表面密度（吸着）の更新
-            # ★ここで加算される atoms_gained_grid には、
-            # ★ 4c でバイパスした低速粒子 と 4d で追跡して衝突した高速粒子 の両方が含まれる
-            surface_density_grid += atoms_gained_grid / cell_areas_m2
+
+            # ★★★【重要】ここからが新設・変更されたブロック (4d-bis) ★★★
+            # --- 4d-bis. 表面密度の安定な更新（陰的オイラー法） ---
+
+            # (1) na(t): ステップ開始時の密度
+            na_t = surface_density_grid
+
+            # (2) F_add * dt [atoms/m^2]: このdtで吸着した総量
+            # (atoms_gained_grid は [atoms])
+            gain_per_area = atoms_gained_grid / cell_areas_m2
+
+            # (3) R_loss [1/s]: このdtでの枯渇レート
+            # (4cで計算したレート配列を合計する)
+            R_loss_grid = rate_psd_grid_s + rate_td_grid_s + rate_sws_grid_s
+
+            dt = current_dt_main
+
+            # (4) na(t+dt) = (na(t) + F_add * dt) / (1 + R_loss * dt) を計算
+
+            numerator = na_t + gain_per_area
+            denominator = 1.0 + R_loss_grid * dt
+
+            # (R_loss >= 0, dt >= 0 なので denominator は常に 1.0 以上のはず)
+            # (ゼロ除算の心配はない)
+
+            # (5) 表面密度グリッドを、計算した na(t+dt) で上書きする
+            surface_density_grid = numerator / denominator
+
+            # (理論上 0 未満にならないが、浮動小数点の誤差のためクリップ)
+            np.clip(surface_density_grid, 0, None, out=surface_density_grid)
+
+            # ★★★更新は 4d-bis で完了★★★
+            # surface_density_grid += atoms_gained_grid / cell_areas_m2
 
             # --- 4e. (旧 4d.) スナップショット保存判定 ---
             save_this_step = False
@@ -1244,11 +1292,11 @@ def main_snapshot_simulation():
 
 if __name__ == '__main__':
     print("必須ファイルを確認しています...")
-    for f in ['orbit2025_v5.txt', 'SolarSpectrum_Na0.txt']:
+    for f in ['orbit2025.txt', 'SolarSpectrum_Na0.txt']:
         if not os.path.exists(f):
             print(f"エラー: 必須ファイル '{f}' が見つかりません。スクリプトと同じディレクトリに配置してください。")
-            if f == 'orbit2025_v5.txt':
-                print("（orbit2025_v5.txt がない場合は、軌道生成スクリトを先に実行してください）")
+            if f == 'orbit2025.txt':
+                print("（orbit2025.txt がない場合は、軌道生成スクリプトを先に実行してください）")
             sys.exit()
     print("ファイルOK。シミュレーションを開始します。")
     main_snapshot_simulation()

@@ -25,7 +25,7 @@ GRID_MAX_RM = 5.0  # グリッドの最大範囲 (水星半径単位)
 # ★★★ .npy ファイルが保存されているディレクトリパス
 #output_dir = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS_COSOFF"
 #output_dir = r"./SimulationResult_202510\Grid101_Budget5000_TD"
-output_dir = r"./SimulationResult_202510\DynamicGrid72x36_1.0"
+output_dir = r"./SimulationResult_202510\DynamicGrid72x36_3.0"
 
 # ★ 変更点 2: プロット選択
 # "DAYSIDE_TOTAL", "DAWN", "DUSK" のいずれかを指定

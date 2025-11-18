@@ -313,7 +313,7 @@ def get_orbital_params(time_sec, orbit_data, mercury_year_sec):
     v_tangential = np.interp(current_time_in_orbit, time_col, orbit_data[:, 4])
     # 惑星固定座標系における太陽直下点経度を計算
     # (水星の自転に基づいて計算。t=0での初期位相は考慮が必要な場合がある)
-    subsolar_lon_rad = (2 * np.pi * time_sec / ROTATION_PERIOD_SEC) % (2 * np.pi)
+    subsolar_lon_rad = (-2 * np.pi * time_sec / ROTATION_PERIOD_SEC) % (2 * np.pi)
     return taa, au, v_radial, v_tangential, subsolar_lon_rad
 
 
