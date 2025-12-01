@@ -161,7 +161,7 @@ def calculate_thermal_desorption_rate(surface_temp_K):
     Returns:
         float: 熱脱離率 [1/s]
     """
-    if surface_temp_K < 350.0:  # 低温では発生しないと仮定
+    if surface_temp_K < 10.0:  # 低温では発生しないと仮定
         return 0.0
     VIB_FREQ = 1e13  # 表面原子の振動数 (論文パラメータ)
     BINDING_ENERGY_EV = 1.85  # 結合エネルギー [eV]
@@ -602,70 +602,54 @@ def simulate_particle_for_one_step(args):
     return {'status': 'alive', 'final_state': {'pos': pos, 'vel': vel, 'weight': weight}}
 
 
-# ==============================================================================
-# メイン制御関数
-# ==============================================================================
-
 def main_snapshot_simulation():
     """
     シミュレーション全体を制御するメイン関数。
     （動的表面密度モデル + 全放出プロセス）
+    ★修正点: 平衡モード(na_eq)を使用したセルは、次のステップの表面密度を
+             強制的に na_eq で上書きし、在庫の持ち越し（ゾンビ在庫）を防ぐ。
     """
     start_time = time.time()
 
     # --- 1. シミュレーション設定 ---
-    OUTPUT_DIRECTORY = r"./SimulationResult_202510"  # 出力先
-    N_LON_FIXED, N_LAT = 72, 36  # 表面グリッドの解像度 (経度72, 緯度36)
-    # 初期表面密度 [atoms/m^2]
-    # (例: 7.5e14 Na/cm^2 の場合 -> 7.5e14 * (100 cm/m)^2 = 7.5e18 atoms/m^2)
-    # (Leblanc 2003, ~4e12 Na/cm2, 0.0053 reservoir)
+    OUTPUT_DIRECTORY = r"./SimulationResult_202510"
+    N_LON_FIXED, N_LAT = 72, 36
     INITIAL_SURFACE_DENSITY_PER_M2 = 7.5e14 * (100.0 ** 2) * 0.0053
 
     # ★要件1, 7: 固定タイムステップ [s]
-    # (メインループとRK4積分の両方で使用する)
     MAIN_TIME_STEP_SEC = 500.0
 
-    # --- ★動的タイムステップ設定 (削除) ---
-    # DEFAULT_MAX_TIME_STEP_SEC = 2000.0  # [s] 「最大」タイムステップ
-    # MIN_TIME_STEP_SEC = 500.0  # [s] 「最小」タイムステップ
-    SAFETY_FACTOR = 0.9  # タイムスケールに対する安全係数 (★要件2のため計算は残す)
     # [atoms/m^2] 枯渇したセルをタイムステップ計算から除外する閾値
     MIN_DENSITY_FOR_TIMESTEP = 1e10
 
-    # --- ★低速粒子の追跡省略設定 ---
-    # ★要件6: この閾値自体は残し、判定ロジック側 (4c) で min_timescale を見る
-    LOW_SPEED_THRESHOLD_M_S = 700.0  # [m/s] この速度未満の粒子は追跡しない (★例として200に設定)
+    # --- ★修正: 低速粒子の追跡省略設定 (0.0にして全追跡) ---
+    LOW_SPEED_THRESHOLD_M_S = 0.0
 
     # シミュレーション時間設定
-    SPIN_UP_YEARS = 1.0  # 表面密度を平衡状態にするためのスピンアップ期間 (水星年)
-    # TIME_STEP_SEC = 1.0  # ★固定ステップは使用しない
-    TOTAL_SIM_YEARS = 1.0  # 記録対象とするシミュレーション期間 (水星年)
-    TARGET_TAA_DEGREES = np.arange(0, 360, 1)  # スナップショットを保存するTAA [度]
+    SPIN_UP_YEARS = 1.0
+    TOTAL_SIM_YEARS = 1.0
+    TARGET_TAA_DEGREES = np.arange(0, 360, 1)
 
     # 可変重み法 (予算配分方式) の設定
-    # 毎ステップで、各プロセスからこの数だけSPを生成することを目標とする
-    # 実際の重み (weight) は (総放出原子数 / TARGET_SPS) で決定される
-    TARGET_SPS_TD = 1000  # 熱脱離 (TD) の目標SP数/ステップ
-    TARGET_SPS_PSD = 1000  # 光刺激脱離 (PSD) の目標SP数/ステップ
-    TARGET_SPS_SWS = 1000  # 太陽風スパッタリング (SWS) の目標SP数/ステップ
-    TARGET_SPS_MMV = 1000  # 微小隕石蒸発 (MMV) の目標SP数/ステップ
+    TARGET_SPS_TD = 1000
+    TARGET_SPS_PSD = 1000
+    TARGET_SPS_SWS = 1000
+    TARGET_SPS_MMV = 1000
 
-    # --- 粒子生成モデル (Leblanc 2003 準拠) ---
-    # (PSD)
-    F_UV_1AU_PER_M2 = 1.5e14 * (100.0 ** 2)  # 1AUでの光子フラックス [photons/m^2/s]
-    Q_PSD_M2 = 1.0e-20 / (100.0 ** 2)  # 脱離断面積 [m^2]
-    TEMP_PSD = 1500.0  # PSD粒子の初期温度 [K]
-    # (MMV)
-    TEMP_MMV = 3000.0  # MMV粒子の初期温度 [K]
+    # --- 粒子生成モデル ---
+    F_UV_1AU_PER_M2 = 1.5e14 * (100.0 ** 2)
+    Q_PSD_M2 = 2.0e-20 / (100.0 ** 2)
+    TEMP_PSD = 1500.0
+    TEMP_MMV = 3000.0
 
-    # --- SWS (CPS) 用のパラメータ辞書 ---
+    # --- SWS (CPS) ---
     SWS_PARAMS = {
-        'SW_DENSITY_1AU': 10.0 * (100.0) ** 3,  # 1AUでの太陽風密度 [protons/m^3]
-        'SW_VELOCITY': 400.0 * 1000.0,  # 太陽風速度 [m/s]
-        'YIELD_EFF': 0.06,  # スパッタリング収率 (Na / proton)
-        'U_eV': 0.27,  # Thompson-Sigmund 分布の束縛エネルギー [eV]
-        'DENSITY_REF_M2': 7.5e14 * (100.0) ** 2,  # 参照表面密度 [atoms/m^2] (収率計算用)
-        'LON_MIN_RAD': np.deg2rad(-40.0),  # SWS発生領域 (太陽直下点から)
+        'SW_DENSITY_1AU': 10.0 * (100.0) ** 3,
+        'SW_VELOCITY': 400.0 * 1000.0,
+        'YIELD_EFF': 0.06,
+        'U_eV': 0.27,
+        'DENSITY_REF_M2': 7.5e14 * (100.0) ** 2,
+        'LON_MIN_RAD': np.deg2rad(-40.0),
         'LON_MAX_RAD': np.deg2rad(40.0),
         'LAT_N_MIN_RAD': np.deg2rad(30.0),
         'LAT_N_MAX_RAD': np.deg2rad(60.0),
@@ -673,671 +657,350 @@ def main_snapshot_simulation():
         'LAT_S_MAX_RAD': np.deg2rad(-30.0),
     }
 
-    # --- 出力グリッド（空間密度）の設定 ---
-    GRID_RESOLUTION = 101  # 3Dグリッドの解像度 (x, y, z)
-    GRID_MAX_RM = 5.0  # グリッドの最大範囲 (水星半径 RM の何倍か)
+    # --- 出力グリッド ---
+    GRID_RESOLUTION = 101
+    GRID_MAX_RM = 5.0
+    USE_SOLAR_GRAVITY = True
+    USE_CORIOLIS_FORCES = True
 
-    # --- 物理モデルのフラグ ---
-    USE_SOLAR_GRAVITY = True  # 太陽重力を考慮するか
-    USE_CORIOLIS_FORCES = True  # 見かけの力（コリオリ力・遠心力）を考慮するか
-
-    # シミュレーション設定を辞書にまとめる
     settings = {
-        'BETA': 0.5,  # 表面反射時の熱 accomodation 係数
-        'T1AU': 168918.0,  # 1AUでのナトリウム光電離寿命 [s]
-
-        # ★要件7: 軌道積分 (RK4) の時間ステップ [s]
-        # (メインループの DT と同じ値に設定)
+        'BETA': 0.5,
+        'T1AU': 168918.0,
         'DT': MAIN_TIME_STEP_SEC,
-
-        'GRID_RADIUS_RM': GRID_MAX_RM + 1.0,  # 粒子の脱出判定半径
+        'GRID_RADIUS_RM': GRID_MAX_RM + 1.0,
         'USE_SOLAR_GRAVITY': USE_SOLAR_GRAVITY,
         'USE_CORIOLIS_FORCES': USE_CORIOLIS_FORCES
     }
 
-    # --- 2. 出力ディレクトリとシミュレーションの初期化 ---
-    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_4.0"
+    # --- 2. 初期化 ---
+    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_8.0"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"結果は '{target_output_dir}' に保存されます。")
 
-    print(f"--- 物理モデル設定 (完全・可変重み方式) ---")
-    print(f"Dynamic Surface Grid: {N_LON_FIXED}x{N_LAT}")
-    print(f"Processes: PSD, Thermal Desorption, Micrometeoroid Vaporization, SWS")
-    print(f"--- 目標SP数/ステップ (予算) ---")
-    print(f"TD  (Variable): Target SPs/Step = {TARGET_SPS_TD}")
-    print(f"PSD (Variable): Target SPs/Step = {TARGET_SPS_PSD}")
-    print(f"SWS (Variable): Target SPs/Step = {TARGET_SPS_SWS}")
-    print(f"MMV (Variable): Target SPs/Step = {TARGET_SPS_MMV}")
-    print(f"----------------------")
-    print(f"Solar Gravity: {USE_SOLAR_GRAVITY}")
-    print(f"Coriolis/Centrifugal: {USE_CORIOLIS_FORCES}")
-    print(f"----------------------")
-
-    # ★要件1: タイムステップ情報を表示
-    print(f"★Fixed Timestep (Main Loop & RK4): {MAIN_TIME_STEP_SEC}s")
-
-    # print(
-    #    f"Dynamic Timestep: HOT_T={HOT_TEMP_THRESHOLD_K}K, HOT_DT={HOT_TEMP_TIME_STEP_SEC}s, MAX_DT={DEFAULT_MAX_TIME_STEP_SEC}s")
-    # print(
-    #     f"Dynamic Timestep: MIN_DT={MIN_TIME_STEP_SEC}s, MAX_DT={DEFAULT_MAX_TIME_STEP_SEC}s (Fixed Range)")
-
-    # ★要件6: タイムスケール計算は常に行うことを明記
-    print(f"★Timescale Calculation: Always ON (for logic branching)")
-    print(f"★Low Speed Bypass (v < {LOW_SPEED_THRESHOLD_M_S} m/s): Enabled when min_timescale <= 500s")
-
-    # --- ★ 修正点 4 ---
-    print(f"★RK4 Integrator: {settings['DT']}s steps (Fixed)")
-    # --- ★ 修正ここまで ---
-
-    # 水星の1公転周期 [s]
     MERCURY_YEAR_SEC = 87.97 * 24 * 3600
 
-    # 惑星固定座標系のグリッドを初期化
+    # グリッド初期化
     lon_edges_fixed = np.linspace(-np.pi, np.pi, N_LON_FIXED + 1)
     lat_edges_fixed = np.linspace(-np.pi / 2, np.pi / 2, N_LAT + 1)
     dlon_fixed = lon_edges_fixed[1] - lon_edges_fixed[0]
-    # 各緯度帯のセル面積 [m^2] を計算
     cell_areas_m2 = (PHYSICAL_CONSTANTS['RM'] ** 2) * dlon_fixed * \
                     (np.sin(lat_edges_fixed[1:]) - np.sin(lat_edges_fixed[:-1]))
-    # 表面密度グリッドを初期値で埋める
     surface_density_grid = np.full((N_LON_FIXED, N_LAT), INITIAL_SURFACE_DENSITY_PER_M2, dtype=np.float64)
 
-    # --- 3. 外部ファイルの読み込み ---
+    # --- 3. ファイル読み込み ---
     try:
         spec_data_np = np.loadtxt('SolarSpectrum_Na0.txt', usecols=(0, 3))
-        # ★要件: 軌道ファイル名を v6 -> v (if main のチェック) に合わせる
         orbit_file_name = 'orbit2025_v6.txt'
         orbit_data = np.loadtxt(orbit_file_name)
     except FileNotFoundError as e:
         print(f"エラー: データファイル '{e.filename}' が見つかりません。");
         sys.exit()
-    if orbit_data.shape[1] < 6:
-        print(f"エラー: '{orbit_file_name}' の列が不足しています。");
-        sys.exit()
 
-    # --- 時間設定 ---
-    # 軌道ファイルから TAA=0 (近日点) の時刻を探す
+    # 時間設定
     taa_col = orbit_data[:, 0]
     time_col = orbit_data[:, 2]
     idx_perihelion = np.argmin(np.abs(taa_col))
-    t_start_run = time_col[idx_perihelion]  # TAA=0 を RUN の開始時刻とする
+    t_start_run = time_col[idx_perihelion]
     t_end_run = t_start_run + (TOTAL_SIM_YEARS * MERCURY_YEAR_SEC)
     t_start_spinup = t_start_run - (SPIN_UP_YEARS * MERCURY_YEAR_SEC)
 
-    # ★シミュレーション全体の時間ステップは使用しない
-    # time_steps = np.arange(t_start_spinup, t_end_run, TIME_STEP_SEC)
-    print(f"--- 時間設定 (動的モデル) ---");
-    print(f"軌道ファイル上のTAA=0 (近日点) 時刻: {t_start_run:.1f} s");
-    print(f"スピンアップ開始時刻: {t_start_spinup:.1f} s ({-SPIN_UP_YEARS} 年前)");
-    print(f"RUN開始時刻 (TAA=0): {t_start_run:.1f} s");
-    print(f"RUN終了時刻: {t_end_run:.1f} s (+{TOTAL_SIM_YEARS} 年後)");
-    print(f"------------------")
-
-    # (スペクトルデータの前処理)
+    # スペクトル
     sigma_const = PHYSICAL_CONSTANTS['E_CHARGE'] ** 2 / (
             4 * PHYSICAL_CONSTANTS['ME'] * PHYSICAL_CONSTANTS['C'] * PHYSICAL_CONSTANTS['EPSILON_0'])
     wl, gamma = spec_data_np[:, 0], spec_data_np[:, 1]
-    # 波長が昇順でない場合はソートする
     if not np.all(np.diff(wl) > 0):
         sort_indices = np.argsort(wl)
         wl, gamma = wl[sort_indices], gamma[sort_indices]
     spec_data_dict = {'wl': wl, 'gamma': gamma,
-                      'sigma0_perdnu2': sigma_const * 0.641,  # D2線
-                      'sigma0_perdnu1': sigma_const * 0.320,  # D1線
-                      'JL': 5.18e14}  # 太陽スペクトルの定数
+                      'sigma0_perdnu2': sigma_const * 0.641,
+                      'sigma0_perdnu1': sigma_const * 0.320,
+                      'JL': 5.18e14}
 
-    # --- 4. メインループ (時間発展) ---
-    active_particles = []  # 現在シミュレーション空間にいる粒子リスト
+    # --- 4. メインループ ---
+    active_particles = []
     previous_taa = -1
     target_taa_idx = 0
 
-    # 現在のステップの重み（初期値）
     current_step_weight_td = 1.0
     current_step_weight_psd = 1.0
     current_step_weight_sws = 1.0
     current_step_weight_mmv = 1.0
 
-    # ★要件5: 前のステップの吸着量 [atoms] と 現ステップの放出率 [1/s] を保持
     previous_atoms_gained_grid = np.zeros_like(surface_density_grid)
-    current_R_loss_grid = np.zeros_like(surface_density_grid)
 
-    # ★t_sec を初期化し、while ループに変更
     t_sec = t_start_spinup
-    # ★pbar の total を総秒数に変更
+
     with tqdm(total=int(t_end_run - t_start_spinup), desc="Time Evolution") as pbar:
-        # for t_sec in time_steps: # ★削除
-        while t_sec < t_end_run:  # ★while ループに変更
+        while t_sec < t_end_run:
 
-            # ★要件1: タイムステップを固定値に設定
             current_dt_main = MAIN_TIME_STEP_SEC
-
-            # --- 4a. 現在時刻の軌道パラメータを取得 ---
             TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad_fixed = get_orbital_params(
                 t_sec, orbit_data, MERCURY_YEAR_SEC
             )
-
             run_phase = "Spin-up" if t_sec < t_start_run else "Run"
 
-            # --- 4b. (★要件2) タイムスケール計算 (常に実行) ---
-            # (タイムステップ決定のためではなく、要件5, 6 の分岐のため)
+            pbar.set_description(f"[{run_phase}] TAA={TAA:.1f} | N_act={len(active_particles)}")
 
-            min_timescale = np.inf
+            # 統計用変数リセット
+            total_atoms_td_this_step = 0.0
+            total_atoms_psd_this_step = 0.0
+            total_atoms_sws_this_step = 0.0
 
-            # ★要件5: 現ステップの放出率グリッドを初期化
-            current_R_loss_grid.fill(0.0)
+            rate_psd_grid_s = np.zeros_like(surface_density_grid)
+            rate_td_grid_s = np.zeros_like(surface_density_grid)
+            rate_sws_grid_s = np.zeros_like(surface_density_grid)
+            total_atoms_lost_grid = np.zeros_like(surface_density_grid)
 
-            # レート計算に必要なパラメータを準備
+            # ★★★ 追加: 平衡密度を記録するグリッド (初期値は NaN) ★★★
+            na_eq_record_grid = np.full((N_LON_FIXED, N_LAT), np.nan)
+
+            # MMV計算
+            flux_mmv_per_m2_s = calculate_mmv_flux(AU)
+            MERCURY_SURFACE_AREA_M2 = 4 * PHYSICAL_CONSTANTS['PI'] * (PHYSICAL_CONSTANTS['RM'] ** 2)
+            n_atoms_mmv = flux_mmv_per_m2_s * MERCURY_SURFACE_AREA_M2 * current_dt_main
+
+            # 共通定数
             F_UV_current_per_m2 = F_UV_1AU_PER_M2 / (AU ** 2)
             flux_sw_1au = SWS_PARAMS['SW_DENSITY_1AU'] * SWS_PARAMS['SW_VELOCITY']
-            current_flux_sw = flux_sw_1au / (AU ** 2)
-            effective_flux_sw = current_flux_sw
-            base_sputtering_rate_per_m2_s = effective_flux_sw * SWS_PARAMS['YIELD_EFF']
+            base_sputtering_rate_per_m2_s = (flux_sw_1au / (AU ** 2)) * SWS_PARAMS['YIELD_EFF']
             DENSITY_REF_M2 = SWS_PARAMS['DENSITY_REF_M2']
 
+            # --- グリッドループ ---
             for i_lon in range(N_LON_FIXED):
                 for i_lat in range(N_LAT):
-                    # ★枯渇したセルはタイムステップ計算から除外
-                    current_density_per_m2 = surface_density_grid[i_lon, i_lat]
-                    if current_density_per_m2 < MIN_DENSITY_FOR_TIMESTEP:
-                        continue
 
-                    # このセルのパラメータ
+                    # 座標
                     lon_fixed_rad = (lon_edges_fixed[i_lon] + lon_edges_fixed[i_lon + 1]) / 2
                     lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
 
-                    # (1) PSD レート
+                    # (1) PSD Rate
                     rate_psd_per_s = 0.0
                     cos_Z = np.cos(lat_rad) * np.cos(lon_fixed_rad - subsolar_lon_rad_fixed)
                     if cos_Z > 0:
                         rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
+                        rate_psd_grid_s[i_lon, i_lat] = rate_psd_per_s
 
-                    # (2) TD レート
-                    temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU,
-                                                                   subsolar_lon_rad_fixed)
+                    # (2) TD Rate (変更なし: 1.5eV, no cutoff で計算済みと仮定)
+                    rate_td_per_s = 0.0
+                    temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_lon_rad_fixed)
                     rate_td_per_s = calculate_thermal_desorption_rate(temp_k)
+                    if rate_td_per_s > 0:
+                        rate_td_grid_s[i_lon, i_lat] = rate_td_per_s
 
-                    # (3) SWS レート
+                    # (3) SWS Rate
                     rate_sws_per_s = 0.0
-                    lon_sun_fixed_rad = (lon_fixed_rad - subsolar_lon_rad_fixed)
-                    lon_sun_fixed_rad = (lon_sun_fixed_rad + PHYSICAL_CONSTANTS['PI']) % (
+                    lon_sun_fixed_rad = (lon_fixed_rad - subsolar_lon_rad_fixed + PHYSICAL_CONSTANTS['PI']) % (
                             2 * PHYSICAL_CONSTANTS['PI']) - PHYSICAL_CONSTANTS['PI']
-                    lat_sun_fixed_rad = lat_rad
-                    is_in_lon_band = (SWS_PARAMS['LON_MIN_RAD'] <= lon_sun_fixed_rad <= SWS_PARAMS['LON_MAX_RAD'])
-                    is_in_lat_n_band = (
-                            SWS_PARAMS['LAT_N_MIN_RAD'] <= lat_sun_fixed_rad <= SWS_PARAMS['LAT_N_MAX_RAD'])
-                    is_in_lat_s_band = (
-                            SWS_PARAMS['LAT_S_MIN_RAD'] <= lat_sun_fixed_rad <= SWS_PARAMS['LAT_S_MAX_RAD'])
-                    if is_in_lon_band and (is_in_lat_n_band or is_in_lat_s_band):
+                    is_in_lon = (SWS_PARAMS['LON_MIN_RAD'] <= lon_sun_fixed_rad <= SWS_PARAMS['LON_MAX_RAD'])
+                    is_in_lat_n = (SWS_PARAMS['LAT_N_MIN_RAD'] <= lat_rad <= SWS_PARAMS['LAT_N_MAX_RAD'])
+                    is_in_lat_s = (SWS_PARAMS['LAT_S_MIN_RAD'] <= lat_rad <= SWS_PARAMS['LAT_S_MAX_RAD'])
+                    if is_in_lon and (is_in_lat_n or is_in_lat_s):
                         rate_sws_per_s = (base_sputtering_rate_per_m2_s / DENSITY_REF_M2)
+                        rate_sws_grid_s[i_lon, i_lat] = rate_sws_per_s
 
-                    # ★合計レートからタイムスケールを計算
                     total_rate_per_s = rate_psd_per_s + rate_td_per_s + rate_sws_per_s
 
-                    # ★要件5: 現ステップの放出率を保存
-                    current_R_loss_grid[i_lon, i_lat] = total_rate_per_s
+                    # --- タイムスケール判定 ---
+                    local_timescale = np.inf
+                    if total_rate_per_s > 1e-30:
+                        local_timescale = 1.0 / total_rate_per_s
 
-                    if total_rate_per_s > 1e-20:  # ゼロ除算を避ける
-                        timescale = 1.0 / total_rate_per_s
-                        min_timescale = min(min_timescale, timescale)
+                    current_density_per_m2 = 0.0
 
-            # ★要件1: 動的タイムステップの決定ロジック (clip) は削除
+                    # ★条件変更なし: 500s のまま
+                    if local_timescale <= 500.0 and t_sec > t_start_spinup:
+                        # 平衡モード
+                        gain_flux = (previous_atoms_gained_grid[i_lon, i_lat] / cell_areas_m2[i_lat]) / current_dt_main
+                        if total_rate_per_s > 0:
+                            current_density_per_m2 = gain_flux / total_rate_per_s
 
-            # --- 4c. (旧 4b.) 表面から新しい粒子を生成 ---
-
-            pbar.set_description(
-                f"[{run_phase}] DT={current_dt_main:.2f}s | TAA={TAA:.1f} | N_act={len(active_particles)} | "
-                f"W_TD={current_step_weight_td:.1e} W_PSD={current_step_weight_psd:.1e} "
-                f"W_SWS={current_step_weight_sws:.1e} W_MMV={current_step_weight_mmv:.1e}"
-            )
-
-            # (A) 事前ループ: 惑星全体の「総放出原子数」をプロセスごとに計算する
-            total_atoms_td_this_step = 0.0
-            total_atoms_psd_this_step = 0.0
-            total_atoms_sws_this_step = 0.0
-            n_atoms_mmv = 0.0
-
-            # 各プロセスで「失われる原子数」ではなく「レート[1/s]」を記録する配列に変更
-            rate_psd_grid_s = np.zeros_like(surface_density_grid)
-            rate_td_grid_s = np.zeros_like(surface_density_grid)
-            rate_sws_grid_s = np.zeros_like(surface_density_grid)
-            # このステップで失われる「原子総数」を記録する配列
-            total_atoms_lost_grid = np.zeros_like(surface_density_grid)
-
-            # (A-1) MMV の総原子数を計算 (表面密度に依存しない)
-            flux_mmv_per_m2_s = calculate_mmv_flux(AU)
-            MERCURY_SURFACE_AREA_M2 = 4 * PHYSICAL_CONSTANTS['PI'] * (PHYSICAL_CONSTANTS['RM'] ** 2)
-            # TIME_STEP_SEC を current_dt_main に変更
-            n_atoms_mmv = flux_mmv_per_m2_s * MERCURY_SURFACE_AREA_M2 * current_dt_main
-
-            # (A-2) PSD, TD, SWS のレートを計算 (グリッドをループ)
-            F_UV_current_per_m2 = F_UV_1AU_PER_M2 / (AU ** 2)
-            flux_sw_1au = SWS_PARAMS['SW_DENSITY_1AU'] * SWS_PARAMS['SW_VELOCITY']
-            current_flux_sw = flux_sw_1au / (AU ** 2)
-            # (ここでは時間変動は考慮しない)
-            effective_flux_sw = current_flux_sw
-
-            base_sputtering_rate_per_m2_s = effective_flux_sw * SWS_PARAMS['YIELD_EFF']
-            DENSITY_REF_M2 = SWS_PARAMS['DENSITY_REF_M2']
-
-            # ★★★放出に使う密度を決定 ★★★
-            # ★ 修正: 最初のステップ (t_sec == t_start_spinup) は、
-            # ★ min_timescale が 500s 以下でも必ず初期密度 (na(t)) を使う
-            if min_timescale <= 500.0 and t_sec > t_start_spinup:
-                # タイムスケールが短い時 (平衡状態) (かつ最初のステップではない)
-
-                # F_add [atoms/m^2/s] = (前の吸着量 [atoms] / 面積 [m^2]) / dt [s]
-                F_add_per_m2_s = (previous_atoms_gained_grid / cell_areas_m2) / current_dt_main
-
-                # R_loss [1/s] は (4b) で計算済みの current_R_loss_grid
-
-                # na_eq = F_add / R_loss (ゼロ除算回避)
-                na_eq_grid = np.divide(F_add_per_m2_s, current_R_loss_grid,
-                                       out=np.full_like(current_R_loss_grid, np.nan),
-                                       where=current_R_loss_grid > 0)
-                use_equilibrium_density = True
-            else:
-                # タイムスケールが長い時 (na(t) を使う)
-                # または、最初のステップの場合
-                na_eq_grid = None  # 使用しない
-                use_equilibrium_density = False
-
-            for i_lon in range(N_LON_FIXED):
-                for i_lat in range(N_LAT):
-
-                    # ★★★放出に使う密度 (current_density_per_m2) を決定 ★★★
-                    if use_equilibrium_density:
-                        # (変更なし: t_sec > t_start_spinup かつ min_timescale <= 500.0 の場合)
-                        na_eq = na_eq_grid[i_lon, i_lat]
-                        # na_eq が計算不能(nan)または負の場合は 0 を使用
-                        if np.isnan(na_eq) or na_eq < 0:
-                            current_density_per_m2 = 0.0
+                            # ★★★ 重要: この平衡密度を記録しておく (後で上書きに使用) ★★★
+                            na_eq_record_grid[i_lon, i_lat] = current_density_per_m2
                         else:
-                            current_density_per_m2 = na_eq
+                            current_density_per_m2 = 0.0
                     else:
-                        # (変更なし: 500sより長い時、または最初のステップの場合)
+                        # 時間発展モード
                         current_density_per_m2 = surface_density_grid[i_lon, i_lat]
 
                     if current_density_per_m2 <= 0:
                         continue
-                    # ★★★ここまで ★★★
 
-                    lon_fixed_rad = (lon_edges_fixed[i_lon] + lon_edges_fixed[i_lon + 1]) / 2
-                    lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
-                    area_m2 = cell_areas_m2[i_lat]
-
-                    # このセルで利用可能な原子の総数 (★要件5で決定した密度に基づく)
-                    atoms_available_in_cell = current_density_per_m2 * area_m2
-
-                    # 太陽天頂角の余弦
-                    cos_Z = np.cos(lat_rad) * np.cos(lon_fixed_rad - subsolar_lon_rad_fixed)
-
-                    # --- レートの計算 ---
-                    # (4bで R_loss_grid の計算は完了しているが、
-                    #  SP生成の按分のために個別のレートも必要)
-                    rate_psd_per_s = 0.0
-                    rate_td_per_s = 0.0
-                    rate_sws_per_s = 0.0
-
-                    # (1) PSD
-                    if cos_Z > 0:  # 昼側のみ
-                        rate_psd_per_s = F_UV_current_per_m2 * Q_PSD_M2 * cos_Z
-                        rate_psd_grid_s[i_lon, i_lat] = rate_psd_per_s  # レートを保存
-
-                    # (2) TD
-                    temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_lon_rad_fixed)
-                    rate_td_per_s = calculate_thermal_desorption_rate(temp_k)  # [1/s]
-                    if rate_td_per_s > 0:
-                        rate_td_grid_s[i_lon, i_lat] = rate_td_per_s  # レートを保存
-
-                    # (3) SWS
-                    # (4bで計算済みの R_loss_grid から SWS レートを逆算してもよいが、
-                    #  コードの簡潔さのため、(4b) と同じロジックを再実行する)
-                    lon_sun_fixed_rad = (lon_fixed_rad - subsolar_lon_rad_fixed)
-                    lon_sun_fixed_rad = (lon_sun_fixed_rad + PHYSICAL_CONSTANTS['PI']) % (
-                            2 * PHYSICAL_CONSTANTS['PI']) - PHYSICAL_CONSTANTS['PI']
-                    lat_sun_fixed_rad = lat_rad
-
-                    is_in_lon_band = (SWS_PARAMS['LON_MIN_RAD'] <= lon_sun_fixed_rad <= SWS_PARAMS['LON_MAX_RAD'])
-                    is_in_lat_n_band = (SWS_PARAMS['LAT_N_MIN_RAD'] <= lat_sun_fixed_rad <= SWS_PARAMS['LAT_N_MAX_RAD'])
-                    is_in_lat_s_band = (SWS_PARAMS['LAT_S_MIN_RAD'] <= lat_sun_fixed_rad <= SWS_PARAMS['LAT_S_MAX_RAD'])
-
-                    if is_in_lon_band and (is_in_lat_n_band or is_in_lat_s_band):
-                        rate_sws_per_s = (base_sputtering_rate_per_m2_s / DENSITY_REF_M2)
-                        rate_sws_grid_s[i_lon, i_lat] = rate_sws_per_s  # レートを保存
-
-                    # --- 安定な枯渇計算 (★要件3) ---
-                    total_rate_per_s = rate_psd_per_s + rate_td_per_s + rate_sws_per_s
+                    # --- 枯渇量計算 (変更なし: 線形近似) ---
+                    atoms_available_in_cell = current_density_per_m2 * cell_areas_m2[i_lat]
 
                     if total_rate_per_s > 0:
-                        # 1. 線形近似で枯渇量を計算
-                        n_atoms_total_lost_linear = atoms_available_in_cell * total_rate_per_s * current_dt_main
+                        # 線形近似
+                        n_lost_linear = atoms_available_in_cell * total_rate_per_s * current_dt_main
+                        n_lost = min(n_lost_linear, atoms_available_in_cell)
 
-                        # 2. 利用可能な原子数でクリップ（上限設定）
-                        #    (要件5で na_eq を使った場合、atoms_available_in_cell が
-                        #     na(t) よりも大きくなる可能性があるが、
-                        #     この計算 (Lの決定) は na_eq ベースで行う)
-                        n_atoms_total_lost = min(n_atoms_total_lost_linear, atoms_available_in_cell)
+                        total_atoms_lost_grid[i_lon, i_lat] = n_lost
 
-                        total_atoms_lost_grid[i_lon, i_lat] = n_atoms_total_lost  # 総枯渇量を保存
-
-                        # 各プロセスの「総放出原子数」は、総枯渇量をレート比で按分して求める
                         if rate_psd_per_s > 0:
-                            total_atoms_psd_this_step += n_atoms_total_lost * (rate_psd_per_s / total_rate_per_s)
+                            total_atoms_psd_this_step += n_lost * (rate_psd_per_s / total_rate_per_s)
                         if rate_td_per_s > 0:
-                            total_atoms_td_this_step += n_atoms_total_lost * (rate_td_per_s / total_rate_per_s)
+                            total_atoms_td_this_step += n_lost * (rate_td_per_s / total_rate_per_s)
                         if rate_sws_per_s > 0:
-                            total_atoms_sws_this_step += n_atoms_total_lost * (rate_sws_per_s / total_rate_per_s)
+                            total_atoms_sws_this_step += n_lost * (rate_sws_per_s / total_rate_per_s)
 
-            # (B) 重みの決定 (全プロセスを可変に)
-            # ... (変更なし) ...
-            current_step_weight_td = 1.0
-            if total_atoms_td_this_step > 0 and TARGET_SPS_TD > 0:
+            # (B) 重み決定 (省略: 変更なし)
+            if total_atoms_td_this_step > 0:
                 current_step_weight_td = total_atoms_td_this_step / TARGET_SPS_TD
-
-            current_step_weight_psd = 1.0
-            if total_atoms_psd_this_step > 0 and TARGET_SPS_PSD > 0:
+            else:
+                current_step_weight_td = 1.0
+            if total_atoms_psd_this_step > 0:
                 current_step_weight_psd = total_atoms_psd_this_step / TARGET_SPS_PSD
-
-            current_step_weight_sws = 1.0
-            if total_atoms_sws_this_step > 0 and TARGET_SPS_SWS > 0:
+            else:
+                current_step_weight_psd = 1.0
+            if total_atoms_sws_this_step > 0:
                 current_step_weight_sws = total_atoms_sws_this_step / TARGET_SPS_SWS
-
-            current_step_weight_mmv = 1.0
-            if n_atoms_mmv > 0 and TARGET_SPS_MMV > 0:
+            else:
+                current_step_weight_sws = 1.0
+            if n_atoms_mmv > 0:
                 current_step_weight_mmv = n_atoms_mmv / TARGET_SPS_MMV
+            else:
+                current_step_weight_mmv = 1.0
 
-            # (C) メインループ: 粒子を生成
+            # (C) 粒子生成ループ (省略: 変更なし)
             newly_launched_particles = []
-            # ★吸着グリッドをここで初期化 (4dから移動)
             atoms_gained_grid = np.zeros_like(surface_density_grid)
 
-            # (C-1) MMV の粒子を生成 (可変重み)
+            # (C-1) MMV
             if n_atoms_mmv > 0 and TARGET_SPS_MMV > 0:
-                num_sps_float_mmv = TARGET_SPS_MMV
-                num_sps_int_mmv = int(num_sps_float_mmv)
-                # 確率的に端数を処理
-                if np.random.random() < (num_sps_float_mmv - num_sps_int_mmv):
-                    num_sps_int_mmv += 1
-
-                if num_sps_int_mmv > 0:
-                    M_rejection = 4.0 / 3.0  # 棄却サンプリング用
-                    for _ in range(num_sps_int_mmv):
-                        # MMVの放出位置は太陽方向に対して非一様 (棄却法)
+                num_sps_float = TARGET_SPS_MMV
+                num_sps_int = int(num_sps_float)
+                if np.random.random() < (num_sps_float - num_sps_int): num_sps_int += 1
+                if num_sps_int > 0:
+                    M_rejection = 4.0 / 3.0
+                    for _ in range(num_sps_int):
                         while True:
-                            lon_rot_rad = np.random.uniform(-np.pi, np.pi)
-                            prob_accept = (1.0 - (1.0 / 3.0) * np.sin(lon_rot_rad)) / M_rejection
-                            if np.random.random() < prob_accept:
-                                break
-                        lat_rot_rad = np.arcsin(np.random.uniform(-1.0, 1.0))
-
-                        # (回転座標系での)初期位置と速度を計算
-                        initial_pos_rot = lonlat_to_xyz(lon_rot_rad, lat_rot_rad, PHYSICAL_CONSTANTS['RM'])
-                        surface_normal_rot = initial_pos_rot / PHYSICAL_CONSTANTS['RM']
+                            lon_rot = np.random.uniform(-np.pi, np.pi)
+                            if np.random.random() < (1.0 - (1.0 / 3.0) * np.sin(lon_rot)) / M_rejection: break
+                        lat_rot = np.arcsin(np.random.uniform(-1.0, 1.0))
+                        pos_rot = lonlat_to_xyz(lon_rot, lat_rot, PHYSICAL_CONSTANTS['RM'])
+                        norm = pos_rot / PHYSICAL_CONSTANTS['RM']
                         speed = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], TEMP_MMV)
-                        initial_vel_rot = speed * transform_local_to_world(sample_lambertian_direction_local(),
-                                                                           surface_normal_rot)
+                        vel_rot = speed * transform_local_to_world(sample_lambertian_direction_local(), norm)
+                        if speed < LOW_SPEED_THRESHOLD_M_S: continue
+                        newly_launched_particles.append(
+                            {'pos': pos_rot, 'vel': vel_rot, 'weight': current_step_weight_mmv})
 
-                        # --- ★(修正) 低速粒子の追跡省略(バイパス)判定 ---
-                        # ★要件6: min_timescale が 500s 以下の場合のみバイパスを有効化
-                        if min_timescale <= 500.0 and speed < LOW_SPEED_THRESHOLD_M_S:
-                            # MMVは特定のセルから出ないため、i_lon, i_lat が未定義。
-                            # 本来は衝突地点を計算すべきだが、MMVはほぼ高速なので
-                            # ここでは単純に追跡をスキップする (吸着にも加算しない)
-                            continue
-                        # --- ★バイパス判定 終了 ---
-
-                        newly_launched_particles.append({
-                            'pos': initial_pos_rot, 'vel': initial_vel_rot,
-                            'weight': current_step_weight_mmv
-                        })
-
-            # (C-2) PSD, TD, SWS の粒子を生成 (グリッドをループ)
+            # (C-2) PSD, TD, SWS
             for i_lon in range(N_LON_FIXED):
                 for i_lat in range(N_LAT):
-
-                    # このセルで失われる原子の総数
-                    total_atoms_to_lose = total_atoms_lost_grid[i_lon, i_lat]
-                    if total_atoms_to_lose <= 0:
-                        continue
-
-                    # このセルの各レートを取得
-                    rate_psd = rate_psd_grid_s[i_lon, i_lat]
-                    rate_td = rate_td_grid_s[i_lon, i_lat]
-                    rate_sws = rate_sws_grid_s[i_lon, i_lat]
-                    total_rate = rate_psd + rate_td + rate_sws
-
-                    if total_rate <= 0: continue
-
-                    # 各プロセスが寄与する原子数 (総枯渇量をレート比で按分)
-                    n_atoms_psd = total_atoms_to_lose * (rate_psd / total_rate)
-                    n_atoms_td = total_atoms_to_lose * (rate_td / total_rate)
-                    n_atoms_sws = total_atoms_to_lose * (rate_sws / total_rate)
-
-                    # このセルのパラメータ
-                    lon_fixed_rad = (lon_edges_fixed[i_lon] + lon_edges_fixed[i_lon + 1]) / 2
-                    lat_rad = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
-                    temp_k = calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU,
-                                                                   subsolar_lon_rad_fixed)
-
-                    # 各プロセスをループ処理
-                    procs = {
-                        'PSD': {'n_atoms': n_atoms_psd, 'temp': TEMP_PSD, 'U_eV': None,
-                                'weight': current_step_weight_psd},
-                        'TD': {'n_atoms': n_atoms_td, 'temp': temp_k, 'U_eV': None, 'weight': current_step_weight_td},
-                        'SWS': {'n_atoms': n_atoms_sws, 'temp': None, 'U_eV': SWS_PARAMS['U_eV'],
-                                'weight': current_step_weight_sws}
-                    }
-
-                    for proc_name, p in procs.items():
-                        if p['n_atoms'] <= 0 or p['weight'] <= 0: continue
-
-                        weight_to_use = p['weight']
-
-                        # 生成すべきSP数を計算
-                        # N_SP = (このセルで放出される原子数) / (SP 1個の重み)
-                        if np.isinf(weight_to_use):
-                            num_sps_float = 0.0
-                        else:
-                            num_sps_float = p['n_atoms'] / weight_to_use
-                        if np.isnan(num_sps_float):
-                            num_sps_float = 0.0
-
-                        # 確率的に端数を処理
-                        num_sps_int = int(num_sps_float)
-                        if np.random.random() < (num_sps_float - num_sps_int):
-                            num_sps_int += 1
-                        if num_sps_int == 0: continue
-
-                        # 枯渇量の計算はここでは不要 (既に total_atoms_lost_grid で確定済)
-
-                        # SPを生成
-                        for _ in range(num_sps_int):
-                            # 初期速度を決定
-                            if proc_name == 'SWS':
-                                energy_eV = sample_thompson_sigmund_energy(p['U_eV'])
-                                energy_J = energy_eV * PHYSICAL_CONSTANTS['EV_TO_JOULE']
-                                speed = np.sqrt(2.0 * energy_J / PHYSICAL_CONSTANTS['MASS_NA'])
+                    n_total_lose = total_atoms_lost_grid[i_lon, i_lat]
+                    if n_total_lose <= 0: continue
+                    r_psd = rate_psd_grid_s[i_lon, i_lat]
+                    r_td = rate_td_grid_s[i_lon, i_lat]
+                    r_sws = rate_sws_grid_s[i_lon, i_lat]
+                    total_r = r_psd + r_td + r_sws
+                    if total_r <= 0: continue
+                    lon_f = (lon_edges_fixed[i_lon] + lon_edges_fixed[i_lon + 1]) / 2
+                    lat_f = (lat_edges_fixed[i_lat] + lat_edges_fixed[i_lat + 1]) / 2
+                    temp_k = calculate_surface_temperature_leblanc(lon_f, lat_f, AU, subsolar_lon_rad_fixed)
+                    procs = [('PSD', n_total_lose * (r_psd / total_r), TEMP_PSD, None, current_step_weight_psd),
+                             ('TD', n_total_lose * (r_td / total_r), temp_k, None, current_step_weight_td),
+                             ('SWS', n_total_lose * (r_sws / total_r), None, SWS_PARAMS['U_eV'],
+                              current_step_weight_sws)]
+                    for pname, n_atoms, T, U, w in procs:
+                        if n_atoms <= 0 or w <= 0: continue
+                        num_sps = int(n_atoms / w)
+                        if np.random.random() < (n_atoms / w - num_sps): num_sps += 1
+                        for _ in range(num_sps):
+                            if pname == 'SWS':
+                                E_ev = sample_thompson_sigmund_energy(U)
+                                spd = np.sqrt(
+                                    2.0 * E_ev * PHYSICAL_CONSTANTS['EV_TO_JOULE'] / PHYSICAL_CONSTANTS['MASS_NA'])
                             else:
-                                speed = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'],
-                                                                            p['temp'])
-
-                            # --- ★(修正) 低速粒子の追跡省略(バイパス)判定 ---
-                            # ★要件6: min_timescale が 500s 以下の場合のみバイパスを有効化
-                            if min_timescale <= 500.0 and speed < LOW_SPEED_THRESHOLD_M_S:
-                                # この粒子は追跡しない (局所平衡とみなす)
-                                # 粒子分の重み(原子数)を、吸着グリッドに直接加算する。
-                                # (放出されたセルにそのまま戻ると仮定)
-                                atoms_gained_grid[i_lon, i_lat] += weight_to_use
-
-                                # 粒子を newly_launched_particles に追加せず、
-                                # このSPの生成処理を終了する。
+                                spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], T)
+                            if spd < LOW_SPEED_THRESHOLD_M_S:
+                                atoms_gained_grid[i_lon, i_lat] += w
                                 continue
-                            # --- ★バイパス判定 終了 ---
+                            lon_rot = lon_f - subsolar_lon_rad_fixed
+                            pos_rot = lonlat_to_xyz(lon_rot, lat_f, PHYSICAL_CONSTANTS['RM'])
+                            norm = pos_rot / PHYSICAL_CONSTANTS['RM']
+                            vel_rot = spd * transform_local_to_world(sample_lambertian_direction_local(), norm)
+                            newly_launched_particles.append({'pos': pos_rot, 'vel': vel_rot, 'weight': w})
 
-                            # (回転座標系での)初期位置と速度を計算
-                            lon_rot_rad = lon_fixed_rad - subsolar_lon_rad_fixed
-                            lat_rot_rad = lat_rad
-
-                            initial_pos_rot = lonlat_to_xyz(lon_rot_rad, lat_rot_rad, PHYSICAL_CONSTANTS['RM'])
-                            surface_normal_rot = initial_pos_rot / PHYSICAL_CONSTANTS['RM']
-                            initial_vel_rot = speed * transform_local_to_world(sample_lambertian_direction_local(),
-                                                                               surface_normal_rot)
-                            newly_launched_particles.append({
-                                'pos': initial_pos_rot, 'vel': initial_vel_rot,
-                                'weight': weight_to_use
-                            })
-
-            # --- 4c 終了: 表面密度（枯渇）の更新 ---
-            # (★要件4: 陽的オイラー法に変更するため、ここでは何もしない)
-            # surface_density_grid -= total_atoms_lost_grid / cell_areas_m2
-            # np.clip(surface_density_grid, 0, None, out=surface_density_grid)
-
-            # 新しく生成された粒子をアクティブリストに追加
             active_particles.extend(newly_launched_particles)
 
-            # --- 4d. (旧 4c.) 全ての粒子を1ステップ進め、結果を集計 ---
-            # マルチプロセス用のタスクリストを作成
+            # (D) 粒子追跡 (省略: 変更なし)
             tasks = [{'settings': settings, 'spec': spec_data_dict, 'particle_state': p,
                       'orbit': (TAA, AU, V_radial_ms, V_tangential_ms, subsolar_lon_rad_fixed),
-                      'duration': current_dt_main} for p in  # current_dt_main に変更
-                     active_particles]
-
+                      'duration': current_dt_main} for p in active_particles]
             next_active_particles = []
-            # ★atoms_gained_grid の初期化は 4c に移動
-            # atoms_gained_grid = np.zeros_like(surface_density_grid) # ★削除
-
             if tasks:
-                # プロセスプールを作成して並列実行
                 with Pool(processes=max(1, cpu_count() - 1)) as pool:
                     results = list(pool.imap(simulate_particle_for_one_step, tasks, chunksize=100))
-
-                # 結果を集計
                 for res in results:
                     if res['status'] == 'alive':
-                        # 生き残った粒子
                         next_active_particles.append(res['final_state'])
                     elif res['status'] == 'stuck':
-                        # 表面に吸着した粒子
-                        pos_rot = res['pos_at_impact']
-                        weight = res['weight']
-
-                        # 衝突位置（回転座標系）
-                        lon_rot = np.arctan2(pos_rot[1], pos_rot[0])
-                        lat_rot = np.arcsin(np.clip(pos_rot[2] / np.linalg.norm(pos_rot), -1.0, 1.0))
-
-                        # 衝突位置（固定座標系）
-                        lon_fixed = (lon_rot + subsolar_lon_rad_fixed)
-                        lon_fixed = (lon_fixed + PHYSICAL_CONSTANTS['PI']) % (2 * PHYSICAL_CONSTANTS['PI']) - \
-                                    PHYSICAL_CONSTANTS['PI']
-                        lat_fixed = lat_rot
-
-                        # 対応するグリッドインデックスを検索
-                        i_lon = np.searchsorted(lon_edges_fixed, lon_fixed) - 1
-                        i_lat = np.searchsorted(lat_edges_fixed, lat_fixed) - 1
-                        if 0 <= i_lon < N_LON_FIXED and 0 <= i_lat < N_LAT:
-                            # 吸着原子数を加算
-                            atoms_gained_grid[i_lon, i_lat] += weight
-                    # 'ionized' と 'escaped' は何もしない (リストから消える)
-
+                        pos = res['pos_at_impact']
+                        lon = np.arctan2(pos[1], pos[0])
+                        lat = np.arcsin(np.clip(pos[2] / np.linalg.norm(pos), -1, 1))
+                        lon_fix = (lon + subsolar_lon_rad_fixed + np.pi) % (2 * np.pi) - np.pi
+                        ix = np.searchsorted(lon_edges_fixed, lon_fix) - 1
+                        iy = np.searchsorted(lat_edges_fixed, lat) - 1
+                        if 0 <= ix < N_LON_FIXED and 0 <= iy < N_LAT:
+                            atoms_gained_grid[ix, iy] += res['weight']
             active_particles = next_active_particles
 
-            # ★★★【要件4】ここからが修正されたブロック (4d-bis) ★★★
-            # --- 4d-bis. 表面密度の更新（陽的オイラー法） ---
-            # na(t+dt) = na(t) + Gain - Loss
+            # --- 4e. 表面密度更新 (★ここを修正) ---
 
-            # (1) na(t): ステップ開始時の密度 [atoms/m^2]
-            na_t_per_m2 = surface_density_grid
+            # 1. まずは通常通りオイラー法で更新
+            na_t = surface_density_grid
+            gain = atoms_gained_grid / cell_areas_m2
+            loss = total_atoms_lost_grid / cell_areas_m2
+            na_next = na_t + gain - loss
 
-            # (2) Gain [atoms/m^2]: このdtで吸着した量
-            # (atoms_gained_grid は [atoms])
-            gain_per_area = atoms_gained_grid / cell_areas_m2
+            # 2. ★★★ ゾンビ在庫対策: 平衡モードだったセルを強制上書き ★★★
+            # na_eq_record_grid が NaN でない場所 = 平衡計算が行われた場所
+            mask_eq = ~np.isnan(na_eq_record_grid)
 
-            # (3) Loss [atoms/m^2]: このdtで放出した量
-            # (total_atoms_lost_grid は [atoms], (4c)で計算済み)
-            loss_per_area = total_atoms_lost_grid / cell_areas_m2
+            # その場所だけ、計算結果を無視して平衡密度(na_eq)を代入する
+            na_next[mask_eq] = na_eq_record_grid[mask_eq]
 
-            # (4) na(t+dt) = na(t) + Gain - Loss
-            na_t_plus_dt_per_m2 = na_t_per_m2 + gain_per_area - loss_per_area
+            # 3. クリップして更新
+            surface_density_grid = np.clip(na_next, 0, None)
 
-            # (5) 表面密度グリッドを更新し、0でクリップ
-            surface_density_grid = np.clip(na_t_plus_dt_per_m2, 0, None)
-
-            # ★★★【要件5】次のステップのために吸着グリッドをコピー ★★★
+            # 次のステップ用に保存
             previous_atoms_gained_grid = atoms_gained_grid.copy()
 
-            # ★★★【要件4】更新ブロック 終了 ★★★
-
-            # --- 4e. (旧 4d.) スナップショット保存判定 ---
-            save_this_step = False
-            if TAA < previous_taa:  # TAAが360->0になった（周回した）
-                target_taa_idx = 0
-
+            # (F) 保存判定 (省略: 変更なし)
+            if TAA < previous_taa: target_taa_idx = 0
             if target_taa_idx < len(TARGET_TAA_DEGREES):
-                current_target_taa = TARGET_TAA_DEGREES[target_taa_idx]
-                # TAA=0 をまたぐ場合の処理
-                is_crossing_zero = (current_target_taa == 0) and \
-                                   ((TAA < previous_taa) or (TAA >= 0 and previous_taa < 0))
-                # 通常のTAAをまたぐ処理
-                is_crossing_normal = (previous_taa < current_target_taa <= TAA)
-
-                if is_crossing_normal or is_crossing_zero:
-                    save_this_step = True
+                tgt = TARGET_TAA_DEGREES[target_taa_idx]
+                if (previous_taa < tgt <= TAA) or (
+                        (tgt == 0) and (TAA < previous_taa or (TAA >= 0 and previous_taa < 0))):
+                    if t_sec >= t_start_run:
+                        pbar.write(f"\n>>> [Run] Saving at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
+                        dgrid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
+                        gmin, gmax = -GRID_MAX_RM * PHYSICAL_CONSTANTS['RM'], GRID_MAX_RM * PHYSICAL_CONSTANTS['RM']
+                        csize = (gmax - gmin) / GRID_RESOLUTION
+                        cvol = csize ** 3
+                        for p in active_particles:
+                            pos = p['pos']
+                            ix = int((pos[0] - gmin) / csize)
+                            iy = int((pos[1] - gmin) / csize)
+                            iz = int((pos[2] - gmin) / csize)
+                            if 0 <= ix < GRID_RESOLUTION and 0 <= iy < GRID_RESOLUTION and 0 <= iz < GRID_RESOLUTION:
+                                dgrid[ix, iy, iz] += p['weight']
+                        dgrid /= cvol
+                        rel_t = t_sec - t_start_run
+                        fname = f"density_grid_t{int(rel_t / 3600):05d}_taa{int(round(TAA)):03d}.npy"
+                        np.save(os.path.join(target_output_dir, fname), dgrid)
+                        fname_s = f"surface_density_t{int(rel_t / 3600):05d}_taa{int(round(TAA)):03d}.npy"
+                        np.save(os.path.join(target_output_dir, fname_s), surface_density_grid)
                     target_taa_idx += 1
-
-            # --- 4f. (旧 4e.) 立方体グリッドに集計して保存 ---
-            if save_this_step and t_sec >= t_start_run:  # Runフェーズのみ保存
-                pbar.write(f"\n>>> [Run] Saving grid snapshot at TAA={TAA:.1f} ({len(active_particles)} particles) <<<")
-
-                # 空間密度グリッドを初期化
-                density_grid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
-                grid_min = -GRID_MAX_RM * PHYSICAL_CONSTANTS['RM']
-                grid_max = GRID_MAX_RM * PHYSICAL_CONSTANTS['RM']
-                cell_size = (grid_max - grid_min) / GRID_RESOLUTION
-                cell_volume_m3 = cell_size ** 3
-
-                # アクティブな粒子をグリッドに集計
-                for p in active_particles:
-                    pos = p['pos']
-                    ix = int((pos[0] - grid_min) / cell_size)
-                    iy = int((pos[1] - grid_min) / cell_size)
-                    iz = int((pos[2] - grid_min) / cell_size)
-                    if 0 <= ix < GRID_RESOLUTION and 0 <= iy < GRID_RESOLUTION and 0 <= iz < GRID_RESOLUTION:
-                        density_grid[ix, iy, iz] += p['weight']
-
-                # SPの重みを実密度に変換 (個数 / 体積)
-                density_grid /= cell_volume_m3
-
-                relative_time_sec = t_sec - t_start_run
-                save_time_h = relative_time_sec / 3600  # [hour]
-
-                # 空間密度グリッドを保存
-                filename = f"density_grid_t{int(save_time_h):05d}_taa{int(round(TAA)):03d}.npy"
-                np.save(os.path.join(target_output_dir, filename), density_grid)
-
-                # 表面密度グリッドも保存
-                filename_surf = f"surface_density_t{int(save_time_h):05d}_taa{int(round(TAA)):03d}.npy"
-                np.save(os.path.join(target_output_dir, filename_surf), surface_density_grid)
-
             previous_taa = TAA
 
-            # --- ★ループの最後で時間を更新 ---
-            pbar.update(current_dt_main)  # pbar を進んだ時間だけ更新
-            t_sec += current_dt_main  # シミュレーション時刻を進める
-            # pbar.update(1) <- ★削除
+            pbar.update(current_dt_main)
+            t_sec += current_dt_main
 
-    end_time = time.time()
-    print(f"\n★★★ シミュレーションが完了しました ★★★")
-    print(f"総計算時間: {(end_time - start_time) / 3600:.2f} 時間")
-
+    print(f"Finished. Total Time: {(time.time() - start_time) / 3600:.2f}h")
 
 if __name__ == '__main__':
-    print("必須ファイルを確認しています...")
-    for f in ['orbit2025.txt', 'SolarSpectrum_Na0.txt']:
-        if not os.path.exists(f):
-            print(f"エラー: 必須ファイル '{f}' が見つかりません。スクリプトと同じディレクトリに配置してください。")
-            if f == 'orbit2025.txt':
-                print("（orbit2025.txt がない場合は、軌道生成スクリプトを先に実行してください）")
-            sys.exit()
-    print("ファイルOK。シミュレーションを開始します。")
+    # 実行前に設定やファイルを確認
+    print("シミュレーションを開始します...")
     main_snapshot_simulation()

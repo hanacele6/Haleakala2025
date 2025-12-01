@@ -99,9 +99,9 @@ if __name__ == '__main__':
 
     # --- 1. 設定 ---
     # ここでTAAを指定してください
-    TAA_TARGET_DEG = 180
+    TAA_TARGET_DEG = 0
 
-    ORBIT_FILE = 'orbit2025_v5.txt'
+    ORBIT_FILE = 'orbit2025_v6.txt'
 
     # --- 2. 軌道ファイルの読み込み ---
     try:

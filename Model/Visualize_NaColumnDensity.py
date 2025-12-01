@@ -28,11 +28,13 @@ import glob  # ファイル検索用
 # (シミュレーションコードの 'target_output_dir' と一致させる)
 # SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS"
 # SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\Grid101_Budget5000_TD"
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\DynamicGrid72x36_3.0"
+#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202511\DynamicGrid72x36_14.0"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\DynamicGrid72x36_12.0"
+#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202511\SubCycle_72x36_3.0"
 
 # 2. プロットしたい TAA (真近点離角)
 # (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 327  # 例: 90度のファイルを探す
+TARGET_TAA = 300 # 例: 90度のファイルを探す
 
 # 3. シミュレーションで使用したグリッド設定
 # (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
@@ -136,7 +138,7 @@ def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
     # ※ PLOT_IN_CM2 = True の場合、[atoms/cm^2] の単位で指定してください
 
     VMIN_MANUAL = 1e8  # カラーバーの最小値
-    VMAX_MANUAL = 1e11  # カラーバーの最大値
+    VMAX_MANUAL = 1e13  # カラーバーの最大値
 
     print(f"プロットを作成中... (TAA={taa}, View={view_from})")  # ★ 変更点
 

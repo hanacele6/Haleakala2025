@@ -271,7 +271,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 # ==============================================================================
 if __name__ == "__main__":
     # --- 1. 基本設定 ---
-    day = "20251021"
+    day = "20251103"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"

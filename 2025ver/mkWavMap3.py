@@ -315,7 +315,7 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, flgPause=True, save
 # ==============================================================================
 if __name__ == "__main__":
     base_dir = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/"
-    master_sky_filepath = os.path.join(base_dir, "output/20251021/master_sky.fits")#変えるのはここ
+    master_sky_filepath = os.path.join(base_dir, "output/20251103/master_sky.fits")#変えるのはここ
     solar_spectrum_directory = os.path.join(base_dir, "psg/")
     calibration_params = {
         #'wlinesM': np.array([588.544, 589.157, 589.449, 589.756, 590.732, 591.580, 591.789]),

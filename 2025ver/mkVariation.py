@@ -11,13 +11,13 @@ if __name__ == '__main__':
     # --- 基本設定 ---
     # 処理したい日付のリスト。ここに日付を追加すれば、自動で集計対象になります。
     #days_to_process = ["20250701", "20250702", "20250703", "20250705", "20250706", "20250707", "20250709", "20250710","20250711", "20250712", "20250713", "20250716", "20250717", "20250720"]
-    days_to_process = ["20251009", "20251014","20251015", "20251020", "20251021"]
+    days_to_process = ["20251009", "20251014","20251015", "20251020", "20251021","20251023", "20251029","20251031"]
 
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
 
     # --- 入力ファイルと出力ファイル ---
     # このスクリプトは、複数の日の結果を一つのファイルにまとめます
-    output_filename = base_dir / 'output' / 'DailyVariation_Summary_202510_1.dat' #ここ変えるでい
+    output_filename = base_dir / 'output' / 'DailyVariation_Summary_202510_2.dat' #ここ変えるでい
     # 位相角補正用のファイル
     correction_file = base_dir / 'PA_correction2.txt'
 
