@@ -22,17 +22,17 @@ GRID_RESOLUTION = 101
 GRID_MAX_RM = 5.0
 
 # ★★★ .npy ファイルが保存されているディレクトリパス
-output_dir = r"./SimulationResult_202511\DynamicGrid72x36_14.0"
+output_dir = r"./SimulationResult_202511\DynamicGrid72x36_15.0"
 #output_dir = r"./SimulationResult_202511\SubCycle_144x72_4.0"
 #output_dir = r"./SimulationResult_202511\Stabilized_v2_Grid72x36_SPS1000"
 
 
 
 # プロット選択 ("DAYSIDE_TOTAL", "DAWN", "DUSK")
-PLOT_MODE = "DAYSIDE_TOTAL"
+#PLOT_MODE = "DAYSIDE_TOTAL"
 #PLOT_MODE = "DUSK"
 #PLOT_MODE = "DAWN"
-#PLOT_MODE = "ALL"
+PLOT_MODE = "ALL"
 
 # --- 3. グリッド計算準備 ---
 grid_total_width_m = 2 * GRID_MAX_RM * RM_m

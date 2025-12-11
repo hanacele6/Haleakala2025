@@ -8,29 +8,31 @@ import matplotlib.pyplot as plt
 CONST = {
     'PI': np.pi,
     'RM': 2.440e6,  # 水星半径 [m]
-    'GM': 2.2032e13,  # 重力定数 (水星)
-    'KB': 1.380649e-23,  # ボルツマン定数
-    'M_NA': 3.8175e-26,  # Na質量 [kg]
+    'GM': 2.2032e13,  # 重力定数 * 水星質量 [m^3/s^2]
+    'KB': 1.380649e-23,  # ボルツマン定数 [J/K]
+    'M_NA': 3.8175e-26,  # Na原子質量 [kg]
     'AU_M': 1.496e11,  # 1AU [m]
 }
 
 # グリッド設定
 GRID_OPTS = {
-    'SURF_LON': 72,
-    'SURF_LAT': 36,
+    'SURF_LON': 144,
+    'SURF_LAT': 72,
     'SPATIAL_RES': 101,
 }
 
 
 # ==============================================================================
-# 2. 物理計算ヘルパー関数 (改良版RK4)
+# 2. 物理計算ヘルパー関数
 # ==============================================================================
 def get_temp_perihelion_subsolar():
+    """近日点・直下点の表面温度概算"""
     r_au = 0.307
     return 100.0 + 600.0 * (1.0 ** 0.25) * ((0.306 / r_au) ** 2)
 
 
 def generate_particles(num_particles, temp_k, lon_center, lat_center, d_lon, d_lat, mode='random'):
+    """初期粒子の生成"""
     if mode == 'center':
         rnd_lon = np.full(num_particles, lon_center)
         rnd_lat = np.full(num_particles, lat_center)
@@ -38,15 +40,18 @@ def generate_particles(num_particles, temp_k, lon_center, lat_center, d_lon, d_l
         rnd_lon = (np.random.random(num_particles) - 0.5) * d_lon + lon_center
         rnd_lat = (np.random.random(num_particles) - 0.5) * d_lat + lat_center
 
+    # 球面上の位置
     x = CONST['RM'] * np.cos(rnd_lat) * np.cos(rnd_lon)
     y = CONST['RM'] * np.cos(rnd_lat) * np.sin(rnd_lon)
     z = CONST['RM'] * np.sin(rnd_lat)
     pos = np.stack([x, y, z], axis=1)
 
+    # Maxwell-Boltzmann分布に従う速度エネルギー
     kT = CONST['KB'] * temp_k
     E = np.random.gamma(2.0, kT, num_particles)
     spd = np.sqrt(2.0 * E / CONST['M_NA'])
 
+    # 速度方向 (Cosine分布)
     u1, u2 = np.random.random(num_particles), np.random.random(num_particles)
     phi, sin_theta = 2 * CONST['PI'] * u1, np.sqrt(u2)
 
@@ -54,8 +59,10 @@ def generate_particles(num_particles, temp_k, lon_center, lat_center, d_lon, d_l
     ly = sin_theta * np.sin(phi)
     lz = np.sqrt(1 - u2)
 
+    # 局所座標系からグローバル座標系への回転
     nx, ny, nz = x / CONST['RM'], y / CONST['RM'], z / CONST['RM']
     world_up = np.array([0, 0, 1])
+    # 北極・南極付近での外積ゼロ対策
     vec_e = np.cross(world_up, np.stack([nx, ny, nz], axis=1))
     norm_e = np.linalg.norm(vec_e, axis=1, keepdims=True)
     vec_e = np.where(norm_e > 1e-6, vec_e / norm_e, np.array([1, 0, 0]))
@@ -66,6 +73,7 @@ def generate_particles(num_particles, temp_k, lon_center, lat_center, d_lon, d_l
 
 
 def get_acceleration(pos):
+    """重力加速度の計算"""
     r_sq = np.sum(pos ** 2, axis=1)[:, None]
     r_mag = np.sqrt(r_sq)
 
@@ -73,10 +81,6 @@ def get_acceleration(pos):
     with np.errstate(divide='ignore', invalid='ignore'):
         acc = -CONST['GM'] * pos / (r_mag ** 3)
 
-    # ★修正箇所★
-    # r_mag == 0 は (N, 1) の形状ですが、acc は (N, 3) なので
-    # そのままインデックスに使うとエラーになります。
-    # .flatten() して (N,) の1次元配列にすれば行を指定できます。
     mask = (r_mag == 0).flatten()
     acc[mask] = 0.0
 
@@ -86,6 +90,7 @@ def get_acceleration(pos):
 def run_trajectory_rk4(pos, vel, duration, dt_step):
     """
     着地時の位置補間機能付き RK4
+    ★修正済み：線形補間ではなく、重力を考慮した弾道計算で着地点を予測する
     """
     num_steps = int(duration / dt_step)
     # 軌跡配列: [step, particle_id, xyz]
@@ -98,12 +103,12 @@ def run_trajectory_rk4(pos, vel, duration, dt_step):
     is_stopped = np.zeros(len(pos), dtype=bool)
 
     for i in range(num_steps):
-        # 既に止まっている粒子は動かさない（前の位置を維持）
+        # 全粒子停止時はループ終了
         if np.all(is_stopped):
             trajectory[i + 1:] = curr_pos
             break
 
-        # RK4 計算
+        # --- RK4 計算 ---
         k1_v = dt_step * get_acceleration(curr_pos)
         k1_p = dt_step * curr_vel
         k2_v = dt_step * get_acceleration(curr_pos + 0.5 * k1_p)
@@ -116,32 +121,59 @@ def run_trajectory_rk4(pos, vel, duration, dt_step):
         next_pos = curr_pos + (k1_p + 2 * k2_p + 2 * k3_p + k4_p) / 6.0
         next_vel = curr_vel + (k1_v + 2 * k2_v + 2 * k3_v + k4_v) / 6.0
 
-        # --- 着地判定と補間 ---
-        dist_curr = np.linalg.norm(curr_pos, axis=1)
+        # --- 着地判定と補間（ここを修正） ---
         dist_next = np.linalg.norm(next_pos, axis=1)
 
         # 今回のステップで新しく地下に潜った粒子
         just_landed = (~is_stopped) & (dist_next < CONST['RM'])
 
         if np.any(just_landed):
-            r_c = dist_curr[just_landed]
-            r_n = dist_next[just_landed]
+            # 該当粒子のステップ開始時の状態
+            p_now = curr_pos[just_landed]
+            v_now = curr_vel[just_landed]
 
+            # --- 修正: 弾道計算による着地点推定 ---
+            # 1. 現在位置での重力加速度の大きさ g を計算
+            r_sq_now = np.sum(p_now ** 2, axis=1)
+            r_mag_now = np.sqrt(r_sq_now)
+            g_mag = CONST['GM'] / r_sq_now
+
+            # 2. 鉛直方向の速度成分 v_perp (動径方向成分)
+            #    正規化ベクトル n = p / |p|
+            n_vec = p_now / r_mag_now[:, None]
+            v_perp = np.sum(v_now * n_vec, axis=1)
+
+            # 3. 滞空時間 t_flight の近似計算
+            #    鉛直投げ上げの式: h(t) = v_perp * t - 0.5 * g * t^2
+            #    h(t)=0 となる t (t!=0) は t = 2 * v_perp / g
+            #    ※ v_perp > 0 であることが前提（放出直後なので通常は正）
+            #    ゼロ除算回避のため g_mag に微小値を足すか、あるいはそのまま計算
+            with np.errstate(divide='ignore', invalid='ignore'):
+                t_flight = 2.0 * v_perp / g_mag
+
+            # 計算結果が異常（負、またはステップより長い）な場合の安全策
+            # 物理的にはあり得ないが数値誤差対策としてクリップ
+            t_flight = np.nan_to_num(t_flight)
+            t_flight = np.clip(t_flight, 0.0, dt_step)
+
+            # 4. 着地点の推定
+            #    r(t) = r0 + v0*t + 0.5*a*t^2
+            acc_vec = -n_vec * g_mag[:, None]  # 重力ベクトル
+
+            hit_pos_est = p_now + v_now * t_flight[:, None] + 0.5 * acc_vec * (t_flight[:, None] ** 2)
+
+            # 数値誤差で RM からわずかにズレるのを防ぐため、強制的に表面へ投影
+            hit_dist = np.linalg.norm(hit_pos_est, axis=1)
             # ゼロ除算防止
-            denom = r_n - r_c
-            denom[denom == 0] = -1e-9
+            hit_dist[hit_dist == 0] = 1.0
+            hit_pos_est = hit_pos_est * (CONST['RM'] / hit_dist[:, None])
 
-            fraction = (CONST['RM'] - r_c) / denom
-            fraction = np.clip(fraction, 0.0, 1.0)
-
-            delta_pos = next_pos[just_landed] - curr_pos[just_landed]
-            hit_pos = curr_pos[just_landed] + delta_pos * fraction[:, None]
-
-            next_pos[just_landed] = hit_pos
+            # 結果を適用
+            next_pos[just_landed] = hit_pos_est
             next_vel[just_landed] = 0.0
             is_stopped[just_landed] = True
 
-        # 既に止まっている粒子は位置更新しない
+        # 既に止まっている粒子は位置更新しない（前の位置を維持）
         already_stopped = is_stopped & (~just_landed)
         next_pos[already_stopped] = trajectory[i][already_stopped]
         next_vel[already_stopped] = 0.0
@@ -164,13 +196,17 @@ def visualize_detailed_migration():
 
     N_PARTICLES = 10000
     N_TRACE = 30
-    TOTAL_TIME = 500.0
-    DT_STEP = 10.0
+
+    # タイムステップが大きくても動作するかの確認設定
+    TOTAL_TIME = 500.0  # 十分な飛行時間を確保
+    DT_STEP = 500.0  # ★先生の指定：大きなタイムステップ
 
     d_lon = 2 * np.pi / GRID_OPTS['SURF_LON']
     d_lat = np.pi / GRID_OPTS['SURF_LAT']
 
     print(f"Generating particles... Mode: {EMISSION_MODE}")
+    print(f"Simulation: Time={TOTAL_TIME}s, dt={DT_STEP}s")
+
     temp = get_temp_perihelion_subsolar()
     pos0, vel0 = generate_particles(N_PARTICLES, temp, 0.0, 0.0, d_lon, d_lat, mode=EMISSION_MODE)
 
@@ -196,6 +232,7 @@ def visualize_detailed_migration():
         r = np.linalg.norm(p_arr, axis=1)
         alt = (r - CONST['RM']) / 1000.0  # km
         lon = np.arctan2(p_arr[:, 1], p_arr[:, 0])
+        # 中心経度0付近での展開
         d_lon_rad = lon - 0.0
         d_lon_rad = (d_lon_rad + np.pi) % (2 * np.pi) - np.pi
         dist_ew = (CONST['RM'] * d_lon_rad) / 1000.0
@@ -206,7 +243,7 @@ def visualize_detailed_migration():
     # --------------------------------------------------------------------------
     fig1 = plt.figure(figsize=(10, 8))
     ax1 = fig1.add_subplot(1, 1, 1)
-    ax1.set_title(f"Top-Down View ({EMISSION_MODE.capitalize()} Emission)")
+    ax1.set_title(f"Top-Down View (dt={DT_STEP}s, {EMISSION_MODE})")
 
     lon_end_deg, lat_end_deg = to_deg(pos_end)
     grid_w_deg = np.degrees(d_lon)
@@ -223,6 +260,7 @@ def visualize_detailed_migration():
         ax1.scatter(lon_end_deg[is_landed], lat_end_deg[is_landed],
                     s=15, c='red', marker='x', alpha=0.8, label='Landed')
 
+    # グリッド描画
     for i in range(-4, 5):
         offset_x = (i + 0.5) * grid_w_deg
         offset_x_m = (i - 0.5) * grid_w_deg
@@ -247,14 +285,14 @@ def visualize_detailed_migration():
     ax1.set_aspect('equal')
     ax1.set_xlim(-15, 15)
     ax1.set_ylim(-10, 10)
-    ax1.grid(False)
+    ax1.legend(loc='lower right')
 
     # --------------------------------------------------------------------------
     # Figure 2: Side View (East-West Cross Section)
     # --------------------------------------------------------------------------
     fig2 = plt.figure(figsize=(10, 8))
     ax2 = fig2.add_subplot(1, 1, 1)
-    ax2.set_title(f"East-West Cross Section ({EMISSION_MODE.capitalize()})")
+    ax2.set_title(f"East-West Cross Section (dt={DT_STEP}s)")
 
     ew_end, alt_end = to_ew_alt(pos_end)
 
@@ -263,12 +301,20 @@ def visualize_detailed_migration():
     if np.any(is_landed):
         ax2.scatter(ew_end[is_landed], alt_end[is_landed], s=20, c='red', marker='x', alpha=0.8, label='Landed')
 
-    for i in range(N_TRACE):
-        color = 'red' if is_landed[i] else 'black'
-        alpha = 0.8 if is_landed[i] else 0.4
+    # 軌跡の描画（サンプリング）
+    for i in range(min(N_TRACE, len(traj[0]))):
+        # 該当粒子が着地済みか
+        landed_idx = is_landed[i]
+        color = 'red' if landed_idx else 'black'
+        alpha = 0.8 if landed_idx else 0.4
 
-        ew_hist, alt_hist = to_ew_alt(traj[:, i, :])
-        ax2.plot(ew_hist, alt_hist, c=color, alpha=alpha, lw=1)
+        # 軌跡データを取り出し
+        p_trace = traj[:, i, :]
+        ew_hist, alt_hist = to_ew_alt(p_trace)
+
+        # RK4のステップが粗いので、単純にplotするとカクカクするが、
+        # 始点と終点の位置関係が正しいかを確認する
+        ax2.plot(ew_hist, alt_hist, c=color, alpha=alpha, lw=1, marker='.')
 
     grid_km_w = (CONST['RM'] * d_lon) / 1000.0
     for i in range(0, 5):
@@ -282,12 +328,13 @@ def visualize_detailed_migration():
         h_grid = i * spatial_cell_size
         ax2.axhline(h_grid, color='blue', linestyle=':', alpha=0.6, label='Spatial Grid' if i == 1 else "")
 
-    ax2.set_xlabel("East-West Distance [km] (West <--- 0 ---> East)")
+    ax2.set_xlabel("East-West Distance [km]")
     ax2.set_ylabel("Altitude [km]")
     ax2.set_xlim(-600, 600)
     ax2.set_ylim(0, 600)
     ax2.legend(loc='upper right')
 
+    plt.tight_layout()
     plt.show()
 
 

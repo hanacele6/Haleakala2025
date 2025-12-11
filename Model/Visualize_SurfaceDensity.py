@@ -5,9 +5,10 @@
 ==============================================================================
 シミュレーション結果の表面密度グリッド (.npy) を読み込みプロットします。
 
-★修正点 (2025/11/24 v2)★
-- カラースケール（カラーバー）の最大値・最小値を固定する機能を追加。
-- 太陽直下点を中央にする補正機能（前回追加分）も維持。
+★修正点 (2025/11/24 v3)★
+- ファイル検索ロジックを修正 (density_grid経由でTAAを特定)
+- 太陽直下点の計算ロジックをシミュレーションコードと統一 (計算式ベースに変更)
+- カラースケール固定機能などは維持
 """
 
 import numpy as np
@@ -26,25 +27,21 @@ import sys
 N_LON, N_LAT = 72, 36
 
 # 2. 出力ディレクトリ
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202510"
-#BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202511"
+# BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202510"
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202511"
 
 # 3. RUN名
-RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_10.0"
-#RUN_NAME = f"SubCycle_{N_LON}x{N_LAT}_3.0"
+RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_16.0"  # 実行したフォルダ名に合わせてください
+# RUN_NAME = f"SubCycle_{N_LON}x{N_LAT}_3.0"
 
 # 4. プロット対象 (TAA指定 または 'latest')
-FILE_TO_PLOT = 100
+FILE_TO_PLOT = 240
 
 # 5. カラースケール設定
 USE_LOG_SCALE = True
 
-# ★★★ 5b. カラースケール範囲の固定 (新規追加) ★★★
-# Trueにすると、以下の COLOR_VMIN, COLOR_VMAX で色を固定します。
-# Falseにすると、そのデータの最小値・最大値に合わせて自動調整されます。
+# 5b. カラースケール範囲の固定
 FIX_COLOR_SCALE = True
-
-# 固定する場合の値 (USE_LOG_SCALE=True の場合は、0より大きい値を指定してください)
 COLOR_VMIN = 1.0e10  # 下限 [atoms/m^2]
 COLOR_VMAX = 1.0e18  # 上限 [atoms/m^2]
 
@@ -52,14 +49,11 @@ COLOR_VMAX = 1.0e18  # 上限 [atoms/m^2]
 ORBIT_FILE_PATH = 'orbit2025_v6.txt'
 
 # 7. 太陽中心補正のON/OFF
-# True: 太陽直下点が画像の中心(0度)に来るようにグリッドを回転させる (MSO風)
 ALIGN_SUN_TO_CENTER = True
 
-# 8. 手動回転補正 (予備)
-MANUAL_OFFSET_DEG = 0.0
-
-# 水星の1公転周期 [s]
+# 物理定数
 MERCURY_YEAR_SEC = 87.97 * 24 * 3600
+ROTATION_PERIOD = 58.6462 * 86400
 
 
 # ==============================================================================
@@ -70,10 +64,14 @@ def load_orbit_data(orbit_file_path):
     """軌道ファイルを読み込み、データ全体と基準時刻(TAA=0)を返します。"""
     try:
         orbit_data = np.loadtxt(orbit_file_path)
+        # 0:TAA, 1:AU, 2:Time, ...
         taa_col = orbit_data[:, 0]
         time_col = orbit_data[:, 2]
+
+        # 近日点(TAA=0)の時刻を探す
         idx_perihelion = np.argmin(np.abs(taa_col))
         t_start_run = time_col[idx_perihelion]
+
         print(f"軌道ファイル読み込み成功: 行数={len(orbit_data)}")
         print(f"基準時刻 (TAA=0): {t_start_run:.1f} s")
         return orbit_data, t_start_run
@@ -82,49 +80,104 @@ def load_orbit_data(orbit_file_path):
         sys.exit(1)
 
 
-def get_subsolar_longitude_from_file(time_h, t_start_run, orbit_data):
-    """指定時刻の太陽直下点経度を軌道ファイルから取得"""
+def calculate_subsolar_longitude(time_h, t_start_run, orbit_data):
+    """
+    指定時刻の太陽直下点経度を計算します（シミュレーションコードと同一ロジック）
+    """
     relative_time_sec = float(time_h) * 3600.0
     current_t_sec = t_start_run + relative_time_sec
 
-    # ★重要: 水星の太陽直下点は「2公転(176日)」で1周します。
-    current_time_in_orbit = current_t_sec % MERCURY_YEAR_SEC
+    # 軌道周期内での時刻
+    cycle_sec = 87.969 * 86400  # ORBITAL_PERIOD
+    dt_from_peri = (current_t_sec - t_start_run)
+    time_in_cycle = dt_from_peri % cycle_sec
 
-    orbit_time_col = orbit_data[:, 2]
-    orbit_subsolar_col = orbit_data[:, 5]  # 5列目(太陽直下点経度)
+    # 軌道データからTAAを補間
+    time_col_original = orbit_data[:, 2]
+    # ファイル内の近日点時刻を取得して補正
+    idx_peri = np.argmin(np.abs(orbit_data[:, 0]))
+    t_peri_in_file = time_col_original[idx_peri]
+    t_lookup = t_peri_in_file + time_in_cycle
 
-    subsolar_lon_deg = np.interp(current_time_in_orbit, orbit_time_col, orbit_subsolar_col)
-    subsolar_lon_rad = np.deg2rad(subsolar_lon_deg)
+    taa_deg = np.interp(t_lookup, time_col_original, orbit_data[:, 0])
+    taa_rad = np.deg2rad(taa_deg)
+
+    # 自転角の計算
+    omega_rot = 2 * np.pi / ROTATION_PERIOD
+    rotation_angle = omega_rot * dt_from_peri
+
+    # 太陽直下点経度 (Subsolar Longitude)
+    subsolar_lon_rad = taa_rad - rotation_angle
     subsolar_lon_rad = (subsolar_lon_rad + np.pi) % (2 * np.pi) - np.pi
+
     return subsolar_lon_rad
 
 
 def find_target_file(target_dir, preference):
-    """指定された条件に合うファイルを探す"""
-    search_path = os.path.join(target_dir, "surface_density_*.npy")
-    files = glob.glob(search_path)
-    if not files: return None
+    """
+    density_grid (TAA付き) を検索してIDを特定し、surface_density ファイルを返す
+    """
+    # まず density_grid_*.npy を探す (TAA情報が含まれているため)
+    search_path_grid = os.path.join(target_dir, "density_grid_*.npy")
+    grid_files = glob.glob(search_path_grid)
 
-    file_info_list = []
-    for f in files:
+    if not grid_files:
+        print("エラー: density_grid ファイルが見つかりません。")
+        return None
+
+    # (TAA, TimeID, FullPath) のリストを作成
+    candidates = []
+    for f in grid_files:
+        # density_grid_tXXXXX_taaYYY.npy
         match = re.search(r'_t(\d+)_taa(\d+)\.npy$', os.path.basename(f))
         if match:
-            file_info_list.append((int(match.group(1)), int(match.group(2)), f))
+            time_id = int(match.group(1))  # tXXXXX
+            taa_val = int(match.group(2))  # taaYYY
+            candidates.append((taa_val, time_id, f))
 
-    if not file_info_list: return None
-    file_info_list.sort(key=lambda x: x[0])
+    if not candidates:
+        return None
+
+    # TAAでソート
+    candidates.sort(key=lambda x: x[0])
+
+    selected_time_id = None
+    target_taa_disp = "Latest"
 
     if isinstance(preference, (int, float)):
+        # 指定されたTAAに近いものを探す
         target_taa = int(preference)
-        candidates = [x for x in file_info_list if x[1] == target_taa]
-        if candidates: return candidates[-1][2], candidates[-1][0]
-        print(f"TAA={target_taa} が見つかりません。最新を表示します。")
+        # 完全一致を探す
+        matches = [c for c in candidates if c[0] == target_taa]
+        if matches:
+            # 複数ある場合は最後（最新）のもの
+            selected_time_id = matches[-1][1]
+            target_taa_disp = matches[-1][0]
+        else:
+            # 近似検索する場合（オプション）
+            print(f"TAA={target_taa} の完全一致なし。最新を表示します。")
+            selected_time_id = candidates[-1][1]
+            target_taa_disp = candidates[-1][0]
+    else:
+        # 'latest' の場合
+        selected_time_id = candidates[-1][1]
+        target_taa_disp = candidates[-1][0]
 
-    return file_info_list[-1][2], file_info_list[-1][0]
+    # 表面密度ファイルのパスを構築
+    # surface_density_tXXXXX.npy
+    surf_filename = f"surface_density_t{selected_time_id:05d}.npy"
+    surf_filepath = os.path.join(target_dir, surf_filename)
+
+    if not os.path.exists(surf_filepath):
+        print(f"エラー: 対応する表面ファイルが見つかりません -> {surf_filename}")
+        return None
+
+    print(f"Plotting Target: TAA={target_taa_disp} (TimeID={selected_time_id})")
+    return surf_filepath, selected_time_id
 
 
 # ==============================================================================
-# プロット関数 (修正版)
+# プロット関数
 # ==============================================================================
 
 def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbit_data,
@@ -133,23 +186,28 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
     try:
         data_fixed = np.load(filepath)
     except Exception as e:
-        print(e);
+        print(e)
         return
 
     if data_fixed.shape != (n_lon, n_lat):
-        print(f"形状不一致: Data{data_fixed.shape} != Config({n_lon}, {n_lat})");
+        print(f"形状不一致: Data{data_fixed.shape} != Config({n_lon}, {n_lat})")
         return
 
-    # --- 軌道計算 ---
-    subsolar_lon_rad_fixed = get_subsolar_longitude_from_file(time_h, t_start_run, orbit_data)
+    # --- 軌道計算 (修正版関数を使用) ---
+    subsolar_lon_rad_fixed = calculate_subsolar_longitude(time_h, t_start_run, orbit_data)
     subsolar_lon_deg_fixed = np.rad2deg(subsolar_lon_rad_fixed)
 
     # --- データの回転処理 ---
     if align_sun:
         dlon_deg = 360.0 / n_lon
+        # 太陽がグリッド上のどこにあるか (index)
         sun_index_float = (subsolar_lon_deg_fixed + 180.0) / dlon_deg
         sun_index = int(np.round(sun_index_float)) % n_lon
+
+        # 画像の中心 (index)
         center_index = n_lon // 2
+
+        # 太陽(sun_index) を 中心(center_index) に持ってくるためのシフト量
         shift_amount = center_index - sun_index
         data_to_plot = np.roll(data_fixed, shift=shift_amount, axis=0)
 
@@ -166,27 +224,19 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
     # --- プロット準備 ---
     data_to_plot_T = data_to_plot.T
 
-    # 自動スケール用の最小値・最大値計算
-    valid_min_auto = 1e8
-    if np.any(data_to_plot_T > 0):
-        valid_min_auto = np.min(data_to_plot_T[data_to_plot_T > 0])
-    max_auto = np.max(data_to_plot_T)
-
-    # 最終的な vmin, vmax の決定
+    # スケール設定
     if fix_scale and (vmin_fixed is not None) and (vmax_fixed is not None):
-        # 固定モード
         final_vmin = vmin_fixed
         final_vmax = vmax_fixed
     else:
-        # 自動モード
+        valid_min_auto = 1e8
+        if np.any(data_to_plot_T > 0):
+            valid_min_auto = np.min(data_to_plot_T[data_to_plot_T > 0])
         final_vmin = valid_min_auto
-        final_vmax = max_auto
+        final_vmax = np.max(data_to_plot_T)
 
-    # ノルム(色割り当て)の設定
     if use_log:
-        # ログスケールで vmin <= 0 だとエラーになるため保護
-        if final_vmin <= 0:
-            final_vmin = 1e-10  # 極小値を入れる
+        if final_vmin <= 0: final_vmin = 1e-10
         norm = LogNorm(vmin=final_vmin, vmax=final_vmax)
     else:
         norm = Normalize(vmin=final_vmin, vmax=final_vmax)
@@ -198,7 +248,6 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
     plt.figure(figsize=(12, 6))
     ax = plt.gca()
 
-    # pcolormeshでは norm を指定すれば vmin/vmax 引数は不要
     mesh = ax.pcolormesh(lon_edges_deg, lat_edges_deg, data_to_plot_T,
                          shading='flat', cmap='inferno', norm=norm)
 
@@ -231,17 +280,25 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
 # ==============================================================================
 
 if __name__ == "__main__":
+    if not os.path.exists(ORBIT_FILE_PATH):
+        print(f"エラー: 軌道ファイルがありません {ORBIT_FILE_PATH}")
+        sys.exit(1)
+
     # 1. 軌道データを読み込む
     orbit_data_full, t_start = load_orbit_data(ORBIT_FILE_PATH)
 
     # 2. ファイルを探す
     full_output_dir = os.path.join(BASE_OUTPUT_DIRECTORY, RUN_NAME)
+
+    if not os.path.exists(full_output_dir):
+        print(f"エラー: 結果フォルダが見つかりません {full_output_dir}")
+        sys.exit(1)
+
     res = find_target_file(full_output_dir, FILE_TO_PLOT)
 
     if res:
         fpath, th = res
         # 3. プロット実行
-        # 設定変数を引数として渡します
         plot_surface_grid(
             fpath, th, N_LON, N_LAT, USE_LOG_SCALE,
             t_start, orbit_data_full,
@@ -251,4 +308,4 @@ if __name__ == "__main__":
             vmax_fixed=COLOR_VMAX
         )
     else:
-        print("ファイルが見つかりませんでした。終了します。")
+        print("プロット可能なファイルが見つかりませんでした。")
