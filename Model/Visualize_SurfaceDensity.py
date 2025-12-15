@@ -31,11 +31,11 @@ N_LON, N_LAT = 72, 36
 BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202511"
 
 # 3. RUN名
-RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_16.0"  # 実行したフォルダ名に合わせてください
+RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_18.0"  # 実行したフォルダ名に合わせてください
 # RUN_NAME = f"SubCycle_{N_LON}x{N_LAT}_3.0"
 
 # 4. プロット対象 (TAA指定 または 'latest')
-FILE_TO_PLOT = 240
+FILE_TO_PLOT = 0
 
 # 5. カラースケール設定
 USE_LOG_SCALE = True
@@ -235,7 +235,15 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
         final_vmin = valid_min_auto
         final_vmax = np.max(data_to_plot_T)
 
+    import copy
+    # 1. カラーマップ 'inferno' のコピーを作成して編集可能にする
+    my_cmap = copy.copy(plt.get_cmap('inferno'))
+
+    # 2. 値が 0 (Log計算不能) の場所の色を「黒 ('black')」に設定する
+    my_cmap.set_bad(color='black')
+
     if use_log:
+        # vmin が 0 以下だとエラーになるので、非常に小さい正の値にクリップする
         if final_vmin <= 0: final_vmin = 1e-10
         norm = LogNorm(vmin=final_vmin, vmax=final_vmax)
     else:
@@ -249,7 +257,7 @@ def plot_surface_grid(filepath, time_h, n_lon, n_lat, use_log, t_start_run, orbi
     ax = plt.gca()
 
     mesh = ax.pcolormesh(lon_edges_deg, lat_edges_deg, data_to_plot_T,
-                         shading='flat', cmap='inferno', norm=norm)
+                         shading='flat', cmap=my_cmap, norm=norm)
 
     cbar = plt.colorbar(mesh, ax=ax)
     cbar.set_label('Surface Density [atoms/m^2]')

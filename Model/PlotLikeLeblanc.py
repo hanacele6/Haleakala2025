@@ -9,8 +9,9 @@ import glob
 # 設定
 # ==============================================================================
 #RESULT_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
+RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_NoEq"
 #RESULT_DIR = r"./SimulationResult_202511/SubCycle_72x36_2.0"
-RESULT_DIR = r"./SimulationResult_202512/SmartSample_72x36_1.0"
+#RESULT_DIR = r"./SimulationResult_202512/SmartSample_72x36_1.0"
 
 RM = 2.440e6  # 水星半径 [m]
 PI = np.pi
