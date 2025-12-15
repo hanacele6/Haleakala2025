@@ -35,7 +35,7 @@ RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_18.0"  # 実行したフォルダ名に�
 # RUN_NAME = f"SubCycle_{N_LON}x{N_LAT}_3.0"
 
 # 4. プロット対象 (TAA指定 または 'latest')
-FILE_TO_PLOT = 0
+FILE_TO_PLOT = 30
 
 # 5. カラースケール設定
 USE_LOG_SCALE = True

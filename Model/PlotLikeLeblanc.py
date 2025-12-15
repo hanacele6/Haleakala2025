@@ -8,8 +8,8 @@ import glob
 # ==============================================================================
 # 設定
 # ==============================================================================
-#RESULT_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
-RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_NoEq"
+RESULT_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
+#RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_NoEq"
 #RESULT_DIR = r"./SimulationResult_202511/SubCycle_72x36_2.0"
 #RESULT_DIR = r"./SimulationResult_202512/SmartSample_72x36_1.0"
 
@@ -181,7 +181,7 @@ def main():
     plt.tight_layout()
 
     save_path = "leblanc_fig5_corrected.png"
-    plt.savefig(save_path, dpi=300)
+    #plt.savefig(save_path, dpi=300)
     print(f"グラフを保存しました: {save_path}")
     plt.show()
 

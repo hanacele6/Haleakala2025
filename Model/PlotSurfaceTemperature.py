@@ -58,14 +58,14 @@ def calculate_surface_temperature_leblanc(lon_fixed_rad, lat_rad, AU, subsolar_l
     # --- ここからがシミュレーションコードの計算式 ---
 
     # 論文の T0, T1 とは異なる、シミュレーションコード内の係数設定
-    T0 = 100.0  # (シミュレーションコードでの T0)
-    T1 = 600.0  # (シミュレーションコードでの T1)
+    T0 = 600.0  # (シミュレーションコードでの T0)
+    T1 = 100.0  # (シミュレーションコードでの T1)
 
     # 要求された (0.306 / AU)**2 のスケーリングファクター
-    scaling_factor = (0.306 / AU) ** 2
+    scaling_factor = (0.306 / AU) ** (1/2)
 
     # シミュレーションコードの計算式
-    return T0 + T1 * (cos_theta ** 0.25) * scaling_factor
+    return T0* scaling_factor + T1 * (cos_theta ** 0.25)
 
 
 # ==============================================================================
@@ -99,7 +99,7 @@ if __name__ == '__main__':
 
     # --- 1. 設定 ---
     # ここでTAAを指定してください
-    TAA_TARGET_DEG = 0
+    TAA_TARGET_DEG = 180
 
     ORBIT_FILE = 'orbit2025_v6.txt'
 
