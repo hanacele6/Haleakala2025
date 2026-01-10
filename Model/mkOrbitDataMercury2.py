@@ -75,7 +75,7 @@ def generate_precise_orbit_file():
 
     # 時間分解能を維持するためにステップ数も増やす
     # (例: 1日4回 = 6時間ごとのデータなら十分)
-    N_STEPS = int(DURATION_DAYS * 10)
+    N_STEPS = int(DURATION_DAYS * 72)
 
     #t_array = np.linspace(0, MERCURY_YEAR_DAYS * 24 * 3600, N_STEPS)
     t_array = np.linspace(0, DURATION_DAYS * 24 * 3600, N_STEPS)
@@ -151,9 +151,23 @@ def generate_precise_orbit_file():
             sub_lon_deg  # 6. SubSolarLon [deg]
         ])
 
-    # --- 4. ファイル出力 ---
+    ## リストをnumpy配列に変換（計算しやすいように）
     output_data = np.array(output_rows)
-    filename = 'orbit2025_spice.txt'
+
+    # 6列目 (index 5) が SubSolarLon です
+    raw_lon_deg = output_data[:, 5]
+
+    # 【重要】保存する前にここで unwrap (連続化) する
+    # degrees -> radians -> unwrap -> degrees の順で変換
+    # これにより 179 -> -179 ではなく 179 -> 181 になります
+    unwrapped_lon_rad = np.unwrap(np.radians(raw_lon_deg))
+    unwrapped_lon_deg = np.degrees(unwrapped_lon_rad)
+
+    # データを書き換え
+    output_data[:, 5] = unwrapped_lon_deg
+
+    # --- 4. ファイル出力 ---
+    filename = 'orbit2025_spice_unwrapped.txt' # 分かりやすく名前変更推奨
 
     header_str = 'TAA[deg]  AU[-]  Time[s]  V_radial_ms[m/s]  V_tangential_ms[m/s]  SubSolarLon_Fixed[deg]'
 
@@ -161,15 +175,13 @@ def generate_precise_orbit_file():
 
     print("-" * 30)
     print(f"'{filename}' を生成しました。")
-    print("【以前のコードとの違い】")
-    print("1. 軌道が楕円近似ではなく、実際の摂動を含んだ軌道です。")
-    print("2. 速度ベクトルが厳密になり、ドップラーシフト計算(Na D線)の精度が向上します。")
-    print("3. SubSolarLonが、3:2共鳴の近似式ではなく、実測の「秤動(Libration)」を含んだ値になります。")
+    print("【修正点】")
+    print("SubSolarLon を np.unwrap で連続化しました。")
+    #print("これにより、読み込み側の線形補間(interp)で 180度->0度 の反転バグが起きなくなります。")
     print("-" * 30)
 
     # カーネルのアンロード
     spice.kclear()
-
 
 if __name__ == '__main__':
     generate_precise_orbit_file()

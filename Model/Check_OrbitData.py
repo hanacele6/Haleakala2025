@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-check_orbit_plot.py
+check_orbit_plot_v4.py
 ==============================================================================
 generate_orbit_spice.pyで生成された水星軌道データ
 (orbit2025_spice.txt)を視覚的にチェックするスクリプト。
 
-- 太陽中心の軌道アニメーションを表示します。
-- 水星上にプライムメリディアン(経度0度)と太陽直下点をプロットし、
-  TAAとSubSolarLonの関係が正しいかを確認します。
+【今回の修正】
+- 太陽直下点 (Sub-Solar Point) のマーカーを復活・強調表示。
+- 太陽から見た自転速度（見かけの回転）のグラフと連動。
 ==============================================================================
 """
 
@@ -17,179 +17,158 @@ from matplotlib.animation import FuncAnimation
 import sys
 import os
 
-# 水星の視覚的なサイズ（軌道に対する比率）
+# 定数
 MERCURY_RADIUS_AU = 0.05  # 描画上の半径 (AUスケール)
+AU_TO_KM = 1.496e8  # 1 AU = 1.496e8 km
+MERCURY_SPIN_PERIOD_DAY = 58.646  # 水星の自転周期 [day]
 
 
-def load_orbit_data(filename='orbit2025_spice.txt'):
-    """生成された軌道データをロードする"""
+def load_orbit_data(filename='orbit2025_spice_unwrapped.txt'):
     if not os.path.exists(filename):
-        print(f"[Error] 必須ファイル '{filename}' が見つかりません。")
-        print("先に 'generate_orbit_spice.py' を実行してファイルを生成してください。", file=sys.stderr)
+        print(f"[Error] '{filename}' が見つかりません。", file=sys.stderr)
         return None
-
     try:
-        # TAA[deg], AU[-], Time[s], Vr[m/s], Vt[m/s], SubSolarLon[deg]
         data = np.loadtxt(filename, skiprows=1)
-        print(f"'{filename}' から {len(data)} ステップのデータをロードしました。")
         return data
-
     except Exception as e:
-        print(f"[Error] データファイルのロードまたは解析に失敗しました: {e}", file=sys.stderr)
+        print(f"[Error] ロード失敗: {e}", file=sys.stderr)
         return None
 
 
 def animate_orbit_check(data):
-    """軌道アニメーションを生成する"""
-    # データを分割
+    # --- データ展開 ---
     taa_deg = data[:, 0]  # TAA [deg]
-    r_au = data[:, 1]  # AU [-]
+    r_au = data[:, 1]  # 距離 [AU]
+    vt_ms = data[:, 4]  # 接線速度 Vt [m/s]
     ssl_deg = data[:, 5]  # SubSolarLon [deg]
 
-    # ラジアンに変換
-    taa_rad = np.radians(taa_deg)
-    # ssl_rad = np.radians(ssl_deg) # SubSolarLonはそのまま角度として扱う
+    # --- 物理量の計算: 見かけの回転速度 ---
+    # 1. 公転角速度
+    r_km = r_au * AU_TO_KM
+    vt_km_s = vt_ms / 1000.0
+    omega_orb_rad_s = vt_km_s / r_km
+    omega_orb_deg_day = np.degrees(omega_orb_rad_s) * (24 * 3600)
 
-    # ----------------------------------------------
-    # 太陽中心の軌道座標 (2D)
-    # 軌道長軸をX軸に仮定 (簡略化されたチェック用)
-    # ----------------------------------------------
+    # 2. 自転角速度
+    spin_rate_deg_day = 360.0 / MERCURY_SPIN_PERIOD_DAY
+
+    # 3. 太陽から見た見かけの回転速度 (正=順行, 負=逆行)
+    apparent_rotation_speed = spin_rate_deg_day - omega_orb_deg_day
+
+    # --- 描画準備 ---
+    taa_rad = np.radians(taa_deg)
     X_merc = r_au * np.cos(taa_rad)
     Y_merc = r_au * np.sin(taa_rad)
 
-    # ----------------------------------------------
-    # プロット設定
-    # ----------------------------------------------
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.set_facecolor('black')
-    ax.set_title("Orbit Data Checking (SPICE Data)")
-    ax.set_xlabel("X (AU)")
-    ax.set_ylabel("Y (AU)")
-    ax.set_aspect('equal', adjustable='box')
+    fig = plt.figure(figsize=(10, 12))
+    gs = fig.add_gridspec(2, 1, height_ratios=[2, 1])
+    ax_orbit = fig.add_subplot(gs[0])
+    ax_graph = fig.add_subplot(gs[1])
 
-    # 軸の範囲を設定 (軌道全体をカバー)
+    # --- [上段] 軌道プロット ---
+    ax_orbit.set_facecolor('black')
+    ax_orbit.set_title("Mercury Orbit Check (Red Line: 0deg Lon, Cyan Dot: Sub-Solar Point)")
+    ax_orbit.set_aspect('equal', adjustable='box')
     max_r = np.max(r_au) * 1.1
-    ax.set_xlim(-max_r, max_r)
-    ax.set_ylim(-max_r, max_r)
+    ax_orbit.set_xlim(-max_r, max_r)
+    ax_orbit.set_ylim(-max_r, max_r)
 
-    # ----------------------------------------------
-    # 描画要素の初期化
-    # ----------------------------------------------
-    # 1. 太陽 (中心)
-    ax.plot(0, 0, 'o', color='yellow', markersize=15, label='太陽')
+    # 静的要素
+    ax_orbit.plot(0, 0, 'o', color='yellow', markersize=20, label='Sun')
+    ax_orbit.plot(X_merc, Y_merc, ':', color='gray', alpha=0.4, linewidth=0.5)
 
-    # 2. 軌道全体 (参照用)
-    ax.plot(X_merc, Y_merc, ':', color='gray', alpha=0.5, linewidth=0.5)
+    # 動的要素
+    mercury_body, = ax_orbit.plot([], [], 'o', color='lightgray', markersize=25, zorder=5)
 
-    # 3. 水星 (現在の位置)
-    mercury_line, = ax.plot([], [], 'o', color='lightgray', markersize=20, zorder=5)
+    # 赤線: プライムメリディアン (経度0度) - 自転とともに回る
+    prime_meridian, = ax_orbit.plot([], [], '-', color='red', linewidth=2, zorder=6, label='Prime Meridian (0 deg)')
 
-    # 4. 水星の自転マーカー（プライムメリディアン: 経度0度）
-    # この線がSubSolarLonの計算結果によって回転する
-    prime_meridian_line, = ax.plot([], [], '-', color='red', linewidth=3, zorder=6)
+    # 水色点: 太陽直下点 (Sub-Solar Point) - 常に太陽方向を向くはず
+    ssl_marker, = ax_orbit.plot([], [], 'o', color='cyan', markersize=6, zorder=7, label='Sub-Solar Point')
 
-    # 5. 太陽直下点 (Sub-Solar Lon: SSL) がどこを向いているかを示すマーカー
-    # SPICEの出力では、SubSolarLonはその点が太陽に向いているはずなので、
-    # Prime Meridianの位置からSSLの角度を引いた位置に太陽が来る
-    ssl_marker, = ax.plot([], [], 'o', color='cyan', markersize=5, zorder=7)
+    # 情報テキスト
+    info_text = ax_orbit.text(0.02, 0.98, '', transform=ax_orbit.transAxes, color='white',
+                              verticalalignment='top', bbox=dict(facecolor='black', alpha=0.6))
 
-    # 6. テキスト表示 (TAAとSSLの値)
-    info_text = ax.text(0.02, 0.98, '', transform=ax.transAxes, color='white',
-                        verticalalignment='top', horizontalalignment='left',
-                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none'))
+    ax_orbit.legend(loc='upper right', fontsize='small')
 
-    # ----------------------------------------------
-    # アニメーション更新関数
-    # ----------------------------------------------
+    # --- [下段] グラフ ---
+    ax_graph.set_title("Apparent Rotation Speed (Spin - Orbit)")
+    ax_graph.set_xlabel("Step")
+    ax_graph.set_ylabel("Speed [deg/day]")
+    ax_graph.grid(True, linestyle='--', alpha=0.5)
+
+    steps = np.arange(len(data))
+    ax_graph.axhline(0, color='white', linewidth=1)
+    ax_graph.plot(steps, apparent_rotation_speed, color='cyan')
+    ax_graph.fill_between(steps, apparent_rotation_speed, 0,
+                          where=(apparent_rotation_speed < 0),
+                          color='red', alpha=0.3, label='Retrograde (Reverse)')
+
+    current_time_bar = ax_graph.axvline(x=0, color='yellow', linestyle='-', linewidth=2)
+    ax_graph.legend()
+
+    # --- アニメーション更新 ---
     def update(frame):
-        r_f = r_au[frame]
+        X_f, Y_f = X_merc[frame], Y_merc[frame]
         taa_f = taa_deg[frame]
         ssl_f = ssl_deg[frame]
-        X_f, Y_f = X_merc[frame], Y_merc[frame]
+        curr_app_w = apparent_rotation_speed[frame]
 
-        # ----------------------------------------------------
-        # 水星の自転状態の計算
-        # ----------------------------------------------------
-        # TAA (軌道角度) を基準として、SubSolarLonが示す角度を調整する。
-        # SubSolarLon: 太陽から見た水星の経度。これが0度なら、0度の点が太陽に向いている。
-        #
-        # Prime Meridian (経度0度) の、慣性座標系 (X, Y) における角度 (deg)
-        # $\phi_{PM} = TAA - \lambda_{SSL}$
-        # この角度が、水星が公転しながら自転している向きを示す
-        # 水星から見て太陽は反対側にあるので +180度 する
-        prime_meridian_angle_deg = (taa_f + 180.0 - ssl_f) % 360.0
-        pm_rad = np.radians(prime_meridian_angle_deg)
+        # 色設定: 逆行中は水星本体を赤く
+        if curr_app_w < 0:
+            merc_color = 'salmon'
+            status_str = "RETROGRADE (Reverse)"
+        else:
+            merc_color = 'lightgray'
+            status_str = "PROGRADE (Normal)"
 
-        # ----------------------------------------------------
-        # プライムメリディアンの描画
-        # ----------------------------------------------------
-        # 水星の中心からの線分の座標
-        r_merc_vis = MERCURY_RADIUS_AU * 0.5  # 描画上のマーカー長さ
-        pm_X_end = X_f + r_merc_vis * np.cos(pm_rad)
-        pm_Y_end = Y_f + r_merc_vis * np.sin(pm_rad)
+        # 1. 水星本体
+        mercury_body.set_data([X_f], [Y_f])
+        mercury_body.set_color(merc_color)
 
-        prime_meridian_line.set_data([X_f, pm_X_end], [Y_f, pm_Y_end])
+        # 2. プライムメリディアン (赤線: 経度0度)
+        # 慣性系角度 = TAA + 180 - SSL
+        pm_angle_deg = (taa_f + 180.0 - ssl_f) % 360.0
+        pm_rad = np.radians(pm_angle_deg)
 
-        # ----------------------------------------------------
-        # 太陽直下点マーカーの描画
-        # ----------------------------------------------------
-        # SubSolarLonは「太陽に向いている点」の経度。
-        # その点の慣性座標系における角度は、**太陽の方向** と一致するはず。
-        # (TAAの角度 - 180度) の方向にマーカーを置くことで、
-        # プライムメリディアンラインとの相対位置を確認する。
-        # ただし、ここではシンプルに「太陽直下点の角度」を計算し、水星上に描く
-        ssl_angle_in_inertial_deg = (taa_f + 180) % 360.0  # 常に太陽の方向(位置ベクトルの反対)
+        r_vis = MERCURY_RADIUS_AU * 0.8
+        pm_x = X_f + r_vis * np.cos(pm_rad)
+        pm_y = Y_f + r_vis * np.sin(pm_rad)
+        prime_meridian.set_data([X_f, pm_x], [Y_f, pm_y])
 
-        # SSLはPrime Meridianからssl_f度離れている
-        # 慣性座標系でのSSLの角度 $\phi_{SSL} = \phi_{PM} + \lambda_{SSL} = (TAA - \lambda_{SSL}) + \lambda_{SSL} = TAA$
-        # これは間違っている。SSLは**太陽に向いている**ので、位置ベクトルとは逆向き。
-        # 正しい：$\phi_{SSL} = TAA + 180^\circ$
+        # 3. 太陽直下点 (水色点)
+        # 幾何学的には常に太陽方向だが、データ検証のため SPICEのSSL値を使って計算して描画
+        # PM角度 + SSL = 太陽直下点の角度
+        ssl_mark_rad = pm_rad + np.radians(ssl_f)
+        ssl_x = X_f + r_vis * np.cos(ssl_mark_rad)
+        ssl_y = Y_f + r_vis * np.sin(ssl_mark_rad)
+        ssl_marker.set_data([ssl_x], [ssl_y])
 
-        # SSLマーカーは、Prime Meridianから $\lambda_{SSL}$ だけずれた位置に描画
-        ssl_marker_angle_rad = pm_rad + np.radians(ssl_f)
-        ssl_X_end = X_f + r_merc_vis * np.cos(ssl_marker_angle_rad)
-        ssl_Y_end = Y_f + r_merc_vis * np.sin(ssl_marker_angle_rad)
+        # 4. グラフ更新
+        current_time_bar.set_xdata([frame])
 
-        ssl_marker.set_data([ssl_X_end], [ssl_Y_end])  # 点マーカーとして描画
+        # 5. テキスト
+        info_text.set_text(f'Step: {frame}\n'
+                           f'Dist: {r_au[frame]:.4f} AU\n'
+                           f'Apparent Speed: {curr_app_w:.2f} deg/day\n'
+                           f'Mode: {status_str}\n'
+                           f'SSL: {ssl_f:.2f} deg')
 
-        # ----------------------------------------------------
-        # 描画要素の更新
-        # ----------------------------------------------------
-        mercury_line.set_data([X_f], [Y_f])
+        return mercury_body, prime_meridian, ssl_marker, current_time_bar, info_text
 
+    # --- 実行 ---
+    skip = 10
+    frames = np.arange(0, len(data), skip)
 
-        info_text.set_text(f'Step: {frame}/{len(data) - 1}\n'
-                           f'TAA: {taa_f:.2f} deg\n'
-                           f'AU: {r_f:.6f}\n'
-                           f'SSL: {ssl_f:.2f} deg\n'
-                           f'PM Angle: {prime_meridian_angle_deg:.2f} deg')
-
-        return mercury_line, prime_meridian_line, ssl_marker, info_text
-
-    # アニメーションの生成と表示
-    # 全ステップだと長すぎるので、1/20のデータを使用 (5年分を3日で1フレーム程度に)
-    skip_frames = 20
-    frames_to_use = np.arange(0, len(data), skip_frames)
-
-    print(f"Generate Animation... (All {len(data)} Framing、{len(frames_to_use)} Using Frames)")
-
-    ani = FuncAnimation(fig, update, frames=frames_to_use,
-                        interval=100, blit=True)
-
-    # plt.show() # アニメーションとして再生する場合
-
-    # 最終的な確認画像を出力する場合 (ファイルとして保存)
-    # ani.save('mercury_orbit_check.gif', writer='pillow', fps=10)
-
-    # 最終的な確認画像を出力する場合 (最後のフレーム)
-    update(len(data) - 1)
-    print("最終フレームの状態を静止画として表示します。")
+    print("Animation generating...")
+    ani = FuncAnimation(fig, update, frames=frames, interval=1, blit=True)
+    plt.tight_layout()
     plt.show()
 
 
 # --- メイン処理 ---
 if __name__ == '__main__':
     orbit_data = load_orbit_data()
-
     if orbit_data is not None:
         animate_orbit_check(orbit_data)

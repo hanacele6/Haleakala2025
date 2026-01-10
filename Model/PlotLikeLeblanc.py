@@ -8,8 +8,11 @@ import glob
 # ==============================================================================
 # 設定
 # ==============================================================================
-RESULT_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
-#RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_NoEq"
+#RESULT_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
+#RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_NoEq_Hard_DT100_T0100_1.0"
+RESULT_DIR = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0106_0.4Denabled_2.7"
+#RESULT_DIR = r"./SimulationResult_202512/ParabolicHop_72x36_EqMode_DT500_PLeblanc_Dsuzuki"
+#RESULT_DIR = r"./SimulationResult_202512/DynamicGrid72x36_EqMode_Hard_DT500_T0100_4.0"
 #RESULT_DIR = r"./SimulationResult_202511/SubCycle_72x36_2.0"
 #RESULT_DIR = r"./SimulationResult_202512/SmartSample_72x36_1.0"
 
@@ -24,6 +27,9 @@ GRID_MAX_RM = 5.0
 
 # プロット設定
 PLOT_SURFACE = True
+
+# ★★★ Y軸の最大値設定 (None にすると自動調整になります) ★★★
+Y_AXIS_MAX = None
 
 # ★追加設定: 補正のON/OFF
 APPLY_CORRECTION = False
@@ -168,21 +174,27 @@ def main():
     ax.set_ylabel(r"Number of Na $\times 10^{28}$", fontsize=14)
     ax.set_xlim(0, 360)
 
-    # 縦軸の範囲を少し広げる (補正後の値が見切れないように)
-    ax.set_ylim(0, max(np.max(y_exosphere_raw), np.max(y_surface)) * 1.8)
-    if APPLY_CORRECTION:
-        ax.set_ylim(0, max(np.max(y_exosphere_corrected), np.max(y_surface)) * 1.2)
+    # --- Y軸の範囲設定 ---
+    if Y_AXIS_MAX is not None:
+        # ユーザー指定の値を使う
+        ax.set_ylim(0, Y_AXIS_MAX)
+    else:
+        # 自動設定 (以前のロジック)
+        max_val = max(np.max(y_exosphere_raw), np.max(y_surface))
+        if APPLY_CORRECTION:
+             max_val = max(np.max(y_exosphere_corrected), max_val)
+        ax.set_ylim(0, max_val * 1.8) # 少し余裕を持たせる
 
     ax.grid(True, linestyle='-', alpha=0.5)
     ax.legend(fontsize=12, loc='upper center')
 
-    title_text = "Total Number of Na Atoms (with Correction)" if APPLY_CORRECTION else "Total Number of Na Atoms (Raw)"
-    plt.title(title_text, fontsize=16)
+    #title_text = "Total Number of Na Atoms (with Correction)" if APPLY_CORRECTION else "Total Number of Na Atoms (Raw)"
+    #plt.title(title_text, fontsize=16)
     plt.tight_layout()
 
     save_path = "leblanc_fig5_corrected.png"
     #plt.savefig(save_path, dpi=300)
-    print(f"グラフを保存しました: {save_path}")
+    print(f"グラフを表示します (保存パス: {save_path})")
     plt.show()
 
 

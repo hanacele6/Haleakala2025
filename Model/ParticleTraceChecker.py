@@ -16,8 +16,8 @@ CONST = {
 
 # グリッド設定
 GRID_OPTS = {
-    'SURF_LON': 144,
-    'SURF_LAT': 72,
+    'SURF_LON': 288,
+    'SURF_LAT': 144,
     'SPATIAL_RES': 101,
 }
 

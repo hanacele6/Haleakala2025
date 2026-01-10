@@ -1,189 +1,303 @@
 # -*- coding: utf-8 -*-
-"""
-シミュレーション結果（3D密度グリッド）をプロットするスクリプト
-
-概要:
-    指定されたシミュレーション結果のディレクトリから、
-    特定のTAA (真近点離角) の.npyファイルを探します。
-
-    ファイルを読み込み、3Dの数密度グリッド (atoms/m^3) を
-    指定された軸方向（視線方向）に積分（合計）し、
-    2Dの柱密度 (atoms/m^2) を計算します。
-
-    結果を matplotlib を使って2Dカラーマップとして表示します。
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib.widgets import Button, Slider
 from matplotlib.patches import Circle
 import os
-import glob  # ファイル検索用
+import glob
+import re
+import sys
+import copy
 
 # ==============================================================================
 # ★★★ ユーザー設定 ★★★
 # ==============================================================================
 
-# 1. シミュレーション結果が保存されているディレクトリ
-# (シミュレーションコードの 'target_output_dir' と一致させる)
-# SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510/Grid101_Range5RM_SP5e+21_SWS"
-# SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\Grid101_Budget5000_TD"
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202511\DynamicGrid72x36_18.0"
-#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202510\DynamicGrid72x36_12.0"
-#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202511\SubCycle_72x36_3.0"
+# 1. シミュレーション結果ディレクトリ
+#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202512/ParabolicHop_72x36_EqMode_DT500_PLeblanc_DLeblanc"
+#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0105_LmtDenabled_2.05"
+#SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0105_0.4Denabled_2.7"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0102_Denabled"
 
-# 2. プロットしたい TAA (真近点離角)
-# (ファイル名に含まれるTAAの値を指定)
-TARGET_TAA = 180 # 例: 90度のファイルを探す
+# 2. 最初に表示したいTAA
+INITIAL_TARGET_TAA = 100
 
-# 3. シミュレーションで使用したグリッド設定
-# (シミュレーションコードの 'GRID_RESOLUTION', 'GRID_MAX_RM' と一致させる)
-GRID_RESOLUTION = 101  # グリッド解像度 (例: 101)
-GRID_MAX_RM = 5.0  # グリッドの最大範囲 [RM] (例: 5.0)
+# 3. グリッド設定
+GRID_RESOLUTION = 101  # グリッド解像度
+GRID_MAX_RM = 5.0  # グリッド範囲 [RM]
 
-# 4. 物理定数 (水星半径)
-RM_METERS = 2.440e6  # 水星の半径 [m]
+# 4. 物理定数
+RM_METERS = 2.440e6  # 水星半径 [m]
 
-# 5. プロット単位
-# Trueにすると、天文学で一般的な [atoms/cm^2] でプロットします
-PLOT_IN_CM2 = True
+# 5. プロット設定
+PLOT_IN_CM2 = True  # True: atoms/cm^2, False: atoms/m^2
+VIEW_FROM = 'Z'  # 'Z': X-Y平面 (Face-on), 'Y': X-Z平面 (Side-on)
 
-# 6. 視点 (どの方向から見るか) ★ 変更点
-# 'Z': +Z軸方向から (X-Y平面, 'Face-on')
-# 'Y': -Y軸方向から (X-Z平面, 'Side-on')
-VIEW_FROM = 'Z'  # ★ ここを 'Z' または 'Y' に設定してください
+# 6. カラーバーのレンジ (対数スケール)
+# ※ PLOT_IN_CM2=True なら cm2 単位の値を入れてください
+VMIN_MANUAL = 1e8
+VMAX_MANUAL = 1e13
 
 
 # ==============================================================================
+# 関数群
+# ==============================================================================
 
-def find_simulation_file(directory, taa):
-    """
-    指定されたTAAに一致する.npyファイルを探します。
-    複数のファイルが見つかった場合（例: 1年目と2年目）、
-    時系列で最後のファイル（最も新しいファイル）を返します。
-    """
-    # ファイル名のパターンを作成 (例: density_grid_t*_taa090.npy)
-    search_pattern = os.path.join(directory, f"density_grid_*_taa{taa:03d}.npy")
-
-    files = glob.glob(search_pattern)
+def get_all_grid_files_sorted(target_dir):
+    """ディレクトリ内の density_grid_*.npy を全て探し、TAA順にソートして返す"""
+    search_path = os.path.join(target_dir, "density_grid_*.npy")
+    files = glob.glob(search_path)
 
     if not files:
-        print(f"エラー: TAA={taa} に一致するファイルが見つかりません。")
-        print(f"検索パス: {search_pattern}")
-        return None
+        print(f"エラー: {target_dir} に density_grid ファイルがありません。")
+        return []
 
-    # ファイルを名前でソート（t_secが大きいものが最後に来る）
-    files.sort()
-    return files[-1]  # 最後のファイル（=最新のシミュレーション結果）を返す
+    file_list = []
+    for f in files:
+        match = re.search(r'_t(\d+)_taa(\d+)\.npy$', os.path.basename(f))
+        if match:
+            time_id = int(match.group(1))
+            taa = int(match.group(2))
+            file_list.append({
+                'taa': taa,
+                'time_h': time_id,
+                'path': f
+            })
+
+    file_list.sort(key=lambda x: (x['taa'], x['time_h']))
+    return file_list
 
 
-def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
-    """
-    3D密度グリッドを指定された軸方向に積分し、2D柱密度マップをプロットします。
-    view_from: 'Z' (Z-View) または 'Y' (Y-View)
-    """
-    print(f"視点 '{view_from}' に基づき、柱密度を計算中...")  # ★ 変更点
+# ==============================================================================
+# ★ビューワークラス
+# ==============================================================================
 
-    # --- 1. 物理スケールの計算 ---
-    # グリッドのセルのサイズ [m]
-    grid_min_m = -GRID_MAX_RM * RM_METERS
-    grid_max_m = GRID_MAX_RM * RM_METERS
-    cell_size_m = (grid_max_m - grid_min_m) / GRID_RESOLUTION
+class Grid3DViewer:
+    def __init__(self, file_list, view_from='Z'):
+        self.file_list = file_list
+        self.view_from = view_from
 
-    # --- 2. 柱密度の計算 --- ★ 変更点
-    if view_from == 'Z':
-        # 従来通り: Z軸 (axis=2) に沿って合計する -> X-Y平面
-        integration_axis = 2
-        xlabel = "X [$R_M$]"
-        ylabel = "Y [$R_M$]"
-        title_view = "Viewed from +Z (X-Y Plane)"
+        # 物理パラメータ計算
+        grid_min_m = -GRID_MAX_RM * RM_METERS
+        grid_max_m = GRID_MAX_RM * RM_METERS
+        self.cell_size_m = (grid_max_m - grid_min_m) / GRID_RESOLUTION
+        self.plot_extent = [-GRID_MAX_RM, GRID_MAX_RM, -GRID_MAX_RM, GRID_MAX_RM]
 
-    elif view_from == 'Y':
-        # 新規: Y軸 (axis=1) に沿って合計する -> X-Z平面
-        integration_axis = 1
-        xlabel = "X [$R_M$]"
-        ylabel = "Z [$R_M$]"  # Y軸がZ軸になる
-        title_view = "Viewed from -Y (X-Z Plane)"
+        # 初期インデックス
+        self.current_idx = 0
+        min_diff = float('inf')
+        for i, f in enumerate(self.file_list):
+            diff = abs(f['taa'] - INITIAL_TARGET_TAA)
+            if diff < min_diff:
+                min_diff = diff
+                self.current_idx = i
 
-    else:
-        print(f"エラー: 不明な視点 '{view_from}' です。'Z' または 'Y' を指定してください。")
-        return
+        # --- 図の準備 ---
+        self.fig, self.ax = plt.subplots(figsize=(10, 8))
+        plt.subplots_adjust(bottom=0.25)
+        self.ax.set_facecolor('black')
 
-    # 柱密度 N [atoms/m^2] = Σ (数密度 n [atoms/m^3] * セルの厚み [m])
-    column_density_m2 = np.sum(density_grid_m3, axis=integration_axis) * cell_size_m
+        # 軸ラベルと積分軸の設定
+        if self.view_from == 'Z':
+            self.integration_axis = 2
+            self.xlabel = "X [$R_M$]"
+            self.ylabel = "Y [$R_M$]"
+            self.view_name = "View: +Z (X-Y Plane)"
+        elif self.view_from == 'Y':
+            self.integration_axis = 1
+            self.xlabel = "X [$R_M$]"
+            self.ylabel = "Z [$R_M$]"
+            self.view_name = "View: -Y (X-Z Plane)"
+        else:
+            raise ValueError("VIEW_FROM must be 'Z' or 'Y'")
 
-    # --- 3. プロット単位の変換 ---
-    if PLOT_IN_CM2:
-        # 1 [m^2] = (100 [cm])^2 = 1e4 [cm^2]
-        # [atoms/m^2] * (1e-4 [m^2/cm^2]) = [atoms/cm^2]
-        column_density_plot = column_density_m2 * 1e-4
-        cbar_label = "Column Density [atoms/cm²]"
-    else:
-        column_density_plot = column_density_m2
-        cbar_label = "Column Density [atoms/m²]"
+        # 単位設定
+        if PLOT_IN_CM2:
+            self.unit_factor = 1e-4
+            self.cbar_label = "Column Density [atoms/cm²]"
+        else:
+            self.unit_factor = 1.0
+            self.cbar_label = "Column Density [atoms/m²]"
 
-    # --- 4. プロット準備 ---
-    plt.style.use('dark_background')
+        # --- カラーマップ設定 ---
+        self.cmap = copy.copy(plt.get_cmap('inferno'))
+        self.cmap.set_bad('black')
+        self.norm = mcolors.LogNorm(vmin=VMIN_MANUAL, vmax=VMAX_MANUAL)
 
-    # プロットの軸範囲 [-5 RM, +5 RM]
-    plot_extent = [-GRID_MAX_RM, GRID_MAX_RM, -GRID_MAX_RM, GRID_MAX_RM]
+        # 初回データロード
+        initial_data = self.load_and_process(self.current_idx)
 
-    # min_val = np.min(column_density_plot[column_density_plot > 0])
-    # if not np.isfinite(min_val):
-    #     print("警告: プロットするデータがすべてゼロまたはNaNです。")
-    #     min_val = 1e-1  # とりあえずの値
-    # vmax_auto = np.max(column_density_plot) # 最大値も自動だった
+        # 画像描画
+        self.im = self.ax.imshow(
+            initial_data.T,
+            origin='lower',
+            extent=self.plot_extent,
+            cmap=self.cmap,
+            norm=self.norm
+        )
 
-    # 新しく固定値を設定 (Logスケールなので 1eX の形式が推奨)
-    # ※ PLOT_IN_CM2 = True の場合、[atoms/cm^2] の単位で指定してください
+        # カラーバー
+        self.cbar = self.fig.colorbar(self.im, ax=self.ax, pad=0.02)
+        self.cbar.set_label(self.cbar_label, fontsize=12)
 
-    VMIN_MANUAL = 1e8  # カラーバーの最小値
-    VMAX_MANUAL = 1e13  # カラーバーの最大値
+        # 水星の円
+        self.add_mercury_circle(self.ax)
 
-    print(f"プロットを作成中... (TAA={taa}, View={view_from})")  # ★ 変更点
+        self.ax.legend(loc='upper right', facecolor='black', labelcolor='white')
+        self.ax.set_aspect('equal')
+        self.update_title()
 
-    fig, ax = plt.subplots(figsize=(10, 8))
+        # === ウィジェット設定 ===
+        ax_slider = plt.axes([0.2, 0.1, 0.6, 0.03], facecolor='lightgray')
+        self.slider = Slider(ax_slider, 'Time/TAA', 0, len(self.file_list) - 1,
+                             valinit=self.current_idx, valfmt='%d')
+        self.slider.on_changed(self.on_slider_change)
 
-    # imshowでプロット
-    # origin='lower': (0,0)を左下に
-    # extent: 軸の物理単位を設定
-    # .T (転置): [ix, iy] 配列を [iy, ix] としてプロットするため、
-    #            X軸にix, Y軸にiyが来るように転置する
-    #            (Y-Viewの場合 [ix, iz] -> .T -> [iz, ix] となり同様に機能する)
-    im = ax.imshow(
-        column_density_plot.T,
-        origin='lower',
-        extent=plot_extent,
-        cmap='afmhot',  # 密度プロットに適したカラーマップ
-        #norm=mcolors.LogNorm(vmin=min_val, vmax=np.max(column_density_plot))  # 対数スケール
-        norm=mcolors.LogNorm(vmin=VMIN_MANUAL, vmax=VMAX_MANUAL)
-    )
+        ax_prev = plt.axes([0.7, 0.025, 0.1, 0.04])
+        self.btn_prev = Button(ax_prev, 'Previous')
+        self.btn_prev.on_clicked(self.prev_frame)
 
-    # --- 5. プロットの装飾 ---
+        ax_next = plt.axes([0.81, 0.025, 0.1, 0.04])
+        self.btn_next = Button(ax_next, 'Next')
+        self.btn_next.on_clicked(self.next_frame)
 
-    # 水星本体の円を描画
-    mercury_circle = Circle((0, 0), 1.0, color='white', fill=False,
-                            linestyle='--', linewidth=1, label='Mercury (1 RM)')
-    ax.add_patch(mercury_circle)
+        # ★ Plate Button
+        ax_plate = plt.axes([0.45, 0.025, 0.15, 0.04])
+        self.btn_plate = Button(ax_plate, 'Show Plate')
+        self.btn_plate.on_clicked(self.generate_plate_view)
 
-    # 軸ラベルとタイトル (★ 変更点)
-    # (シミュレーション座標系に基づき、+Xが太陽方向)
-    ax.set_xlabel(xlabel, fontsize=14)
-    ax.set_ylabel(ylabel, fontsize=14)
-    ax.set_title(f"Mercury Na Exosphere Column Density ({title_view})\n"
-                 f"TAA = {taa}° (File: {os.path.basename(filepath)})",
-                 fontsize=12)
+    def add_mercury_circle(self, ax):
+        """指定されたaxに水星の円を描画する"""
+        mercury_circle = Circle((0, 0), 1.0, color='white', fill=False,
+                                linestyle='--', linewidth=1, label='Mercury')
+        ax.add_patch(mercury_circle)
 
-    # アスペクト比を1:1に
-    ax.set_aspect('equal')
+    def load_and_process(self, idx):
+        """指定インデックスのファイルを読み込み、柱密度(2D)を計算して返す"""
+        filepath = self.file_list[idx]['path']
+        try:
+            # 3Dグリッド [x, y, z]
+            data_3d = np.load(filepath)
+            # 積分
+            column_density = np.sum(data_3d, axis=self.integration_axis) * self.cell_size_m
+            # 単位変換
+            data = column_density * self.unit_factor
+            return data
+        except Exception as e:
+            print(f"Read Error: {e}")
+            return np.zeros((GRID_RESOLUTION, GRID_RESOLUTION))
 
-    # カラーバー
-    cbar = fig.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label(cbar_label, fontsize=14)
+    def update_title(self):
+        """タイトルと軸ラベルの更新"""
+        info = self.file_list[self.current_idx]
+        taa = info['taa']
+        time_h = info['time_h']
+        filename = os.path.basename(info['path'])
 
-    ax.legend()
-    plt.tight_layout()
-    plt.show()
+        title_str = (f"Mercury Na Exosphere Column Density\n"
+                     f"{self.view_name} | TAA: {taa:03d}° (TimeID: {time_h})\n"
+                     f"File: {filename}")
+
+        self.ax.set_title(title_str, fontsize=12)
+        self.ax.set_xlabel(self.xlabel, fontsize=12)
+        self.ax.set_ylabel(self.ylabel, fontsize=12)
+
+    def update_plot(self):
+        """プロット内容の更新"""
+        new_data = self.load_and_process(self.current_idx)
+        self.im.set_data(new_data.T)
+        self.update_title()
+        self.fig.canvas.draw_idle()
+
+    # --- イベントハンドラ ---
+    def next_frame(self, event):
+        if self.current_idx < len(self.file_list) - 1:
+            self.slider.set_val(self.current_idx + 1)
+
+    def prev_frame(self, event):
+        if self.current_idx > 0:
+            self.slider.set_val(self.current_idx - 1)
+
+    def on_slider_change(self, val):
+        idx = int(val)
+        if idx != self.current_idx:
+            self.current_idx = idx
+            self.update_plot()
+
+    # ==========================================================================
+    # ★ 新規追加: Plate作成機能 (2x2)
+    # ==========================================================================
+    def generate_plate_view(self, event):
+        """TAA 0, 60, 180, 300 の4枚を 2x2 Plate として表示する"""
+
+        target_taas = [0, 60, 180, 300]
+
+        # 新しいウィンドウを作成 (2行2列)
+        fig_plate, axes = plt.subplots(2, 2, figsize=(10, 10), constrained_layout=True)
+        # 背景を少し暗く設定(任意)
+        # fig_plate.patch.set_facecolor('#202020')
+        axes = axes.flatten()
+
+        print("\n--- Generating Plate View (2x2) ---")
+
+        im_object = None  # カラーバー用に保持
+
+        for i, target_taa in enumerate(target_taas):
+            ax = axes[i]
+            ax.set_facecolor('black')
+
+            # 最も近いTAAを持つファイルのインデックスを探す
+            # file_list は辞書のリストなので、enumerateでインデックスを取得
+            closest_idx, closest_file = min(enumerate(self.file_list),
+                                            key=lambda x: abs(x[1]['taa'] - target_taa))
+
+            actual_taa = closest_file['taa']
+            print(f"Target: {target_taa}° -> Actual: {actual_taa}° (File: {os.path.basename(closest_file['path'])})")
+
+            # データの読み込み (既存メソッド再利用)
+            data = self.load_and_process(closest_idx)
+
+            # プロット
+            im_object = ax.imshow(
+                data.T,
+                origin='lower',
+                extent=self.plot_extent,
+                cmap=self.cmap,
+                norm=self.norm
+            )
+
+            # 水星の円を追加
+            self.add_mercury_circle(ax)
+
+            # タイトルとラベル
+            ax.set_title(f"TAA = {actual_taa}$^\circ$", fontsize=14, fontweight='bold')  # color='white' if dark bg
+            ax.set_aspect('equal')
+
+            # 軸ラベル (外側だけ残す等の調整はお好みで。ここでは全てにつける)
+            if i >= 2:  # 下段
+                ax.set_xlabel(self.xlabel, fontsize=10)
+            else:
+                ax.set_xticklabels([])  # 上段はラベルなし
+
+            if i % 2 == 0:  # 左列
+                ax.set_ylabel(self.ylabel, fontsize=10)
+            else:
+                ax.set_yticklabels([])  # 右列はラベルなし
+
+            # 目盛りの色調整 (必要なら)
+            # ax.tick_params(colors='white')
+
+        # 共通カラーバーを追加
+        if im_object:
+            cbar = fig_plate.colorbar(im_object, ax=axes, orientation='horizontal',
+                                      fraction=0.05, pad=0.05, shrink=0.8)
+            cbar.set_label(self.cbar_label, fontsize=12)
+            # cbar.ax.xaxis.set_tick_params(color='white')
+            # plt.setp(plt.getp(cbar.ax.axes, 'xticklabels'), color='white')
+
+        fig_plate.suptitle(f"Mercury Exosphere: {self.view_name}", fontsize=16)
+        plt.show()
 
 
 # ==============================================================================
@@ -191,19 +305,19 @@ def plot_column_density(density_grid_m3, taa, view_from='Z'):  # ★ 変更点
 # ==============================================================================
 if __name__ == "__main__":
 
-    # 1. TAAに一致するファイルを探す
-    filepath = find_simulation_file(SIMULATION_RUN_DIRECTORY, TARGET_TAA)
+    if not os.path.exists(SIMULATION_RUN_DIRECTORY):
+        print(f"エラー: フォルダが見つかりません {SIMULATION_RUN_DIRECTORY}")
+        sys.exit(1)
 
-    if filepath:
-        print(f"ファイルが見つかりました:\n{filepath}\n")
+    print("ファイルリストを作成中...")
+    file_list = get_all_grid_files_sorted(SIMULATION_RUN_DIRECTORY)
+    print(f"合計 {len(file_list)} 個のグリッドファイルが見つかりました。")
 
-        # 2. 3D密度グリッドをロード
-        try:
-            density_grid = np.load(filepath)
-            print(f"グリッドデータをロードしました。Shape: {density_grid.shape}")
+    if not file_list:
+        sys.exit(0)
 
-            # 3. プロット関数を呼び出し (★ 変更点)
-            plot_column_density(density_grid, TARGET_TAA, view_from=VIEW_FROM)
+    print("ビューワーを起動します...")
+    viewer = Grid3DViewer(file_list, view_from=VIEW_FROM)
 
-        except Exception as e:
-            print(f"ファイルのロードまたはプロット中にエラーが発生しました: {e}")
+    print("表示中... ウィンドウを閉じると終了します。")
+    plt.show()

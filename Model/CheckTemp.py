@@ -85,14 +85,16 @@ def calculate_surface_temperature_leblanc_corrected(AU, ref_au_actual):
     """
     修正されたLeblancモデル
     """
-    T0 = 600.0
-    T1 = 100.0
+    T0 = 100.0
+    T1 = 600.0
 
     # 実際のデータに基づく近日点距離を基準にする
-    scaling = np.sqrt(ref_au_actual / AU)
+    #scaling = np.sqrt(ref_au_actual / AU)
+    scaling = (ref_au_actual / AU) ** 2
 
     # 全体をスケーリング
-    return T0  * scaling + T1
+    #return T0  * scaling + T1
+    return T0 + T1 * scaling
 
 
 # ==============================================================================

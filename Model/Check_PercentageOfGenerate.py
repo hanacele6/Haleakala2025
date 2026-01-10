@@ -2,9 +2,11 @@
 """
 ==============================================================================
 事後解析ツール (Leblancスタイル完全版):
-修正点: MMVを「表面滞留寿命」の計算から除外しました。
-       MMVは表面密度に依存しないバルクプロセスであるため、
-       表面原子の枯渇タイムスケールには寄与しない物理モデルとしました。
+修正点1: MMVを「表面滞留寿命」の計算から除外しました。
+        MMVは表面密度に依存しないバルクプロセスであるため、
+        表面原子の枯渇タイムスケールには寄与しない物理モデルとしました。
+修正点2: 軌道データがUnwrapped（360度以上）であっても、
+        TAAを0-360度に正規化して解析・プロットするように修正しました。
 ==============================================================================
 """
 
@@ -18,8 +20,8 @@ import re
 # ==============================================================================
 # 1. 設定・定数
 # ==============================================================================
-TARGET_DIR = r"./SimulationResult_202511/DynamicGrid72x36_18.0"
-ORBIT_FILE = 'orbit2025_v6.txt'
+TARGET_DIR = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0102_Denabled"
+ORBIT_FILE = 'orbit2025_spice_unwrapped.txt'
 
 # --- ★解析設定 ---
 TARGET_TAA_CENTER = 30.0  # 解析したいTAAの中心
@@ -101,23 +103,34 @@ def calculate_mmv_total_rate(r_au):
 
 
 def get_orbital_info_from_time(rel_hours, orbit_data):
+    """
+    時刻から軌道情報を取得し、TAAを0-360度に正規化して返す
+    """
     idx_peri = np.argmin(np.abs(orbit_data[:, 0]))
     t_peri = orbit_data[idx_peri, 2]
     current_time = t_peri + rel_hours * 3600.0
     time_col = orbit_data[:, 2]
+
+    # 時間で検索
     idx = np.searchsorted(time_col, current_time)
     if idx >= len(time_col): idx = len(time_col) - 1
     if idx > 0 and abs(current_time - time_col[idx - 1]) < abs(current_time - time_col[idx]):
         idx -= 1
-    au = orbit_data[idx, 1]
-    taa_deg = orbit_data[idx, 0]
 
+    au = orbit_data[idx, 1]
+    taa_deg_raw = orbit_data[idx, 0]  # これは360を超える可能性がある
+
+    # Sub-solar longitude計算 (連続性が重要なのでraw値または時間差分を使用)
     omega_rot = 2 * np.pi / ROTATION_PERIOD
     rotation_angle = omega_rot * (current_time - t_peri)
-    taa_rad = np.deg2rad(taa_deg)
+    taa_rad = np.deg2rad(taa_deg_raw)
     sub_lon = taa_rad - rotation_angle
     sub_lon = (sub_lon + np.pi) % (2 * np.pi) - np.pi
-    return taa_deg, au, sub_lon
+
+    # ★重要修正: 呼び出し元（解析・プロット）には 0-360 の値を返す
+    taa_deg_normalized = taa_deg_raw % 360.0
+
+    return taa_deg_normalized, au, sub_lon
 
 
 # ==============================================================================
@@ -128,19 +141,24 @@ def analyze_lifetime_contribution_averaged(target_taa, width, files, orbit_data)
     print(f"Target TAA: {target_taa} +/- {width / 2} deg")
 
     target_files = []
+    # ターゲット範囲の設定 (0-360空間)
     taa_min = target_taa - width / 2.0
     taa_max = target_taa + width / 2.0
     cross_zero = False
     if taa_min < 0:
-        taa_min += 360; cross_zero = True
+        taa_min += 360;
+        cross_zero = True
     elif taa_max > 360:
-        taa_max -= 360; cross_zero = True
+        taa_max -= 360;
+        cross_zero = True
 
     print("Scanning files for the TAA range...")
     for fpath in files:
         match = re.search(r"t(\d+)", fpath)
         if not match: continue
         rel_hours = int(match.group(1))
+
+        # 正規化されたTAAが返ってくる
         taa, au, sub_lon = get_orbital_info_from_time(rel_hours, orbit_data)
 
         hit = False
@@ -333,6 +351,8 @@ def main():
         return
 
     orbit_data = np.loadtxt(ORBIT_FILE)
+
+    # 既存のUnwrap処理。入力が既にUnwrappedなら影響なし、Wrappedなら連続化されます。
     orbit_data[:, 0] = np.rad2deg(np.unwrap(np.deg2rad(orbit_data[:, 0])))
 
     # Phase 1: Global Time-Evolution (変更なし)
@@ -355,6 +375,8 @@ def main():
         match = re.search(r"t(\d+)", fpath)
         if not match: continue
         rel_hours = int(match.group(1))
+
+        # ここで0-360に正規化されたTAAが返るため、グラフは0-360の範囲でプロットされます
         taa_deg, au, sub_lon = get_orbital_info_from_time(rel_hours, orbit_data)
         surf_dens = np.load(fpath)
 

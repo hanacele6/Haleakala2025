@@ -348,7 +348,7 @@ def main_snapshot_simulation():
     }
 
     # --- 初期化 ---
-    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_17.1"
+    run_name = f"DynamicGrid{N_LON_FIXED}x{N_LAT}_19.0"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"Simulation Start. Results: {target_output_dir}")

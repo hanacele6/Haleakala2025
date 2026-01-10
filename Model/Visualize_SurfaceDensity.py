@@ -28,14 +28,14 @@ N_LON, N_LAT = 72, 36
 
 # 2. 出力ディレクトリ
 # BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202510"
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202511"
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202512"
 
 # 3. RUN名
-RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_18.0"  # 実行したフォルダ名に合わせてください
-# RUN_NAME = f"SubCycle_{N_LON}x{N_LAT}_3.0"
+#RUN_NAME = f"DynamicGrid{N_LON}x{N_LAT}_18.0"  # 実行したフォルダ名に合わせてください
+RUN_NAME = f"DynamicGrid72x36_EqMode_1.0_T0600"
 
 # 4. プロット対象 (TAA指定 または 'latest')
-FILE_TO_PLOT = 30
+FILE_TO_PLOT = 318
 
 # 5. カラースケール設定
 USE_LOG_SCALE = True
