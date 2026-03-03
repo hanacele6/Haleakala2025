@@ -99,6 +99,7 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 
             width = end_int - start_int + 1
 
+
             fit_results[name] = {'counts': integrated_counts, 'width': width}
             print(f"    -> フィット '{name}': 積分幅 = {width} ピクセル")
 
@@ -147,6 +148,11 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
     errm = abs(ctsm2 - cts2)
     err_fuse = max(errp, errm)
 
+    wings_combined = np.concatenate((wing1, wing2))
+    sigma_noise = np.std(wings_combined, ddof=1)
+    print(f"DEBUG err_sys: {err_fuse:.4e}, errp: {errp:.4e}, errm: {errm:.4e}")
+    print(f"DEBUG sigma_noise: {sigma_noise:.4e}, wing_width: {wing_width}, wings_len: {len(wings_combined)}")
+
     return {'counts': cts2, 'stat_error': err_stat, 'sys_error': err_fuse}
 
 
@@ -155,15 +161,15 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20251103"
+    day = "20250819"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # sftの値（ファイル名から探すために使用）
     #sft_map = {'main': '002','minus': '001','plus': '003'}
-    sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
-    #sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
+    #sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
+    sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
     #sft_map = {'main': '000', 'minus': '-10', 'plus': '010'}#tese
 
     # --- フィッティングとプロットに関する設定 ---
