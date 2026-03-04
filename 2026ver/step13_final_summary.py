@@ -56,7 +56,6 @@ def gaussian_func(x, a, x0, sigma, c):
     return a * np.exp(-(x - x0) ** 2 / (2 * sigma ** 2)) + c
 
 
-# S/N計算 & 形状チェック (Mainのみを検査)
 def check_spectral_quality(file_path, target_wl=589.7558):
     try:
         data = np.loadtxt(file_path)
@@ -72,7 +71,6 @@ def check_spectral_quality(file_path, target_wl=589.7558):
     if len(f_cut) < 5: return False, "Data Too Short"
 
     try:
-        # 波長ステップ(分解能)の計算
         if len(w_cut) > 1:
             wav_step = np.median(np.diff(w_cut))
         else:
@@ -86,49 +84,31 @@ def check_spectral_quality(file_path, target_wl=589.7558):
         p0 = [raw_amp, init_center, 0.02, init_base]
         bounds = ([0, w_cut[0], 0.001, -np.inf], [np.inf, w_cut[-1], 0.15, np.inf])
 
-        # QC用のフィット実行 (値を採用するためではなく、形を見るため)
         popt, pcov = curve_fit(gaussian_func, w_cut, f_cut, p0=p0, bounds=bounds, maxfev=3000)
         h, c, s = popt[0], popt[1], popt[2]
 
-        # --- 1. コントラストチェック（ピーク領域の最大値 vs ピーク外の最大値） ---
-        # フィットした中心(c)と幅(s)から、ピーク領域（±3シグマ）のマスクを作成
+        # --- 1. コントラストチェック ---
         peak_mask = (w_cut > c - 3 * s) & (w_cut < c + 3 * s)
-
-        # マスクの内側（ピーク領域）と外側（ピーク以外の背景）に分割
         peak_flux = f_cut[peak_mask]
         continuum_flux = f_cut[~peak_mask]
 
         if len(continuum_flux) > 0 and len(peak_flux) > 0:
-            # ピークの中の最大値 (生のデータ値)
             peak_max_val = np.max(peak_flux)
-            # ピーク以外の最大値 (生のデータ値)
             bg_max_val = np.max(continuum_flux)
-
-            # ゼロ割エラー防止
-            if bg_max_val <= 0:
-                bg_max_val = 1e-9
-
-            # コントラスト ＝ ピーク領域の最大値 ÷ ピーク外の最大値
+            if bg_max_val <= 0: bg_max_val = 1e-9
             contrast = peak_max_val / bg_max_val
-
-            # 設定値（例: 1.5）より小さければ除外
             if contrast < QC_PARAMS['min_fit_vs_raw_ratio']:
                 return False, f"Low Contrast (PeakMax/BgMax={contrast:.2f} < {QC_PARAMS['min_fit_vs_raw_ratio']})"
         else:
-            # データ点が少なすぎて分割できない場合は除外
             return False, "Peak or Continuum missing"
 
-        # --- 2. ★FWHM内データ点数チェック (鋭すぎるピークを除去)★ ---
-        fwhm_nm = 2.355 * s  # ガウス関数の半値全幅
+        # --- 2. FWHM内データ点数チェック ---
+        fwhm_nm = 2.355 * s
         points_in_peak = fwhm_nm / wav_step
-
         if points_in_peak < QC_PARAMS['min_points_in_fwhm']:
             return False, f"Too Sharp (Points={points_in_peak:.1f} < {QC_PARAMS['min_points_in_fwhm']})"
 
-        # --- 3. ノイズ推定 (MAD) ---
-        peak_mask = (w_cut > c - 3 * s) & (w_cut < c + 3 * s)
-        continuum_flux = f_cut[~peak_mask]
-
+        # --- 3. ノイズ推定 ---
         if len(continuum_flux) > 5:
             mad = np.median(np.abs(continuum_flux - np.median(continuum_flux)))
             noise = mad * 1.4826
@@ -144,16 +124,10 @@ def check_spectral_quality(file_path, target_wl=589.7558):
         fitted = gaussian_func(w_cut, *popt)
         residuals = f_cut - fitted
         residual_std = np.median(np.abs(residuals - np.median(residuals))) * 1.4826
-
         fit_quality = h / (residual_std + 1e-9)
 
-        # 判定
-        if fit_quality < QC_PARAMS['residual_quality_threshold']:
-            return False, f"Poor Fit Quality ({fit_quality:.1f})"
-
-        if snr < QC_PARAMS['snr_threshold']:
-            return False, f"Low S/N ({snr:.1f})"
-
+        if fit_quality < QC_PARAMS['residual_quality_threshold']: return False, f"Poor Fit Quality ({fit_quality:.1f})"
+        if snr < QC_PARAMS['snr_threshold']: return False, f"Low S/N ({snr:.1f})"
         if s < QC_PARAMS['sigma_min']: return False, f"Too Narrow (Sigma={s:.4f})"
         if s > QC_PARAMS['sigma_max']: return False, f"Too Broad (Sigma={s:.4f})"
 
@@ -165,79 +139,24 @@ def check_spectral_quality(file_path, target_wl=589.7558):
         return False, f"Fit Calculation Failed ({str(e)})"
 
 
-# 最大クラスター検出関数
 def find_largest_cluster(items, drift_threshold):
-    """
-    items: dictのリスト [{'idx':1, 'center':589.75}, ...]
-    戻り値: 最大クラスターに含まれるアイテムのリスト, 除外されたアイテムのリスト
-    """
-    valid_items = [x for x in items if x['center'] > 100]  # 有効な波長のみ
+    valid_items = [x for x in items if x['center'] > 100]
     if not valid_items: return [], items
-
-    # 波長でソート
     sorted_items = sorted(valid_items, key=lambda x: x['center'])
-
     max_cluster = []
-
-    # スライディングウィンドウで探索
     for i in range(len(sorted_items)):
         cluster = []
         start_wl = sorted_items[i]['center']
-
         for j in range(i, len(sorted_items)):
             if sorted_items[j]['center'] - start_wl <= drift_threshold:
                 cluster.append(sorted_items[j])
             else:
                 break
-
         if len(cluster) > len(max_cluster):
             max_cluster = cluster
-
     cluster_indices = {x['index'] for x in max_cluster}
     rejected_items = [x for x in items if x['index'] not in cluster_indices]
-
     return max_cluster, rejected_items
-
-
-# ==============================================================================
-# Plotting
-# ==============================================================================
-def plot_regional_density(taa, n, s, eq, out_dir, d_str):
-    try:
-        if len(taa) == 0: return
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.scatter(taa, n, c='b', marker='^', label='North')
-        ax.scatter(taa, s, c='r', marker='v', label='South')
-        ax.scatter(taa, eq, c='g', marker='o', label='Equator')
-        ax.set_title(f"Regional Density\n{d_str}")
-        ax.set_yscale('log')
-        ax.set_xlabel("True Anomaly Angle (deg)")
-        ax.set_ylabel("Column Density")
-        ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend()
-        plt.savefig(out_dir / "Regional_Density_Variation.png")
-        plt.close()
-    except:
-        pass
-
-
-def plot_equatorial_lt_density(taa, d, ss, dusk, out_dir, d_str):
-    try:
-        if len(taa) == 0: return
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.scatter(taa, d, c='c', marker='<', label='Dawn')
-        ax.scatter(taa, ss, c='m', marker='*', label='SSP')
-        ax.scatter(taa, dusk, c='k', marker='>', label='Dusk')
-        ax.set_title(f"Equatorial Density (LT)\n{d_str}")
-        ax.set_yscale('log')
-        ax.set_xlabel("True Anomaly Angle (deg)")
-        ax.set_ylabel("Column Density")
-        ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend()
-        plt.savefig(out_dir / "Equatorial_LT_Density.png")
-        plt.close()
-    except:
-        pass
 
 
 # ==============================================================================
@@ -250,10 +169,9 @@ def run(run_info, config):
     col_conf = config.get("column_density", {})
     target_wl = col_conf.get("target_wavelength", 589.7558)
 
-    print(f"\n--- 最終集計 (Step 13: Clustering Method - Use Step12 Values) ---")
+    print(f"\n--- 1D最終集計QC (Step 13: Clustering Method) ---")
 
     final_dat = output_dir / 'Na_atoms_final.dat'
-    region_dat = output_dir / 'Na_atoms_regions.dat'
     report_out = output_dir / f'Quality_Report_{date_str}.txt'
     summary_out = output_dir / f'Final_Summary_{date_str}.txt'
 
@@ -261,33 +179,16 @@ def run(run_info, config):
         print("  > Error: Na_atoms_final.dat not found.")
         return
 
-    # Step 12 のデータを読み込む
     try:
         data = np.loadtxt(final_dat)
         if data.ndim == 1: data = data.reshape(1, -1)
         if data.shape[1] < 5:
-            print("  > Error: Invalid format in Na_atoms_final.dat (Require 5 columns)")
+            print("  > Error: Invalid format in Na_atoms_final.dat")
             return
-        # Index(0), Atoms(1), Error(2), PeakDiff(3), CenterWL(4)
         indices, atoms, errors, peak_diffs, center_wls = data[:, 0], data[:, 1], data[:, 2], data[:, 3], data[:, 4]
     except Exception as e:
         print(f"Error reading data: {e}")
         return
-
-    # 領域データ読み込み
-    reg_map = {}
-    if region_dat.exists():
-        try:
-            rdata = np.loadtxt(region_dat)
-            if rdata.ndim == 1: rdata = rdata.reshape(1, -1)
-            for r in rdata:
-                idx = int(r[0])
-                if len(r) >= 8:
-                    reg_map[idx] = {'N': r[2], 'S': r[3], 'Eq': r[4], 'D': r[5], 'SS': r[6], 'Dusk': r[7]}
-                elif len(r) >= 5:
-                    reg_map[idx] = {'N': r[2], 'S': r[3], 'Eq': r[4], 'D': np.nan, 'SS': np.nan, 'Dusk': np.nan}
-        except:
-            pass
 
     mercury_df = pd.DataFrame()
     if csv_file_path:
@@ -303,7 +204,6 @@ def run(run_info, config):
         except:
             pass
 
-    # --- Phase 1: Filtering & Quality Check ---
     print("\n[Phase 1] Filtering Step12 Data...")
     all_data_points = []
     spec_dir = output_dir if (output_dir / "2_spectra").exists() == False else output_dir / "2_spectra"
@@ -318,7 +218,6 @@ def run(run_info, config):
         qa_status = True
         qa_reason = "OK"
 
-        # 1. 数値チェック (Step 12の値を使用)
         if val <= 0:
             qa_status = False;
             qa_reason = "Value <= 0"
@@ -329,18 +228,12 @@ def run(run_info, config):
             qa_status = False;
             qa_reason = f"Large Peak Diff ({p_diff:.4f} nm)"
 
-        # 2. 形状チェック (数値OKの場合のみ、Mainファイルを検査)
         if qa_status:
-            # Mainファイルを特定 (ファイル名パターンは変動しうるのでglobで探す)
-            # パターン: MERCURY{idx}_tr...sft...exos.dat
-            # ここでは Step 12 で使った 'main' 相当のファイルを探す必要がある
-            # 簡易的に、そのIDを持つファイルの中で最もファイルサイズが大きい、あるいは名前順で真ん中のものなどを探す
-            # ★注意: ファイル名ルールが不明確なため、'sft' を含むものを探してチェックする
+            # ソートして真ん中のファイルをMainとして扱う（元の仕様）
             cands = sorted(list(spec_dir.glob(f"MERCURY{idx}_tr*.exos.dat")))
 
             target_file = None
             if len(cands) >= 1:
-                # 3枚あるなら真ん中(main)を使う、1枚ならそれを使う
                 target_file = cands[len(cands) // 2]
 
             if target_file:
@@ -348,10 +241,6 @@ def run(run_info, config):
                 if not is_good:
                     qa_status = False;
                     qa_reason = reason
-            else:
-                # ファイルが見つからない場合は形状チェックスキップ (数値だけで判断)
-                # あるいは厳密に False にするならここを変更
-                pass
 
         row_idx = idx - 1
         taa = np.nan
@@ -367,25 +256,18 @@ def run(run_info, config):
             'is_valid': qa_status, 'reason': qa_reason
         })
 
-    # --- Phase 2: Finding Largest Cluster (Drift Check) ---
     print(f"\n[Phase 2] Clustering Analysis...")
-
-    # 候補データ（波長がまともなもの）
     candidates = [d for d in all_data_points if d['center'] > 100]
-
-    # 最大クラスターを検出
     drift_thr = QC_PARAMS['max_drift_threshold']
     best_cluster, rejected_by_cluster = find_largest_cluster(candidates, drift_thr)
 
     excluded_log = []
     reject_all = False
 
-    # クラスター以外のデータを不合格リストへ
     for item in rejected_by_cluster:
         reason = item['reason'] if not item['is_valid'] else f"Outlier (Not in main cluster)"
         excluded_log.append(f"ID {item['idx']}: {reason} (WL={item['center']:.4f})")
 
-    # クラスター内のデータでも、Phase 1で落ちていたものは除外
     final_valid_data = []
     for item in best_cluster:
         if item['is_valid']:
@@ -393,7 +275,6 @@ def run(run_info, config):
         else:
             excluded_log.append(f"ID {item['idx']}: {item['reason']} (In cluster)")
 
-    # 最終的な生存数チェック
     n_total = len(indices)
     n_survived = len(final_valid_data)
 
@@ -401,7 +282,6 @@ def run(run_info, config):
     print(f"  > Largest Cluster Size: {len(best_cluster)}")
     print(f"  > Final Valid Data: {n_survived}")
 
-    # 全滅判定: 生存数が少なすぎる場合
     min_count = QC_PARAMS.get('min_survival_count', 3)
     min_rate = QC_PARAMS.get('min_survival_rate', 0.15)
 
@@ -409,37 +289,26 @@ def run(run_info, config):
         print(f"  > [Reject All] Too few valid data points ({n_survived})")
         excluded_log.insert(0, f"ALL REJECTED: Only {n_survived} valid points found (Cluster size={len(best_cluster)})")
         reject_all = True
-        final_valid_data = []  # データクリア
+        final_valid_data = []
 
-    # --- Phase 3: Prepare Data ---
-    valid_data = {'taa': [], 'atoms': [], 'n': [], 's': [], 'eq': [], 'd': [], 'ss': [], 'dusk': []}
-
+        # --- Phase 3: Prepare Data (1D Only) ---
+    valid_data = {'taa': [], 'atoms': []}
     if not reject_all:
         for item in final_valid_data:
             valid_data['atoms'].append(item['val'])
             valid_data['taa'].append(item['taa'])
 
-            idx = item['idx']
-            N, S, Eq, D, SS, Du = np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
-            if idx in reg_map:
-                r = reg_map[idx]
-                N, S, Eq, D, SS, Du = r['N'], r['S'], r['Eq'], r['D'], r['SS'], r['Dusk']
-
-            def flt(v):
-                return v if v > 0 else np.nan
-
-            valid_data['n'].append(flt(N));
-            valid_data['s'].append(flt(S));
-            valid_data['eq'].append(flt(Eq))
-            valid_data['d'].append(flt(D));
-            valid_data['ss'].append(flt(SS));
-            valid_data['dusk'].append(flt(Du))
-
     # --- Summary & Save ---
     n_valid = len(valid_data['atoms'])
     avg_atoms = np.mean(valid_data['atoms']) if n_valid > 0 else 0
     valid_errs = [d['err'] for d in final_valid_data]
-    avg_err = np.mean(valid_errs) if valid_errs else 0
+
+    # 誤差の計算方法:
+    # (単純平均): 各観測の典型的な誤差を表す
+    # avg_err = np.mean(valid_errs) if valid_errs else 0
+
+    # 旧方式 (二乗和平方根/N): 独立な誤差の合成として計算 (過去データとの一貫性のため採用)
+    avg_err = np.sqrt(np.sum(np.array(valid_errs) ** 2)) / len(valid_errs) if valid_errs else 0
 
     print(f"  > Final Valid: {n_valid}/{n_total}")
 
@@ -466,13 +335,6 @@ def run(run_info, config):
                 seen.add(l)
 
     print(f"  > Report Saved: {report_out.name}")
-
-    if len(valid_data['n']) > 0:
-        plot_regional_density(valid_data['taa'], valid_data['n'], valid_data['s'], valid_data['eq'], output_dir,
-                              date_str)
-        if not all(np.isnan(v) for v in valid_data['d']):
-            plot_equatorial_lt_density(valid_data['taa'], valid_data['d'], valid_data['ss'], valid_data['dusk'],
-                                       output_dir, date_str)
 
 
 if __name__ == '__main__':

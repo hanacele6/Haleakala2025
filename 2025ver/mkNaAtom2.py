@@ -161,15 +161,15 @@ def fit_spectrum_and_get_counts(file_paths, fit_config, plot_config,target_wavel
 # ==============================================================================
 if __name__ == '__main__':
     # --- 基本設定 ---
-    day = "20250819"
+    day = "20250710"
     base_dir = Path("C:/Users/hanac/University/Senior/Mercury/Haleakala2025/")
     data_dir = base_dir / "output" / day
     csv_file_path = base_dir / "2025ver" / f"mcparams{day}.csv"
 
     # sftの値（ファイル名から探すために使用）
     #sft_map = {'main': '002','minus': '001','plus': '003'}
-    #sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
-    sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
+    sft_map = {'main': '020','minus': '010','plus': '030'}#dawn
+    #sft_map = {'main': '005', 'minus': '-05', 'plus': '015'}#dusk
     #sft_map = {'main': '000', 'minus': '-10', 'plus': '010'}#tese
 
     # --- フィッティングとプロットに関する設定 ---
@@ -240,6 +240,8 @@ if __name__ == '__main__':
         # ★★★ 2. 観測ごとのg-factorを計算 ★★★
         gfac1 = gfac_base / AU ** 2
 
+        print(f"DEBUG [old] gfac_base={gfac_base:.4e}, AU={AU:.4f}, gfac1={gfac1:.4e}")
+
         # 必要な3つのファイルパスを構築
         try:
             file_paths = {
@@ -267,6 +269,10 @@ if __name__ == '__main__':
             naerr = (result['stat_error'] + result['sys_error']) / gfac1
             final_results.append([idx, naatm, naerr])
             print(f"    -> 計算結果 (AU={AU:.4f}): 原子数密度 = {naatm:.4e}, 誤差 = {naerr:.4e}")
+            naatm = result['counts'] / gfac1
+            naerr = (result['stat_error'] + result['sys_error']) / gfac1
+            print(
+                f"DEBUG [old] counts={result['counts']:.4e}, stat={result['stat_error']:.4e}, sys={result['sys_error']:.4e}, N_err={naerr:.4e}")
 
     # --- 最終結果をファイルに書き出し ---
     if final_results:
