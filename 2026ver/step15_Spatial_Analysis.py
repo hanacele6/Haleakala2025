@@ -53,126 +53,145 @@ def get_sun_position_angle(date_obs_str):
 # ==============================================================================
 def find_mercury_center_with_hapke(obs_img_2d, hapke_img_highres, sun_pa_deg):
     """
-    Hapkeモデルをシーイングでぼかし、太陽の角度に合わせて回転させ、
-    観測画像の解像度(12x10)のキャンバスに配置してマッチングを行う。
+    Leblanc et al. (2008) の手法に基づいた位置特定とシーイング推定。
+    1. 観測データの重心を50%閾値で計算
+    2. シーイングを1.0"〜3.0"の範囲でスキャン
+    3. 各シーイングでモデルの重心を観測データに重ね合わせる
+    4. 重心周辺(±0.2")で微調整し、最適な(位置, シーイング)を決定する
     """
     ny_obs, nx_obs = obs_img_2d.shape
+    plate_scale = SPATIAL_CONFIG['plate_scale']
+    hapke_scale = SPATIAL_CONFIG['hapke_scale_factor']
 
-    # 1. シーイング(2Dぼかし)の適用
-    sigma_arcsec = SPATIAL_CONFIG['seeing_arcsec'] / 2.355
-    sigma_pix = sigma_arcsec * SPATIAL_CONFIG['hapke_scale_factor']
-    hapke_blurred = ndimage.gaussian_filter(hapke_img_highres, sigma=sigma_pix)
+    # --- ステップ1: 観測データの重心計算 (Leblanc et al. 2008, [6]) ---
+    # 最大輝度の50%以上のみを使用 [cite: 107, 111, 113]
+    thresh_50 = np.max(obs_img_2d) * 0.5
+    mask = (obs_img_2d >= thresh_50)
+    if np.sum(mask) == 0:
+        mask = (obs_img_2d >= 0)
+    cy_obs, cx_obs = ndimage.center_of_mass(obs_img_2d * mask)
 
-    # ---------------------------------------------------------
-    # 2. 太陽のPosition Angleに合わせてHapke画像を回転 (パイプライン固定版)
-    # ---------------------------------------------------------
+    # --- パラメータ設定 (Leblancらの観測結果に基づく範囲) ---
+    # 論文での結果(約2.0"±0.4")をカバーする範囲 [cite: 113, 167, 322]
+    seeing_candidates = np.linspace(1.0, 3.5, 11)
+    # 位置の微調整範囲 (論文では±0.2")
+    fine_search_arcsec = 1.0
+    fine_steps = 11
 
-    # 鏡面反転の補正 (カセグレン焦点のため東西が反転している場合の固定処理)
-    # ※もし反転が不要と分かれば、この1行は消してください
-    hapke_flipped = np.fliplr(hapke_blurred)
-
-    # [定数1] Hapkeモデルの初期の光の方向 (fliplrをした場合、光は「右(0度)」になります)
-    # ※ fliplrをしない場合は 180.0 (左) にしてください。
-    HAPKE_LIGHT_ANGLE = 0.0
-
-    # [定数2] カメラの固定向き (画像上の「北」は何度方向か？)
-    # 10の側が南北なので、北は「右(0度)」か「左(180度)」のどちらかです。
-    # ※ 一度決めたら全日程で固定します。
-    NORTH_ANGLE_ON_IMAGE = 0.0
-
-    # [定数3] カメラの東西の向き (画像上の「東」は何度方向か？)
-    # 通常、北から反時計回りに90度回した方向が東です。
-    EAST_ANGLE_ON_IMAGE = NORTH_ANGLE_ON_IMAGE + 90.0
-
-    # ドイツ式赤道儀の子午線反転の自動検知 (夕方観測なら望遠鏡が180度逆立ちしている)
-    telescope_flip_angle = 180.0 if sun_pa_deg > 180.0 else 0.0
-
-    # ---------------------------------------------------------
-    # 天球上の太陽PA(sun_pa_deg)を、画像上の光の入射角に変換する
-    # ---------------------------------------------------------
-    # 太陽のPA(北から東回り)を、Python画像座標(北から東方向への角度)にマッピング
-    # 太陽の方向 = 北の角度 + (PA * 東の方向への符号) + 望遠鏡反転
-
-    # 東が +90度の方向にあるので、PAをそのまま足す
-    target_light_angle = NORTH_ANGLE_ON_IMAGE + sun_pa_deg + telescope_flip_angle
-
-    # ---------------------------------------------------------
-    # 最終的な回転処理
-    # ---------------------------------------------------------
-    # 目的の光の角度(target_light_angle)から、Hapkeの初期角度(HAPKE_LIGHT_ANGLE)を引き算する
-    rotation_angle = target_light_angle - HAPKE_LIGHT_ANGLE
-
-    # ndimage.rotate は時計回りがデフォルトなので、マイナスをつけて反時計回りにする
-    hapke_rotated = ndimage.rotate(hapke_flipped, -rotation_angle, reshape=False, mode='constant', cval=0.0)
-
-
-    # 3. ダウンスケール(縮小)
-    zoom_factor = 1.0 / (SPATIAL_CONFIG['hapke_scale_factor'] * SPATIAL_CONFIG['plate_scale'])
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore', UserWarning)
-        hapke_lowres = ndimage.zoom(hapke_rotated, zoom_factor, order=1)
-
-    # ---------------------------------------------------------
-    # サイズの不一致を防ぐため、12x10の黒いキャンバスに配置する
-    # ---------------------------------------------------------
-    h_low, w_low = hapke_lowres.shape
-    hapke_canvas = np.zeros((ny_obs, nx_obs), dtype=float)
-
-    # キャンバスの中央付近に配置するためのオフセット計算
-    y0 = (ny_obs - h_low) // 2
-    x0 = (nx_obs - w_low) // 2
-
-    # はみ出し防止（水星が大きすぎる場合の安全対策）
-    y_start, y_end = max(0, y0), min(ny_obs, y0 + h_low)
-    x_start, x_end = max(0, x0), min(nx_obs, x0 + w_low)
-    h_start, h_end = max(0, -y0), max(0, -y0) + (y_end - y_start)
-    w_start, w_end = max(0, -x0), max(0, -x0) + (x_end - x_start)
-
-    # ペースト実行
-    hapke_canvas[y_start:y_end, x_start:x_end] = hapke_lowres[h_start:h_end, w_start:w_end]
-
-    # キャンバス上での幾何学的な「真の中心」座標を再計算
-    true_cy_hapke = y_start + (h_low / 2.0) - h_start
-    true_cx_hapke = x_start + (w_low / 2.0) - w_start
-    # ---------------------------------------------------------
-
-    # 4. 観測画像の光度重心で初期位置のアタリをつける
-    threshold = np.max(obs_img_2d) * 0.2
-    img_masked = np.where(obs_img_2d > threshold, obs_img_2d, 0)
-    cy_init, cx_init = ndimage.center_of_mass(img_masked)
-
-    if np.isnan(cy_init) or np.isnan(cx_init):
-        cy_init, cx_init = ny_obs / 2.0, nx_obs / 2.0
-
-    # 5. グリッドサーチによるテンプレートマッチング
-    search_range = 2.0  # ±2ピクセル探索
-    steps = 40
     best_score = -np.inf
-    best_cx, best_cy = cx_init, cy_init
-    best_shifted_model = np.zeros_like(obs_img_2d)
+    best_results = {
+        'cx': cx_obs, 'cy': cy_obs,
+        'seeing': 2.0, 'model': np.zeros_like(obs_img_2d),
+        'rot_angle': 0
+    }
 
-    for dy in np.linspace(-search_range, search_range, steps):
-        for dx in np.linspace(-search_range, search_range, steps):
-            cx_test = cx_init + dx
-            cy_test = cy_init + dy
+    # --- ステップ2 & 3: シーイングのループと重心合わせ ---
+    for s_arcsec in seeing_candidates:
+        # A. モデルの準備 (ぼかし -> 回転 -> 縮小)
+        sigma_pix = (s_arcsec / 2.355) * hapke_scale
+        h_blurred = ndimage.gaussian_filter(hapke_img_highres, sigma=sigma_pix)
 
-            # Hapkeキャンバスの中心を cx_test, cy_test にシフト
-            shift_y = cy_test - true_cy_hapke
-            shift_x = cx_test - true_cx_hapke
+        # ---------------------------------------------------------
+        # 2. 太陽のPosition Angleに合わせてHapke画像を回転 (パイプライン固定版)
+        # ---------------------------------------------------------
 
-            shifted_hapke = ndimage.shift(hapke_canvas, (shift_y, shift_x), order=1, mode='constant', cval=0.0)
+        # 鏡面反転の補正 (カセグレン焦点のため東西が反転している場合の固定処理)
+        # ※もし反転が不要と分かれば、この1行は消す
+        hapke_flipped = np.fliplr(h_blurred)
+        # hapke_flipped = hapke_blurred
 
-            # 内積でスコア化（12x10同士なのでエラーにならない）
-            score = np.sum(obs_img_2d * shifted_hapke)
+        # [定数1] Hapkeモデルの初期の光の方向 (fliplrをした場合、光は「右(0度)」)
+        # ※ fliplrをしない場合は 180.0 (左) にする
+        HAPKE_LIGHT_ANGLE = 0.0
+        # HAPKE_LIGHT_ANGLE = 180.0
 
-            if score > best_score:
-                best_score = score
-                best_cx = cx_test
-                best_cy = cy_test
-                best_shifted_model = shifted_hapke
+        # [定数2] カメラの固定向き (画像上の「北」は何度方向か？)
+        # 10の側が南北なので、北は「右(0度)」か「左(180度)」のどちらか
+        # ※ 一度決めたら全日程で固定
+        NORTH_ANGLE_ON_IMAGE = 180.0
 
-    return best_cx, best_cy, best_shifted_model, rotation_angle
+        # ドイツ式赤道儀の子午線反転の自動検知 (夕方観測なら望遠鏡が180度逆立ちしている)
+        telescope_flip_angle = 180.0 if sun_pa_deg > 180.0 else 0.0
+
+        # ---------------------------------------------------------
+        # 天球上の太陽PA(sun_pa_deg)を、画像上の光の入射角に変換する
+        # ---------------------------------------------------------
+        # 太陽のPA(北から東回り)を、Python画像座標(北から東方向への角度)にマッピング
+        # 太陽の方向 = 北の角度 + (PA * 東の方向への符号) + 望遠鏡反転
+
+        # 東が +90度の方向にあるので、PAをそのまま足す
+        target_light_angle = NORTH_ANGLE_ON_IMAGE + sun_pa_deg + telescope_flip_angle
+
+        # ---------------------------------------------------------
+        # 最終的な回転処理
+        # ---------------------------------------------------------
+        # 目的の光の角度(target_light_angle)から、Hapkeの初期角度(HAPKE_LIGHT_ANGLE)を引き算する
+        rotation_angle = target_light_angle - HAPKE_LIGHT_ANGLE
+
+        # ndimage.rotate は時計回りがデフォルトなので、マイナスをつけて反時計回りにする
+        h_rotated = ndimage.rotate(hapke_flipped, -rotation_angle, reshape=False, mode='constant', cval=0.0)
+
+        # 縮小
+        zoom_factor = 1.0 / (hapke_scale * plate_scale)
+        h_lowres = ndimage.zoom(h_rotated, zoom_factor, order=1)
+
+        # サイズを12x10に合わせるためのキャンバス
+        h_canvas = np.zeros((ny_obs, nx_obs))
+        h_h, h_w = h_lowres.shape
+        y_c, x_c = (ny_obs - h_h) // 2, (nx_obs - h_w) // 2
+        # はみ出し処理をしてペースト
+        y_s, y_e = max(0, y_c), min(ny_obs, y_c + h_h)
+        x_s, x_e = max(0, x_c), min(nx_obs, x_c + h_w)
+        h_canvas[y_s:y_e, x_s:x_e] = h_lowres[0:(y_e - y_s), 0:(x_e - x_s)]
+
+        true_cy_canvas = y_s + (h_h / 2.0)
+        true_cx_canvas = x_s + (h_w / 2.0)
+
+        # B. このモデル自体の重心を計算
+        h_thresh_50 = np.max(h_canvas) * 0.5
+        h_mask = (h_canvas >= h_thresh_50)
+        if np.sum(h_mask) == 0:
+            h_mask = (h_canvas >= 0)
+
+        cy_mod, cx_mod = ndimage.center_of_mass(h_canvas * h_mask)
+
+
+        # 観測データを最大値1.0に正規化
+        obs_norm = obs_img_2d / np.max(obs_img_2d)
+
+        # 最小二乗法なので、初期値は「無限大」にして最小値を探す
+        best_error = np.inf
+
+        # C. ステップ4: 重心周辺での微調整
+        fine_range = fine_search_arcsec / plate_scale
+        for dy in np.linspace(-fine_range, fine_range, fine_steps):
+            for dx in np.linspace(-fine_range, fine_range, fine_steps):
+                shift_y = (cy_obs - cy_mod) + dy
+                shift_x = (cx_obs - cx_mod) + dx
+
+                shifted_model = ndimage.shift(h_canvas, (shift_y, shift_x), order=1)
+
+                # シフトしたモデルも最大値を1.0に正規化
+                max_val = np.max(shifted_model)
+                model_norm = shifted_model / max_val if max_val > 0 else shifted_model
+
+                # 最小二乗法 (Sum of Squared Errors) の計算
+                error = np.sum((obs_norm - model_norm) ** 2)
+
+
+                if error < best_error:
+                    best_error = error
+                    best_results.update({
+                        'cx': true_cx_canvas + shift_x,
+                        'cy': true_cy_canvas + shift_y,
+                        'seeing': s_arcsec,
+                        'model': shifted_model,
+                        'rot_angle': rotation_angle
+                    })
+
+    print(
+        f"    -> Best Fit: Seeing={best_results['seeing']:.2f}\", Center=({best_results['cx']:.2f}, {best_results['cy']:.2f})")
+    return best_results['cx'], best_results['cy'], best_results['model'], best_results['rot_angle']
 
 
 # ==============================================================================
