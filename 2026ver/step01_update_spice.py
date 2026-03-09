@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 
-# ▼▼▼【拡張機能】明け方/夕方を判断するための関数 ▼▼▼
+# ▼▼▼ 明け方/夕方を判断するための関数 ▼▼▼
 def get_terminator_side(et):
     try:
         subp_vec, _, _ = spice.subpnt('INTERCEPT/ELLIPSOID', 'MERCURY', et, 'IAU_MERCURY', 'LT+S', 'EARTH')
@@ -36,7 +36,7 @@ def planazel(et, target='MERCURY', lon=203.742, lat=20.708, alt=3043.0):
 
 
 # ==============================================================================
-# パイプライン実行用モジュール
+# パイプライン用
 # ==============================================================================
 def run(run_info, config):
     csv_path = run_info["csv_path"]
@@ -121,7 +121,6 @@ def run(run_info, config):
 
             et = spice.str2et(date_obs_str)
 
-            # 元の計算
             az, el, ddist, ddot = planazel(et, 'MERCURY')
             apparent_diameter_arcsec = np.degrees(2 * np.arctan(radius_km / ddist)) * 3600
             posSP, _ = spice.spkezr('MERCURY', et, 'J2000', 'LT+S', 'SUN')

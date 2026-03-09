@@ -16,7 +16,6 @@ def gaussian(x, amplitude, mean, stddev):
 def create_final_trace_products(data_filepath, dark_filepath, output_dir, config, make_plots=True):
     """
     fibfit(mkFibFit4c)のロジックと可視化機能を取り入れたトレース処理。
-    「累積更新」ロジックを実装済み。
     """
     print(f"--- 高精度トレース処理開始 (fibfit準拠・可視化機能付き) ---")
     print(f"データファイル: {data_filepath.name}")
@@ -228,7 +227,7 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
             y_max = min(num_spatial_pts, y_pos + trace_width_radius + 1)
             pp1_data[y_min:y_max, x_pos] = i + 1
 
-    # ★★★ 確実なファイル名生成 (バグ回避済み) ★★★
+    # ★★★ ファイル名生成 ★★★
     clean_stem = data_filepath.stem.replace("_nhp_py", "")
 
     file_pp1 = output_dir / f"{clean_stem}.pp1.fits"
@@ -277,13 +276,13 @@ def run(run_info, config):
 
         clean_stem = original_fits_path.stem.replace("_nhp_py", "")
 
-        # ★ 修正: 入力ファイルが 1_fits/ に移動されている可能性を考慮
+        # 入力ファイルが 1_fits/ に移動されている可能性を考慮
         nhp_fits_name = f"{clean_stem}_nhp_py.fits"
         input_file = output_dir / nhp_fits_name
         if not input_file.exists():
             input_file = output_dir / "1_fits" / nhp_fits_name
 
-        # ★ 修正: 出力ファイルがすでに 1_fits/ にあるかどうかもチェックする
+        # 出力ファイルがすでに 1_fits/ にあるかどうかもチェックする
         fppoly_name = f"{clean_stem}.fppoly.fits"
         fppoly_path_direct = output_dir / fppoly_name
         fppoly_path_organized = output_dir / "1_fits" / fppoly_name

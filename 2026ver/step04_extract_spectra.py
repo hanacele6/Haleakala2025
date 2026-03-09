@@ -76,7 +76,7 @@ def run(run_info, config):
             if not data_file_path.exists():
                 data_file_path = output_dir / "1_fits" / processed_filename
 
-            # ★ 修正: 出力ファイルがすでに 1_fits/ にあるかチェック
+            # 出力ファイルがすでに 1_fits/ にあるかチェック
             current_count = sum(df.iloc[:ifile + 1][desc_col] == description)
             output_file_name = f"{description}{current_count}_tr.fits"
             output_path_direct = output_dir / output_file_name

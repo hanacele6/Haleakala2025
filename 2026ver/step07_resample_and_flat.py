@@ -18,15 +18,6 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
                      apply_wl_flat=True, processing_range=None):
     """
     2Dスペクトルを波長校正し、等間隔の波長軸に再サンプリングします。
-
-    Args:
-        input_fsp_path (str): 入力となる2Dスペクトルファイル(*.fsp.fits)のパス。
-        wavmap_path (str): 波長マップファイル(*.wmp.fits)のパス。
-        wl_flat_path (str): ホワイトライトフラットの2Dスペクトルファイル(*.fsp.fits)のパス。
-        sky_flat_fsp_path (str, optional): スカイフラット用の2Dスペクトルファイル(*.fsp.fits)のパス。Defaults to None.
-        params (dict, optional): 'wavshift', 'interpolation_kind' を含むパラメータ辞書。Defaults to None.
-        save_plots (bool, optional): 各ファイバーの詳細なプロットを保存するかどうか。Defaults to False.
-        representative_fiber_plot (int, optional): 指定した場合、そのファイバー番号のプロットのみを表示する。Defaults to None.
     """
     print("\n" + "=" * 80)
     print(f"Starting Wavelength Resampling for: {os.path.basename(input_fsp_path)}")
@@ -493,7 +484,7 @@ def run(run_info, config):
     wavmap = find_file_in_folders(f"{master_sky_flat_name}.wmp.fits", output_dir)
     sky_flat = find_file_in_folders(f"{master_sky_flat_name}.fits", output_dir)
 
-    # ★★★ 新機能: フラット画像 (HLG or LED) を自動で探す (探索機能付き) ★★★
+    # ★★★ フラット画像 (HLG or LED) を自動で探す ★★★
     wl_flat = None
     if apply_wl_flat:
         hlg_path = find_file_in_folders("master_hlg.fits", output_dir)

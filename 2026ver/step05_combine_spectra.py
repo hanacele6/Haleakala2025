@@ -137,11 +137,11 @@ def run(run_info, config):
         output_filename = f"master_{current_type.lower()}{output_suffix}"
         output_filepath = output_dir / output_filename
 
-        # ★ 修正: 出力ファイルがすでに整理フォルダ(1_fits)にあるかチェック
+        # 出力ファイルがすでに整理フォルダ(1_fits)にあるかチェック
         output_filepath_organized = output_dir / "1_fits" / output_filename
         is_processed = output_filepath.exists() or output_filepath_organized.exists()
 
-        # ▼▼▼ 極限まで実行を減らすスキップ処理 ▼▼▼
+        # ▼▼▼ スキップ処理 ▼▼▼
         if is_processed and not force_rerun:
             print(f"[{current_type}] 処理済みスキップ: {output_filename}")
             continue
@@ -153,7 +153,7 @@ def run(run_info, config):
             input_filename = f"{current_type}{file_num}{input_suffix}"
             file_path = output_dir / input_filename
 
-            # ★ 修正: 直下に無ければ整理フォルダ(1_fits)を探す
+            # 直下に無ければ整理フォルダ(1_fits)を探す
             if not file_path.exists():
                 file_path = output_dir / "1_fits" / input_filename
 

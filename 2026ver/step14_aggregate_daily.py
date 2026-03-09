@@ -59,9 +59,13 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
                 beta = obs_row['ecliptic_latitude_deg']
                 elon = obs_row['ecliptic_longitude_deg']
                 obs_type = str(obs_row.get('terminator_side', 'Unknown')).strip()
+
+                # ★ 輝度計算のために g_factor を取得
+                g_factor = float(obs_row.get('g_factor', np.nan))
             else:
                 Rms, beta, elon = np.nan, np.nan, np.nan
                 obs_type = "Unknown"
+                g_factor = np.nan
 
         except Exception as e:
             print(f"  > 警告: {day} の基本データ読み込みに失敗しました ({e})。スキップします。")
@@ -72,9 +76,14 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
         h = Rms * np.sin(beta * d2r)
         half_surface_area = 3.74e17
 
+        # 柱密度 (Column Density)
         cd_1d_raw = avg_atoms / half_surface_area
         cd_1d_corrected = (avg_atoms / pa_correction_factor) / half_surface_area
         cd_err_corrected = (integrated_err / pa_correction_factor) / half_surface_area
+
+        # ★ 輝度 (Brightness) の計算 [kR] (Column Density * g_factor / 10^9)
+        brightness_kr_raw = (cd_1d_raw * g_factor) / 1e9 if not np.isnan(g_factor) else np.nan
+        brightness_kr_corrected = (cd_1d_corrected * g_factor) / 1e9 if not np.isnan(g_factor) else np.nan
 
         result_row = {
             'Date': str(day),
@@ -89,6 +98,9 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
             'Disk_Avg_CD_Raw': cd_1d_raw,
             'Disk_Avg_CD_Corrected': cd_1d_corrected,
             'Disk_Avg_Error_Corrected': cd_err_corrected,
+            # ★ 新しく追加した輝度の列
+            'Disk_Avg_Brightness_kR': brightness_kr_raw,
+            'Disk_Avg_Brightness_kR_Corrected': brightness_kr_corrected,
             'Correction_Factor': pa_correction_factor
         }
         yearly_results[year].append(result_row)
@@ -96,13 +108,13 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
         cf_for_plot[year].append(pa_correction_factor)
 
         print(
-            f"  > [{day}] {obs_type:<4}, TAA={TAA:.1f}°, 補正係数={pa_correction_factor:.3f} -> Disk_Avg_CD_Corrected={cd_1d_corrected:.3e}")
+            f"  > [{day}] {obs_type:<4}, PA={PA:.1f}°, 補正係数={pa_correction_factor:.3f} -> CD_Corrected={cd_1d_corrected:.3e}, Brightness={brightness_kr_corrected:.2f} kR")
 
     # --- 3. 年ごとにCSVを読み込み・結合・上書き保存 ---
     for year, rows in yearly_results.items():
         if not rows: continue
 
-        csv_filename = out_base / f"All_Results_Summary_1D_{year}.csv"  # 名前を1Dと明記
+        csv_filename = out_base / f"All_Results_Summary_1D_{year}.csv"
         new_df = pd.DataFrame(rows)
 
         if csv_filename.exists() and csv_filename.stat().st_size > 0:

@@ -5,7 +5,7 @@ from pathlib import Path
 from scipy.optimize import curve_fit
 
 # ==============================================================================
-# Quality Control Parameters (Step 12の結果を尊重 + 形状厳密チェック)
+# Quality Control Parameters (Step 12の形状厳密チェック)
 # ==============================================================================
 QC_PARAMS = {
     # 1. 基本数値チェック (Na_atoms_final.dat の値を判定)
@@ -307,7 +307,7 @@ def run(run_info, config):
     # (単純平均): 各観測の典型的な誤差を表す
     # avg_err = np.mean(valid_errs) if valid_errs else 0
 
-    # 旧方式 (二乗和平方根/N): 独立な誤差の合成として計算 (過去データとの一貫性のため採用)
+    # (二乗和平方根/N): 独立な誤差の合成として計算 (過去データとの一貫性のため採用)
     avg_err = np.sqrt(np.sum(np.array(valid_errs) ** 2)) / len(valid_errs) if valid_errs else 0
 
     print(f"  > Final Valid: {n_valid}/{n_total}")

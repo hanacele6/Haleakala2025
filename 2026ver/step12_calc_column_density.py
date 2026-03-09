@@ -131,8 +131,8 @@ def process_total_atoms(paths, base_name, output_dir, gfac1, fit_config, target_
     peak_diff = (max(centers) - min(centers)) if len(centers) >= 2 else 0.0
 
 
-    print(f"DEBUG [{base_name}] cts2={cts2:.4e}, err_stat={err_stat:.4e}, err_sys={err_sys:.4e}")
-    print(f"DEBUG [{base_name}] N_total={N_total:.4e}, N_err={N_err:.4e}")
+    #print(f"DEBUG [{base_name}] cts2={cts2:.4e}, err_stat={err_stat:.4e}, err_sys={err_sys:.4e}")
+    #print(f"DEBUG [{base_name}] N_total={N_total:.4e}, N_err={N_err:.4e}")
 
     return N_total, N_err, peak_diff, main_center_wl
 
@@ -185,7 +185,7 @@ def run(run_info, config):
 
         gfac1 = (GFAC_CONST * gamma) / (dist ** 2)
 
-        print(f"DEBUG [run] GFAC_CONST={GFAC_CONST:.4e}, gamma={gamma:.4e}, dist={dist:.4f}, gfac1={gfac1:.4e}")
+        #print(f"DEBUG [run] GFAC_CONST={GFAC_CONST:.4e}, gamma={gamma:.4e}, dist={dist:.4f}, gfac1={gfac1:.4e}")
 
         # 1D全体計算のみを実行
         ret = process_total_atoms(paths, base, output_dir, gfac1, fit_config, target_wl)

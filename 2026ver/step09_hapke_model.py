@@ -33,7 +33,7 @@ def run(run_info, config):
     fits_path_rr = output_dir / 'test_python.fit'
     dat_path = output_dir / f'{date_str}HapkeMRnm.dat'
 
-    # ▼▼▼ 極限まで実行を減らすスキップ処理 ▼▼▼
+    # ▼▼▼ スキップ処理 ▼▼▼
     if fits_path_sr.exists() and dat_path.exists() and not force_rerun:
         print(f"  > 処理済みスキップ: {fits_path_sr.name}")
         print("--- Hapkeモデル処理完了 ---")

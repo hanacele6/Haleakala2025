@@ -6,7 +6,7 @@ import re
 
 
 def get_obj_type(filename):
-    """ファイル名からオブジェクトタイプを判定するヘルパー関数"""
+    """ファイル名からオブジェクトタイプを判定する関数"""
     name_lower = filename.lower()
     if "me" in name_lower or "mercury" in name_lower:
         return "MERCURY"
@@ -30,7 +30,6 @@ def get_obj_type(filename):
 def search_neighboring_dates(data_base_dir, target_date, missing_types):
     """
     指定されたタイプ(missing_types)を含むファイルを、近隣の日付フォルダから探す。
-    戻り値: {type: [Pathオブジェクト, ...]}
     """
     # dataディレクトリ内の全ての日付フォルダを取得 (YYYYMMDD形式と仮定)
     data_root = data_base_dir / "data"
@@ -122,7 +121,7 @@ def run(run_info, config):
         # 通常は水星データもないはずなのでここで止めるのが無難
         return False
 
-    # カラム定義
+    # 定義
     columns = [
         "fits", "Type", "DATE-OBS", "apparent_diameter_arcsec",
         "mercury_sun_distance_au", "mercury_sun_radial_velocity_km_s",

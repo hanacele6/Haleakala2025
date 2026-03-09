@@ -6,11 +6,13 @@ import os
 from scipy.ndimage import median_filter
 
 
-# --- 関数定義 (変更なし) ---
+# --- 関数定義 ---
 
 def find_and_correct_hotpixels_auto(image_data, kernel_size=3, sigma_threshold=5.0):
     """
     統計的な手法を用いて、単一の画像フレーム内のホットピクセルを自動で検出し補正する。
+    ただ、ほっとぴくせうをまじめに除去してもしなくてもあんまり結果は変わらない。
+    デフォルトの設定では基本的にそのまま通している。
     """
     print(f"  > 自動ホットピクセル除去を開始 (kernel_size={kernel_size}, sigma_threshold={sigma_threshold})...")
     corrected_data = image_data.copy()
@@ -32,8 +34,7 @@ def find_and_correct_hotpixels_auto(image_data, kernel_size=3, sigma_threshold=5
 
 def correct_pixels_manual(image_data, roi_list):
     """
-    ユーザーが指定したROI（関心領域）リストに基づき、ピクセルを手動で補正する。
-    IDLのROI指定が「左下原点Y上向き」であることを前提に、PythonでY座標を変換する。
+    指定したROIリストに基づき、ピクセルを手動で補正する。
     """
     if not roi_list:
         return image_data
@@ -67,7 +68,7 @@ def correct_pixels_manual(image_data, roi_list):
 
 def run(run_info, config):
     """
-    メインの処理フロー (統合パイプラインから呼び出される)
+    メインの処理
     """
     # 統合スクリプトから自動生成されたパスを受け取る
     output_dir = run_info["output_dir"]
@@ -119,7 +120,7 @@ def run(run_info, config):
 
         is_processed = output_filename.exists() or output_filename_organized.exists()
 
-        # ▼▼▼ 極限まで実行を減らすスキップ処理 ▼▼▼
+        # ▼▼▼ スキップ処理 ▼▼▼
         if is_processed and not force_rerun:
             print(f"[{i + 1}/{len(file_list)}] 処理済みスキップ: {output_filename.name}")
             continue
@@ -165,6 +166,5 @@ def run(run_info, config):
     print("--- ホットピクセル除去処理が完了しました ---")
 
 
-# 単体テスト用（必要に応じて）
 if __name__ == '__main__':
     print("このスクリプトは main.py からモジュールとして呼び出してください。")

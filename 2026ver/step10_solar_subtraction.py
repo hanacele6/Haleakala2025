@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 
 # ==============================================================================
-# ヘルパー関数: 2次元スペクトルマップの生成
+# 2次元スペクトルマップの生成
 # ==============================================================================
 def generate_solar_subtracted_map(wc_fits_path, solar_model_norm, wl_model, fit_config, output_path):
     """
@@ -245,7 +245,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 
     Natb = Nat - ratio2 * best_params['surf2s']
 
-    # --- 1Dファイルの保存 (既存機能) ---
+    # --- 1Dファイルの保存 ---
     output_test_path = output_dir / f"{base_filename}.test.dat"
     output_data1 = np.column_stack([wl, Nat, best_params['surf2s'] * best_params['ratiof_full']])
     np.savetxt(output_test_path, output_data1, fmt='%.8e', header="Wavelength Obs Model")

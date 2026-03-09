@@ -29,7 +29,7 @@ def gaussian_kernel(size, sigma=1):
 def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, save_fiber_plots=True, root_output_dir=None):
     base_filename = input_fsp_path.name
 
-    # ★ 修正: 整理フォルダの中のファイルを読み込んでも、出力は必ず直下に出す
+    # 整理フォルダの中のファイルを読み込んでも、出力は必ず直下に出す
     output_dir = Path(root_output_dir) if root_output_dir else input_fsp_path.parent
     fileWMP = output_dir / base_filename.replace(".fits", ".wmp.fits")
     plot_output_dir = output_dir / "fiber_plots" / input_fsp_path.stem
@@ -80,7 +80,7 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, save_fiber_plots=Tr
     axes_detail_flat = axes_detail.flatten()
 
     # =====================================================================
-    # 究極の対策: センターアウト方式 ＆ 偶数奇数完全分離
+    # 偶数奇数完全分離
     # =====================================================================
     even_fibs = [f for f in iFibAct if f % 2 == 0]
     odd_fibs = [f for f in iFibAct if f % 2 != 0]
@@ -110,7 +110,7 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, save_fiber_plots=Tr
         is_even = (j % 2 == 0)
 
         # -------------------------------------------------------------
-        # 1. 探索基準位置の決定 (独立記憶の参照)
+        # 1. 探索基準位置の決定
         # -------------------------------------------------------------
         expected_pos = None
         search_window = 15  # 基本は隣なので±15ピクセル
@@ -275,7 +275,7 @@ def run(run_info, config):
 
     print(f"\n--- 波長較正処理を開始します ---")
 
-    # ★ 修正1: 出力ファイルがすでに整理フォルダ(1_fits)にあるかチェックしてスキップ
+    # 出力ファイルがすでに整理フォルダ(1_fits)にあるかチェックしてスキップ
     wmp_name = "master_sky.wmp.fits"
     wmp_path_direct = output_dir / wmp_name
     wmp_path_organized = output_dir / "1_fits" / wmp_name
@@ -285,7 +285,7 @@ def run(run_info, config):
         print("--- 波長較正処理完了 ---")
         return
 
-    # ★ 修正2: 入力ファイル(master_sky.fits)を直下と 1_fits/ の両方から探す
+    # 入力ファイル(master_sky.fits)を直下と 1_fits/ の両方から探す
     input_path = output_dir / "master_sky.fits"
     if not input_path.exists():
         input_path = output_dir / "1_fits" / "master_sky.fits"

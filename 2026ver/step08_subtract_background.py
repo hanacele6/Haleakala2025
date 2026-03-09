@@ -5,7 +5,7 @@ import pandas as pd
 
 
 # ==============================================================================
-# メインの背景光減算・切り出し関数 (アルゴリズム変更なし)
+# メインの背景光減算・切り出し関数
 # ==============================================================================
 def subtract_background(input_wc_path, fiber_definitions, output_dir,
                         crop_spectrum=False, center_wl=None, crop_half_width=None):
@@ -127,13 +127,13 @@ def run(run_info, config):
         for i, _ in enumerate(target_df.iterrows(), start=1):
             base_name = f"{process_type}{i}_tr"
 
-            # ★ 修正1: 入力ファイル (*.wc.fits) を直下と 1_fits/ の両方から探す
+            # 入力ファイル (*.wc.fits) を直下と 1_fits/ の両方から探す
             input_file_name = f"{base_name}.wc.fits"
             input_file = output_dir / input_file_name
             if not input_file.exists():
                 input_file = output_dir / "1_fits" / input_file_name
 
-            # ★ 修正2: 出力ファイル (*.dat) が直下または 2_spectra/ にあるかチェック
+            # 出力ファイル (*.dat) が直下または 2_spectra/ にあるかチェック
             suffix = ".totfib.dat" if crop_enabled else ".totfib_orig.dat"
             output_name = f"{base_name}{suffix}"
             is_processed = (output_dir / output_name).exists() or (output_dir / "2_spectra" / output_name).exists()

@@ -36,7 +36,7 @@ GRID_MAX_RM = 5.0
 #output_dir = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0109_0.4Denabled_2.7_HalfQ"
 #output_dir = r"./SimulationResult_202602/HeteroSurf_72x36_NoEq_DT100_UDist_Refill1.0e-5"
 #output_dir = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0211_0.4Denabled_2.7_LowestQ_Bounce525K"
-output_dir = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0220_0.4Denabled_2.7_LowestQ_Bounce525K_A2.0"
+output_dir = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0301_0.4Denabled_2.7_LowestQ_Bounce525K_A1.5_LongLT"
 
 
 # ★★★ プロットモード選択 (シミュレーション側)
