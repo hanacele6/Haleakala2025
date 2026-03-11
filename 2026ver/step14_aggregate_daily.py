@@ -74,16 +74,26 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
         # --- (D) 物理量の補正と計算 ---
         pa_correction_factor = np.polyval(pa_correction_coeffs, PA) if pa_correction_coeffs is not None else 1.0
         h = Rms * np.sin(beta * d2r)
+
+        # 柱密度用：水星の半球の表面積 (cm^2)
         half_surface_area = 3.74e17
 
-        # 柱密度 (Column Density)
+        # 輝度用：水星の円盤の投影面積 (cm^2)
+        disk_area_cm2 = 1.8698e17
+
+        # 1. 柱密度 (Column Density) - 従来通り半球の表面積を使用
         cd_1d_raw = avg_atoms / half_surface_area
         cd_1d_corrected = (avg_atoms / pa_correction_factor) / half_surface_area
         cd_err_corrected = (integrated_err / pa_correction_factor) / half_surface_area
 
-        # ★ 輝度 (Brightness) の計算 [kR] (Column Density * g_factor / 10^9)
-        brightness_kr_raw = (cd_1d_raw * g_factor) / 1e9 if not np.isnan(g_factor) else np.nan
-        brightness_kr_corrected = (cd_1d_corrected * g_factor) / 1e9 if not np.isnan(g_factor) else np.nan
+        # 2. 輝度 (Brightness) [kR] - 投影面積を使用し、総原子数から直接計算
+        # 計算式: (総原子数 * g-factor / 投影面積) / 10^9
+        if not np.isnan(g_factor):
+            brightness_kr_raw = (avg_atoms * g_factor / disk_area_cm2) / 1e9
+            brightness_kr_corrected = ((avg_atoms / pa_correction_factor) * g_factor / disk_area_cm2) / 1e9
+        else:
+            brightness_kr_raw = np.nan
+            brightness_kr_corrected = np.nan
 
         result_row = {
             'Date': str(day),
