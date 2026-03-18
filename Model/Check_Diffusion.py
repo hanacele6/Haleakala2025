@@ -13,9 +13,18 @@ T_AMP = 600.0
 EA_OLD = 0.4
 EA_NEW = 0.65
 
+# --- Sizmannモデル(Proposed)用の物理パラメータ ---
+EA_TH = 0.95  # Sizmann 熱拡散 (TD)
+EA_RED = 0.48  # Sizmann イオン誘起拡散 (RED: 0.5 * Hv^M)
+
 KAPPA = 4.0
-# ベースとなるイオン供給フラックス（近日点での強度を想定）
-ION_BASE_FLUX = DIFF_REF_FLUX * 0.1
+
+# --- SWS (太陽風スパッタリング/イオン供給) パラメータ ---
+SWS_FLUX_1AU = 10.0 * (100 ** 3) * 400e3 * 4  # 約 1.6e13 [ions/m^2/s]
+SWS_YIELD = 0.06
+SWS_SOURCE_1AU = SWS_FLUX_1AU * SWS_YIELD  # 1AUでのベース供給量 (約 9.6e11)
+
+R_PERI_AU = 0.387098 * (1 - 0.205630)
 
 
 # ==========================================
@@ -42,20 +51,18 @@ def calc_thermal_flux(temp, ea_ev, prefactor):
     return prefactor * np.exp(-ea_ev / (KB_EV_CONST * temp))
 
 
-# ご指定の通り、ブロック状の判定関数を使用
 def is_sw_region(lon_deg, lat_deg):
     in_lon = -40 <= lon_deg <= 40
     in_lat = (20 <= lat_deg <= 80) or (-80 <= lat_deg <= -20)
     return in_lon and in_lat
 
 
-R_PERI_AU = 0.387098 * (1 - 0.205630)
-
 # ==========================================
 # 1. TAA vs 全球供給量
 # ==========================================
 pref_old = get_prefactor(EA_OLD)
 pref_new = get_prefactor(EA_NEW)
+pref_th = get_prefactor(EA_TH)
 
 taas = np.arange(0, 360, 10)
 global_old, global_new = [], []
@@ -63,7 +70,12 @@ global_burger, global_prop = [], []
 
 for taa in taas:
     r_au = calc_r_au(taa)
+
+    # 既存のBurgerモデル用スケーリング
     sw_flux_scale = (R_PERI_AU / r_au) ** 2
+
+    # 【追加】RED用の局所太陽風ソース (1/r^2 依存)
+    sws_source_local = SWS_SOURCE_1AU / (r_au ** 2)
 
     tot_old, tot_new, tot_b, tot_p = 0, 0, 0, 0
     for lon in range(-180, 180, 5):
@@ -77,12 +89,20 @@ for taa in taas:
 
             f_old = calc_thermal_flux(t, EA_OLD, pref_old)
             f_new = calc_thermal_flux(t, EA_NEW, pref_new)
+            f_th = calc_thermal_flux(t, EA_TH, pref_th)
 
             sw_flag = is_sw_region(lon, lat)
 
-            # ★ 太陽風フラックスの変動を KAPPA やベースフラックスに乗算する
+            # Burger Style (元のまま)
             f_burger = f_new * (1 + KAPPA * sw_flux_scale) if sw_flag else f_new
-            f_prop = f_new + (ION_BASE_FLUX * KAPPA * sw_flux_scale) if sw_flag else f_new
+
+            # Proposed Style (Sizmann: TD + RED)
+            if sw_flag:
+                # 太陽風の絶対供給量(sws_source_local)に、Ea=0.48eVの熱活性化項を乗算
+                red_term = (sws_source_local * KAPPA) * np.exp(-EA_RED / (KB_EV_CONST * t)) if t >= 100.0 else 1e-30
+                f_prop = f_th + red_term
+            else:
+                f_prop = f_th
 
             tot_old += f_old * area
             tot_new += f_new * area
@@ -99,7 +119,7 @@ fig1, ax1 = plt.subplots(figsize=(8, 5))
 ax1.plot(taas, global_old, label=f'Old (Ea={EA_OLD}eV)', color='black', linestyle='--')
 ax1.plot(taas, global_new, label=f'High Ea (Ea={EA_NEW}eV)', color='gray')
 ax1.plot(taas, global_burger, label='Burger Style', color='blue')
-ax1.plot(taas, global_prop, label='Proposed Style (with 1/r^2)', color='red')
+ax1.plot(taas, global_prop, label=f'Proposed (Sizmann: TD {EA_TH}eV + RED {EA_RED}eV)', color='red')
 ax1.set_yscale('log')
 ax1.set_xlabel('True Anomaly Angle (deg)')
 ax1.set_ylabel('Relative Global Source Rate')
@@ -123,6 +143,9 @@ for i, t_taa in enumerate(target_taas):
     r_au_val = calc_r_au(t_taa)
     sw_flux_scale_val = (R_PERI_AU / r_au_val) ** 2
 
+    # 【追加】RED用の局所太陽風ソース
+    sws_source_local_val = SWS_SOURCE_1AU / (r_au_val ** 2)
+
     p_old, p_new, p_burger, p_prop = [], [], [], []
     for lat in lats:
         lat_rad = np.deg2rad(lat)
@@ -132,11 +155,17 @@ for i, t_taa in enumerate(target_taas):
 
         f_old = calc_thermal_flux(t, EA_OLD, pref_old)
         f_new = calc_thermal_flux(t, EA_NEW, pref_new)
+        f_th = calc_thermal_flux(t, EA_TH, pref_th)
 
         sw_flag = is_sw_region(0, lat)
 
         f_burger = f_new * (1 + KAPPA * sw_flux_scale_val) if sw_flag else f_new
-        f_prop = f_new + (ION_BASE_FLUX * KAPPA * sw_flux_scale_val) if sw_flag else f_new
+
+        if sw_flag:
+            red_term = (sws_source_local_val * KAPPA) * np.exp(-EA_RED / (KB_EV_CONST * t)) if t >= 100.0 else 1e-30
+            f_prop = f_th + red_term
+        else:
+            f_prop = f_th
 
         p_old.append(f_old)
         p_new.append(f_new)
@@ -147,14 +176,13 @@ for i, t_taa in enumerate(target_taas):
     ax.plot(lats, p_old, label=f'Old (Ea={EA_OLD}eV)', color='black', linestyle='--')
     ax.plot(lats, p_new, label=f'High Ea (Ea={EA_NEW}eV)', color='gray')
     ax.plot(lats, p_burger, label='Burger Style', color='blue')
-    ax.plot(lats, p_prop, label='Proposed Style', color='red')
+    ax.plot(lats, p_prop, label=f'Proposed (TD+RED)', color='red')
 
     ax.set_yscale('log')
     ax.set_title(f'TAA={t_taa}° (r={r_au_val:.3f} AU)')
     ax.set_xlabel('Latitude (deg) [Subsolar line]')
     ax.set_ylabel('Local Flux')
 
-    # 太陽風流入領域のハイライト
     ax.axvspan(20, 80, color='yellow', alpha=0.2, label='SW Influx Region' if i == 0 else "")
     ax.axvspan(-80, -20, color='yellow', alpha=0.2)
 

@@ -23,8 +23,9 @@ import os
 # ==========================================================
 # 例: r"./SimulationResult_202512/ParabolicHop_.../budget_statistics_per_taa.csv"
 #CSV_FILE_PATH = r"./SimulationResult_202512/ParabolicHop_72x36_NoEq_DT100_0128_0.4Denabled_2.7_LowestQ_test/budget_statistics_per_taa.csv"
-CSV_FILE_PATH = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0213_0.4Denabled_2.7_LowestQ_Bounce575K/budget_statistics_per_taa.csv"
+#CSV_FILE_PATH = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0213_0.4Denabled_2.7_LowestQ_Bounce575K/budget_statistics_per_taa.csv"
 #CSV_FILE_PATH = r"./SimulationResult_202602/HeteroSurf_72x36_NoEq_DT100_UDist_Refill0.1/budget_statistics_per_taa.csv"
+CSV_FILE_PATH = r"./SimulationResult_202603/ParabolicHop_72x36_NoEq_DT100_0317_Multi_0.4Denabled_1.85&2.7_OnlyLowestQ_Bouncetau30s_A2.0_LongLT/budget_statistics_per_taa.csv"
 
 # 図の保存設定
 SAVE_FIGS = True

@@ -37,7 +37,7 @@ GRID_MAX_RM = 5.0
 #output_dir = r"./SimulationResult_202602/HeteroSurf_72x36_NoEq_DT100_UDist_Refill1.0e-5"
 #output_dir = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0211_0.4Denabled_2.7_LowestQ_Bounce525K"
 #output_dir = r"./SimulationResult_202602/ParabolicHop_72x36_NoEq_DT100_0220_0.4Denabled_2.7_LowestQ_Bounce525K_A2.0"
-output_dir = r"./SimulationResult_202603/ParabolicHop_72x36_NoEq_DT100_0316_Multi_0.65Denabled_1.6&2.7_OnlyLowestQ_Bounce525K_A2.0_LongLT"
+output_dir = r"./SimulationResult_202603/ParabolicHop_72x36_NoEq_DT100_0317_Multi_0.4Denabled_1.85&2.7_OnlyLowestQ_Bouncetau30s_A2.0_LongLT"
 # ★★★ プロットモード選択 (シミュレーション側)
 # 選択肢: "ALL", "DAYSIDE_TOTAL", "DAWN", "DUSK", "DAWN_OUTER", "DUSK_OUTER"
 PLOT_MODE = "ALL"
