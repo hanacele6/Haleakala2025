@@ -96,8 +96,8 @@ SIMULATION_SETTINGS = {
     # インデックス 0: 浅いサイト (吸着用)
     # インデックス 1: 深いサイト (拡散供給用)
     # ==========================================================================
-    'U_BINS': np.array([1.85, 2.7]),
-    # 'Q_PSD_BINS': np.array([1.0e-20 / (100 ** 2), 2.7e-21 / (100 ** 2)]),
+    'U_BINS': np.array([2.15, 2.7]),
+    # 'Q_PSD_BINS': np.array([1.0e-20 / (100 ** 2), 1.0e-20 / (100 ** 2)]),
     'Q_PSD_BINS': np.array([2.7e-21 / (100 ** 2), 2.7e-21 / (100 ** 2)]),
 }
 
@@ -401,18 +401,18 @@ def simulate_particle_for_one_step(args: Dict) -> Dict:
             lon_fixed = (lon_rot + subsolar_lon + np.pi) % (2 * np.pi) - np.pi
             temp_impact = calculate_surface_temperature_leblanc(lon_fixed, lat_rot, AU, subsolar_lon)
 
-            # [New] 吸着先のビンを決定し、その束縛エネルギーを取得
+            # 吸着先のビンを決定し、その束縛エネルギーを取得
             bin_idx = assign_sticking_bin()
             U_assigned = settings['U_BINS'][bin_idx]
 
-            # [New] 滞在時間(tau_TD)の計算
+            # 滞在時間(tau_TD)の計算
             td_rate = calculate_thermal_desorption_rate(temp_impact, U_assigned)
             tau_td = 1.0 / td_rate if td_rate > 1e-30 else float('inf')
 
-            # --- ここから変更 ---
+            # --- バウンド判定 ---
             HOP_TAU_THRESHOLD = 30.0  # 即時バウンドを許す最大の滞在時間 [秒]
 
-            # 「滞在時間が閾値(30秒)以下」かつ「残り時間内で飛べる」場合のみ即時ホップ
+            # 「滞在時間が閾値以下」かつ「残り時間内で飛べる」場合のみ即時ホップ
             if tau_td <= HOP_TAU_THRESHOLD and time_remaining > tau_td:
                 time_remaining -= tau_td
                 spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], temp_impact)
@@ -473,7 +473,7 @@ def main_snapshot_simulation():
     mode_str = "EqMode" if SIMULATION_SETTINGS['USE_EQUILIBRIUM_MODE'] else "NoEq"
 
     # ファイル名 (最新版に_MultiBinを付与)
-    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0317_Multi_0.4Denabled_1.85&2.7_OnlyLowestQ_Bouncetau30s_A2.0_LongLT"
+    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0325_Multi_0.4Denabled_U2.15&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"Simulation Start. Results: {target_output_dir}")

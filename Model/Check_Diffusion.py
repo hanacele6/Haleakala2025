@@ -14,8 +14,8 @@ EA_OLD = 0.4
 EA_NEW = 0.65
 
 # --- Sizmannモデル(Proposed)用の物理パラメータ ---
-EA_TH = 0.95  # Sizmann 熱拡散 (TD)
-EA_RED = 0.48  # Sizmann イオン誘起拡散 (RED: 0.5 * Hv^M)
+EA_TH = 0.65  # Sizmann 熱拡散 (TD)
+EA_RED = 0.33  # Sizmann イオン誘起拡散 (RED: 0.5 * Hv^M)
 
 KAPPA = 4.0
 
