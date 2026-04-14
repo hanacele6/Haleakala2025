@@ -26,10 +26,10 @@ import os
 from multiprocessing import Pool, cpu_count
 import time
 from typing import Dict, Tuple, List, Optional, Any
-import csv  # [追加] CSV出力用
+import csv 
 
 # ==============================================================================
-# 0. シミュレーション設定・物理定数 (一元管理)
+# 0. シミュレーション設定・物理定数
 # ==============================================================================
 
 # 物理定数
@@ -51,7 +51,6 @@ PHYSICAL_CONSTANTS = {
     'ROTATION_PERIOD': 58.6462 * 86400,  # 自転周期 [s]
     'ORBITAL_PERIOD': 87.969 * 86400,  # 公転周期 [s]
 
-    # [追加] 軌道計算用 (基準距離算出のため)
     'MERCURY_SEMI_MAJOR_AXIS_AU': 0.387098,
     'MERCURY_ECCENTRICITY': 0.205630,
 }
@@ -92,13 +91,33 @@ SIMULATION_SETTINGS = {
 
     # ==========================================================================
     # マルチビン束縛エネルギー設定 (Multi-Bin Binding Energy)
-    # 拡張性を持たせるため、束縛エネルギーとPSD断面積を配列で定義します。
-    # インデックス 0: 浅いサイト (吸着用)
-    # インデックス 1: 深いサイト (拡散供給用)
     # ==========================================================================
-    'U_BINS': np.array([2.15, 2.7]),
-    # 'Q_PSD_BINS': np.array([1.0e-20 / (100 ** 2), 1.0e-20 / (100 ** 2)]),
-    'Q_PSD_BINS': np.array([2.7e-21 / (100 ** 2), 2.7e-21 / (100 ** 2)]),
+    # 吸着モデルの選択: 'fixed', 'dynamic', 'gaussian_random' のいずれかを指定
+    'U_MODEL_TYPE': 'gaussian_random', 
+
+    # --- [A] 固定値モデル('fixed')用設定 ---
+    'U_BINS_FIXED': np.array([1.95, 2.7]),
+    'Q_PSD_BINS_FIXED': np.array([2.7e-21 / (100 ** 2), 2.7e-21 / (100 ** 2)]),
+
+    # --- [B/C] 共通のビン分割設定 ('dynamic', 'gaussian_random'用) ---
+    'N_U_BINS': 10,              # ビンの分割数（任意に変更可能）
+    'U_MIN': 1.4,                # 最小束縛エネルギー [eV]
+    'U_MAX': 2.7,                # 最大束縛エネルギー [eV]
+
+    # --- [C] ガウス分布ランダムモデル('gaussian_random')用設定 ---
+    'U_GAUSSIAN_MU': 1.85,       # 分布の中心 [eV]
+    'U_GAUSSIAN_SIGMA': 0.25,    # 分布の広がり
+
+    # --- [B] 動的モデル('dynamic')用設定 ---
+    'V_U_MODE': 'uniform',       # 'uniform' または 'gaussian'
+
+    # 拡散供給時の束縛エネルギー設定
+    'DIFFUSION_U_MODE': 'single',  # 'single'(単一ビン) または 'gaussian'(ガウス分布)
+    'DIFFUSION_U_TARGET': 2.7,     # singleの場合：どの深さに供給するか [eV]
+    'DIFFUSION_U_MU': 1.85,         # gaussianの場合：分布の中心 [eV]
+    'DIFFUSION_U_SIGMA': 0.35,     # gaussianの場合：分布の広がり
+    'DIFFUSION_U_MIN': 1.4,        # gaussianの場合：供給する最小U [eV]
+    'DIFFUSION_U_MAX': 2.7,        # gaussianの場合：供給する最大U [eV]
 }
 
 # サイトのインデックス定義
@@ -119,7 +138,6 @@ Target_Grain_Radius = 100.0e-6  # [m]
 
 # 頻度因子 A (J0) の事前計算
 DIFF_PRE_FACTOR = DIFF_REF_FLUX / np.exp(-DIFF_E_A_EV / (KB_EV_CONST * DIFF_REF_TEMP))
-print(f"Diffusion Parameters: Ea={DIFF_E_A_EV}eV, RefFlux={DIFF_REF_FLUX:.1e} at {DIFF_REF_TEMP}K")
 
 # ==============================================================================
 # [B] Clamped (Peak-Cut) Diffusion Settings
@@ -144,14 +162,136 @@ FORCED_INJECTION_EVENTS = []
 # 1. 物理モデル・ヘルパー関数群
 # ==============================================================================
 
-def assign_sticking_bin() -> int:
+def setup_binding_energy_bins(settings: Dict) -> Tuple[np.ndarray, np.ndarray]:
     """
-    [New] 吸着サイト決定関数
-    外気圏から落下してきた粒子がどの束縛エネルギーのビンに入るかを決定する。
-    現在はすべて浅いサイト（1.6 eV）に入ると仮定。
-    将来的に分布を持たせたい場合は、この関数内でルーレット処理などを記述する。
+    設定されたモデル(fixed, dynamic, gaussian_random)に応じて
+    束縛エネルギーのビン(U_bins)と、サイトの確率重み(V_weights)を生成する。
     """
+    mode = settings.get('U_MODEL_TYPE', 'fixed')
+
+    # [A] 固定値モデル (従来の浅い/深い2ビン等)
+    if mode == 'fixed':
+        U_bins = settings.get('U_BINS_FIXED', np.array([1.95, 2.7]))
+        V_weights = np.ones(len(U_bins))
+        V_weights /= np.sum(V_weights)
+        return U_bins, V_weights
+
+    # [B/C] 共通のビン生成 (指定された最小〜最大をN分割)
+    n_bins = settings.get('N_U_BINS', 5)
+    U_bins = np.linspace(settings['U_MIN'], settings['U_MAX'], n_bins)
+
+    # [C] 新規: ガウス分布ランダムモデル
+    if mode == 'gaussian_random':
+        mu = settings.get('U_GAUSSIAN_MU', 1.85)
+        sigma = settings.get('U_GAUSSIAN_SIGMA', 0.35)
+        
+        # ガウス分布に基づく確率の重みを計算
+        V_weights = np.exp(-0.5 * ((U_bins - mu) / sigma)**2)
+        
+        # 確率の規格化 (合計を1.0にする)
+        weight_sum = np.sum(V_weights)
+        if weight_sum > 1e-30:
+            V_weights /= weight_sum
+        else:
+            V_weights = np.ones(n_bins) / n_bins # 安全対策
+
+        return U_bins, V_weights
+
+    # [B] 従来の動的エネルギーモデル
+    elif mode == 'dynamic':
+        v_mode = settings.get('V_U_MODE', 'uniform')
+        if v_mode == 'gaussian':
+            mu = settings.get('U_GAUSSIAN_MU', 1.85)
+            sigma = settings.get('U_GAUSSIAN_SIGMA', 0.35)
+            V_weights = np.exp(-0.5 * ((U_bins - mu) / sigma)**2)
+        else:
+            V_weights = np.ones_like(U_bins)
+        
+        V_weights /= np.max(V_weights) # dynamicは規格化ではなく最大値1で扱う
+        return U_bins, V_weights
+
+    # フェイルセーフ
+    return settings.get('U_BINS_FIXED', np.array([1.95, 2.7])), np.array([1.0, 0.0])
+
+
+def assign_sticking_bin(E_in_eV: float, temp_impact_K: float, U_bins: np.ndarray, V_weights: np.ndarray, settings: Dict) -> int:
+    """
+    粒子の吸着サイト(ビン)を決定する関数。
+    """
+    mode = settings.get('U_MODEL_TYPE', 'fixed')
+
+    # [A] 固定値モデルの場合は常に浅いサイト(インデックス0)を返す
+    if mode == 'fixed':
+        return IDX_SHALLOW
+
+    # [C] 新規: ガウス分布ランダムモデル
+    # 入射エネルギーや温度に依存せず、表面のサイト分布(V_weights)のみで決定
+    if mode == 'gaussian_random':
+        return np.random.choice(len(U_bins), p=V_weights)
+
+    # [B] 従来の動的エネルギーモデル (エネルギーと温度に依存)
+    if mode == 'dynamic':
+        kBT_eV = PHYSICAL_CONSTANTS['K_BOLTZMANN'] * temp_impact_K / PHYSICAL_CONSTANTS['EV_TO_JOULE']
+        alpha = (settings['U_MAX'] - settings['U_MIN']) / 0.5
+        U_target = settings['U_MIN'] + alpha * E_in_eV
+        gamma = 0.5
+        
+        energy_factor = np.exp(- ((U_bins - U_target)**2) / (kBT_eV * gamma))
+        probabilities = V_weights * energy_factor
+
+        P_total = np.sum(probabilities)
+        if P_total > 1e-100:
+            probabilities /= P_total
+        else:
+            closest_idx = np.argmin(np.abs(U_bins - U_target))
+            probabilities = np.zeros(len(U_bins))
+            probabilities[closest_idx] = 1.0
+
+        return np.random.choice(len(U_bins), p=probabilities)
+        
     return IDX_SHALLOW
+
+def get_diffusion_supply_distribution(total_supply: float, U_bins: np.ndarray, settings: Dict) -> np.ndarray:
+    """
+    内部拡散や強制注入によってもたらされた総供給量を、設定に応じて各ビンに分配する。
+    """
+    distribution = np.zeros(len(U_bins))
+    if total_supply <= 0:
+        return distribution
+
+    mode = settings.get('DIFFUSION_U_MODE', 'single')
+
+    if mode == 'single':
+        # 指定された単一の深さ(DIFFUSION_U_TARGET)に一番近いビンを探す
+        target_U = settings.get('DIFFUSION_U_TARGET', 2.7)
+        closest_idx = np.argmin(np.abs(U_bins - target_U))
+        distribution[closest_idx] = total_supply
+
+    elif mode == 'gaussian':
+        mu = settings.get('DIFFUSION_U_MU', 2.5)
+        sigma = settings.get('DIFFUSION_U_SIGMA', 0.15)
+        u_min = settings.get('DIFFUSION_U_MIN', 2.0)
+        u_max = settings.get('DIFFUSION_U_MAX', 2.7)
+        
+        # 🌟 最小値〜最大値の範囲内(mask)にあるビンだけ計算する
+        mask = (U_bins >= u_min) & (U_bins <= u_max)
+        weights = np.zeros(len(U_bins))
+        
+        if np.any(mask):
+            weights[mask] = np.exp(-0.5 * ((U_bins[mask] - mu) / sigma)**2)
+        
+        weights_sum = np.sum(weights)
+        if weights_sum > 1e-30:
+            weights /= weights_sum
+            distribution = total_supply * weights
+        else:
+            # 範囲設定が厳しすぎて当てはまるビンが無い場合は一番深いビンに入れる
+            distribution[-1] = total_supply
+            
+    else:
+        distribution[-1] = total_supply
+
+    return distribution
 
 
 def calculate_surface_temperature_leblanc(lon_rad: float, lat_rad: float, AU: float, subsolar_lon_rad: float) -> float:
@@ -307,6 +447,8 @@ def _calculate_acceleration(pos: np.ndarray, vel: np.ndarray, V_radial_ms: float
 def simulate_particle_for_one_step(args: Dict) -> Dict:
     settings, spec_data = args['settings'], args['spec']
     TAA, AU, V_rad, V_tan, subsolar_lon = args['orbit']
+    U_bins = args['u_bins']       
+    V_weights = args['v_weights'] 
 
     time_remaining = args['duration']
     MAX_DT_STEP = settings['DT_INTEGRATION']
@@ -327,10 +469,16 @@ def simulate_particle_for_one_step(args: Dict) -> Dict:
         if pos[0] > 0 and np.random.random() < (1.0 - np.exp(-dt_this_loop / tau_ion)):
             altitude = np.linalg.norm(pos) - PHYSICAL_CONSTANTS['RM']
             if altitude < 10000.0:
-                bin_idx = assign_sticking_bin()
+                v_mag = np.linalg.norm(vel)
+                E_eV = (0.5 * PHYSICAL_CONSTANTS['MASS_NA'] * v_mag**2) / PHYSICAL_CONSTANTS['EV_TO_JOULE']
+                # 落下地点の経度・緯度を計算して温度を出す
+                lon_rot_ion = np.arctan2(pos[1], pos[0])
+                lat_rot_ion = np.arcsin(np.clip(pos[2] / PHYSICAL_CONSTANTS['RM'], -1, 1))
+                lon_fixed_ion = (lon_rot_ion + subsolar_lon + PHYSICAL_CONSTANTS['PI']) % (2 * PHYSICAL_CONSTANTS['PI']) - PHYSICAL_CONSTANTS['PI']
+                temp_ion_impact = calculate_surface_temperature_leblanc(lon_fixed_ion, lat_rot_ion, AU, subsolar_lon)
+
+                bin_idx = assign_sticking_bin(E_eV, temp_ion_impact, U_bins, V_weights, settings)                
                 return {'status': 'stuck', 'pos_at_impact': pos, 'weight': weight, 'bin_idx': bin_idx}
-            else:
-                return {'status': 'ionized', 'final_state': None, 'weight': weight}
 
         # 衝突予測
         r_vec_now = pos
@@ -401,9 +549,12 @@ def simulate_particle_for_one_step(args: Dict) -> Dict:
             lon_fixed = (lon_rot + subsolar_lon + np.pi) % (2 * np.pi) - np.pi
             temp_impact = calculate_surface_temperature_leblanc(lon_fixed, lat_rot, AU, subsolar_lon)
 
+            v_hit_mag = np.linalg.norm(vel_hit_in)
+            E_hit_eV = (0.5 * PHYSICAL_CONSTANTS['MASS_NA'] * v_hit_mag**2) / PHYSICAL_CONSTANTS['EV_TO_JOULE']
+
             # 吸着先のビンを決定し、その束縛エネルギーを取得
-            bin_idx = assign_sticking_bin()
-            U_assigned = settings['U_BINS'][bin_idx]
+            bin_idx = assign_sticking_bin(E_hit_eV, temp_impact, U_bins, V_weights, settings)
+            U_assigned = U_bins[bin_idx] # settings['U_BINS'] から U_bins に
 
             # 滞在時間(tau_TD)の計算
             td_rate = calculate_thermal_desorption_rate(temp_impact, U_assigned)
@@ -434,6 +585,8 @@ def simulate_particle_for_one_step(args: Dict) -> Dict:
 # ==============================================================================
 def main_snapshot_simulation():
     start_time = time.time()
+    # 🌟 Windowsでの複数回出力を防ぐため、ここに移動
+    print(f"Diffusion Parameters: Ea={DIFF_E_A_EV}eV, RefFlux={DIFF_REF_FLUX:.1e} at {DIFF_REF_TEMP}K")
 
     # --- 設定読み込み ---
     DT_MOVE = SIMULATION_SETTINGS['DT_MOVE']
@@ -472,8 +625,23 @@ def main_snapshot_simulation():
     # === 初期化処理 ===
     mode_str = "EqMode" if SIMULATION_SETTINGS['USE_EQUILIBRIUM_MODE'] else "NoEq"
 
+    U_BINS_ARRAY, V_WEIGHTS_ARRAY = setup_binding_energy_bins(SIMULATION_SETTINGS)
+    N_BINS_DYNAMIC = len(U_BINS_ARRAY)
+
+    # メインループで参照されるように設定を上書き
+    SIMULATION_SETTINGS['U_BINS'] = U_BINS_ARRAY 
+    if SIMULATION_SETTINGS.get('USE_DYNAMIC_U_MODEL', False):
+        # Q_PSD_BINS もビン数に合わせて拡張 (全て同じ断面積とする)
+        base_q = 2.7e-21 / (100 ** 2)
+        SIMULATION_SETTINGS['Q_PSD_BINS'] = np.full(N_BINS_DYNAMIC, base_q)
+
+    # 表面密度マップの3次元化 (N_BINS を N_BINS_DYNAMIC に変更)
+    surface_density = np.zeros((N_LON_FIXED, N_LAT, N_BINS_DYNAMIC), dtype=np.float64)
+    # 初期値は内部拡散用に、一番深いサイト(インデックス -1)に与える
+    surface_density[:, :, -1] = INIT_SURF_DENS
+
     # ファイル名 (最新版に_MultiBinを付与)
-    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0325_Multi_0.4Denabled_U2.15&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
+    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0410_Multi_0.4Denabled_U1.4-2.7&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"Simulation Start. Results: {target_output_dir}")
@@ -485,10 +653,10 @@ def main_snapshot_simulation():
     dlon = lon_edges[1] - lon_edges[0]
     cell_areas = (PHYSICAL_CONSTANTS['RM'] ** 2) * dlon * (np.sin(lat_edges[1:]) - np.sin(lat_edges[:-1]))
 
-    # [New] 表面密度マップの3次元化
-    surface_density = np.zeros((N_LON_FIXED, N_LAT, N_BINS), dtype=np.float64)
+    # 表面密度マップの3次元化
+    # surface_density = np.zeros((N_LON_FIXED, N_LAT, N_BINS), dtype=np.float64)
     # 初期値は内部拡散用の深いサイト(IDX_DEEP)に与える
-    surface_density[:, :, IDX_DEEP] = INIT_SURF_DENS
+    # surface_density[:, :, IDX_DEEP] = INIT_SURF_DENS
 
     # 外部データ読み込み
     try:
@@ -550,333 +718,342 @@ def main_snapshot_simulation():
         }
 
     # === メインループ ===
-    while t_curr < t_end_run:
-        step_count += 1
+    try:  # 🌟 Ctrl+Cをキャッチするための開始地点
+        # 🌟 ループに入る前にPoolを1回だけ作成する
+        with Pool(cpu_count() - 1) as pool:
+            
+            while t_curr < t_end_run:  # 🌟 ここから時間ステップのループ
+                step_count += 1
 
-        TAA_raw, AU, V_rad, V_tan, sub_lon = get_orbital_params_linear(t_curr, orbit_data, t_peri_file)
-        TAA = TAA_raw % 360.0
-        time_since_last_update += DT_MOVE
+                TAA_raw, AU, V_rad, V_tan, sub_lon = get_orbital_params_linear(t_curr, orbit_data, t_peri_file)
+                TAA = TAA_raw % 360.0
+                time_since_last_update += DT_MOVE
 
-        is_recording_phase = (t_curr >= t_start_run)
-        current_taa_bin = int(TAA) % 360
-        step_stats = {k: 0.0 for k in stats_data[0].keys()}
+                is_recording_phase = (t_curr >= t_start_run)
+                current_taa_bin = int(TAA) % 360
+                step_stats = {k: 0.0 for k in stats_data[0].keys()}
 
-        # ----------------------------------------------------------------------
-        # A. 表面放出率マップの更新
-        # ----------------------------------------------------------------------
-        if time_since_last_update >= DT_RATE_UPDATE:
-            dt_accumulated = time_since_last_update
-            f_uv = F_UV_1AU / (AU ** 2)
-            sw_flux = SWS_PARAMS['FLUX_1AU'] / (AU ** 2)
-            mmv_flux = calculate_mmv_flux(AU)
+                # ----------------------------------------------------------------------
+                # A. 表面放出率マップの更新
+                # ----------------------------------------------------------------------
+                if time_since_last_update >= DT_RATE_UPDATE:
+                    dt_accumulated = time_since_last_update
+                    f_uv = F_UV_1AU / (AU ** 2)
+                    sw_flux = SWS_PARAMS['FLUX_1AU'] / (AU ** 2)
+                    mmv_flux = calculate_mmv_flux(AU)
 
-            scaling = np.sqrt(0.306 / AU)
-            temp_rate_psd = np.zeros_like(surface_density)
-            temp_rate_td = np.zeros_like(surface_density)
-            temp_rate_sws = np.zeros_like(surface_density)
-            temp_loss_per_sec = np.zeros_like(surface_density)
+                    scaling = np.sqrt(0.306 / AU)
+                    temp_rate_psd = np.zeros_like(surface_density)
+                    temp_rate_td = np.zeros_like(surface_density)
+                    temp_rate_sws = np.zeros_like(surface_density)
+                    temp_loss_per_sec = np.zeros_like(surface_density)
 
-            target_au_for_diff = AU if TAA_CLAMP_START <= TAA <= TAA_CLAMP_END else AU_AT_CUTOFF
-            scaling_clamped = np.sqrt(0.306 / target_au_for_diff)
+                    target_au_for_diff = AU if TAA_CLAMP_START <= TAA <= TAA_CLAMP_END else AU_AT_CUTOFF
+                    scaling_clamped = np.sqrt(0.306 / target_au_for_diff)
 
-            for i in range(N_LON_FIXED):
-                for j in range(N_LAT):
-                    lon_f = (lon_edges[i] + lon_edges[i + 1]) / 2
-                    lat_f = (lat_edges[j] + lat_edges[j + 1]) / 2
-                    cos_z_center = np.cos(lat_f) * np.cos(lon_f - sub_lon)
+                    for i in range(N_LON_FIXED):
+                        for j in range(N_LAT):
+                            lon_f = (lon_edges[i] + lon_edges[i + 1]) / 2
+                            lat_f = (lat_edges[j] + lat_edges[j + 1]) / 2
+                            cos_z_center = np.cos(lat_f) * np.cos(lon_f - sub_lon)
 
-                    if cos_z_center > sin_half_width:
-                        illum_frac = 1.0
-                    elif cos_z_center < -sin_half_width:
-                        illum_frac = 0.0
-                    else:
-                        illum_frac = np.clip((cos_z_center + sin_half_width) / (2 * sin_half_width), 0, 1)
-
-                    if not SIMULATION_SETTINGS['USE_AREA_WEIGHTED_FLUX'] and not SIMULATION_SETTINGS[
-                        'USE_SUBGRID_SMOOTHING']:
-                        illum_frac = 1.0 if cos_z_center > 0 else 0.0
-
-                    eff_cos = max(0.0, cos_z_center)
-                    T_day_potential = SIMULATION_SETTINGS['TEMP_BASE'] + \
-                                      SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling
-
-                    supply_dens_std_diff = 0.0
-                    if SIMULATION_SETTINGS['USE_STD_DIFFUSION'] and T_day_potential > 100.0:
-                        flux_val = DIFF_PRE_FACTOR * np.exp(-DIFF_E_A_EV / (KB_EV_CONST * T_day_potential))
-                        supply_dens_std_diff = flux_val * dt_accumulated
-
-                    supply_dens_clamped = 0.0
-                    if SIMULATION_SETTINGS['USE_CLAMPED_DIFFUSION']:
-                        T_day_clamped = SIMULATION_SETTINGS['TEMP_BASE'] + \
-                                        SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling_clamped
-                        if T_day_clamped > 100.0:
-                            flux_val = DIFF_PRE_FACTOR * np.exp(-DIFF_E_A_EV / (KB_EV_CONST * T_day_clamped))
-                            supply_dens_clamped = flux_val * dt_accumulated
-
-                    supply_dens_forced = 0.0
-                    diff_rad = (lon_f - sub_lon + np.pi) % (2 * np.pi) - np.pi
-                    lt_hour = (12.0 + np.rad2deg(diff_rad) / 15.0) % 24.0
-                    curr_lat_deg = np.rad2deg(lat_f)
-
-                    for event in FORCED_INJECTION_EVENTS:
-                        if event['taa_range'][0] <= TAA <= event['taa_range'][1]:
-                            if not (event['lat_range'][0] <= curr_lat_deg <= event['lat_range'][1]): continue
-                            start_lt, end_lt = event['lt_range']
-                            is_in_lt = False
-                            if start_lt <= end_lt:
-                                if start_lt <= lt_hour <= end_lt: is_in_lt = True
+                            if cos_z_center > sin_half_width:
+                                illum_frac = 1.0
+                            elif cos_z_center < -sin_half_width:
+                                illum_frac = 0.0
                             else:
-                                if start_lt <= lt_hour or lt_hour <= end_lt: is_in_lt = True
+                                illum_frac = np.clip((cos_z_center + sin_half_width) / (2 * sin_half_width), 0, 1)
 
-                            if is_in_lt: supply_dens_forced += event['flux'] * dt_accumulated
+                            if not SIMULATION_SETTINGS['USE_AREA_WEIGHTED_FLUX'] and not SIMULATION_SETTINGS['USE_SUBGRID_SMOOTHING']:
+                                illum_frac = 1.0 if cos_z_center > 0 else 0.0
 
-                    # [New] 拡散などの内部供給源は、すべて深いサイト(IDX_DEEP)にのみ追加する
-                    supply_dens_total = np.zeros(N_BINS)
-                    supply_dens_total[IDX_DEEP] = supply_dens_std_diff + supply_dens_clamped + supply_dens_forced
+                            eff_cos = max(0.0, cos_z_center)
+                            T_day_potential = SIMULATION_SETTINGS['TEMP_BASE'] + \
+                                              SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling
 
-                    lon_sun = (lon_f - sub_lon + np.pi) % (2 * np.pi) - np.pi
-                    in_lon = SWS_PARAMS['LON_RANGE'][0] <= lon_sun <= SWS_PARAMS['LON_RANGE'][1]
-                    in_lat = (SWS_PARAMS['LAT_N_RANGE'][0] <= lat_f <= SWS_PARAMS['LAT_N_RANGE'][1]) or \
-                             (SWS_PARAMS['LAT_S_RANGE'][0] <= lat_f <= SWS_PARAMS['LAT_S_RANGE'][1])
+                            supply_dens_std_diff = 0.0
+                            if SIMULATION_SETTINGS['USE_STD_DIFFUSION'] and T_day_potential > 100.0:
+                                flux_val = DIFF_PRE_FACTOR * np.exp(-DIFF_E_A_EV / (KB_EV_CONST * T_day_potential))
+                                supply_dens_std_diff = flux_val * dt_accumulated
 
-                    for b in range(N_BINS):
-                        # ビンごとに個別のPSD断面積(Q)を使用
-                        if illum_frac > 0:
-                            temp_rate_psd[i, j, b] = f_uv * SIMULATION_SETTINGS['Q_PSD_BINS'][b] * eff_cos * illum_frac
+                            supply_dens_clamped = 0.0
+                            if SIMULATION_SETTINGS['USE_CLAMPED_DIFFUSION']:
+                                T_day_clamped = SIMULATION_SETTINGS['TEMP_BASE'] + \
+                                                SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling_clamped
+                                if T_day_clamped > 100.0:
+                                    flux_val = DIFF_PRE_FACTOR * np.exp(-DIFF_E_A_EV / (KB_EV_CONST * T_day_clamped))
+                                    supply_dens_clamped = flux_val * dt_accumulated
 
-                        # ビンごとに個別の束縛エネルギー(U)を使用してTDを計算
+                            supply_dens_forced = 0.0
+                            diff_rad = (lon_f - sub_lon + np.pi) % (2 * np.pi) - np.pi
+                            lt_hour = (12.0 + np.rad2deg(diff_rad) / 15.0) % 24.0
+                            curr_lat_deg = np.rad2deg(lat_f)
+
+                            for event in FORCED_INJECTION_EVENTS:
+                                if event['taa_range'][0] <= TAA <= event['taa_range'][1]:
+                                    if not (event['lat_range'][0] <= curr_lat_deg <= event['lat_range'][1]): continue
+                                    start_lt, end_lt = event['lt_range']
+                                    is_in_lt = False
+                                    if start_lt <= end_lt:
+                                        if start_lt <= lt_hour <= end_lt: is_in_lt = True
+                                    else:
+                                        if start_lt <= lt_hour or lt_hour <= end_lt: is_in_lt = True
+
+                                    if is_in_lt: supply_dens_forced += event['flux'] * dt_accumulated
+
+                            total_supply_amount = supply_dens_std_diff + supply_dens_clamped + supply_dens_forced
+                            
+                            supply_dens_total = get_diffusion_supply_distribution(
+                                total_supply_amount, 
+                                SIMULATION_SETTINGS['U_BINS'], 
+                                SIMULATION_SETTINGS
+                            )
+
+                            lon_sun = (lon_f - sub_lon + np.pi) % (2 * np.pi) - np.pi
+                            in_lon = SWS_PARAMS['LON_RANGE'][0] <= lon_sun <= SWS_PARAMS['LON_RANGE'][1]
+                            in_lat = (SWS_PARAMS['LAT_N_RANGE'][0] <= lat_f <= SWS_PARAMS['LAT_N_RANGE'][1]) or \
+                                     (SWS_PARAMS['LAT_S_RANGE'][0] <= lat_f <= SWS_PARAMS['LAT_S_RANGE'][1])
+
+                            for b in range(N_BINS_DYNAMIC):
+                                if illum_frac > 0:
+                                    temp_rate_psd[i, j, b] = f_uv * SIMULATION_SETTINGS['Q_PSD_BINS'][b] * eff_cos * illum_frac
+
+                                if SIMULATION_SETTINGS['USE_AREA_WEIGHTED_FLUX']:
+                                    rate_day = calculate_thermal_desorption_rate(T_day_potential, SIMULATION_SETTINGS['U_BINS'][b])
+                                    rate_night = calculate_thermal_desorption_rate(SIMULATION_SETTINGS['TEMP_NIGHT'], SIMULATION_SETTINGS['U_BINS'][b])
+                                    temp_rate_td[i, j, b] = rate_day * illum_frac + rate_night * (1.0 - illum_frac)
+                                else:
+                                    temp_val = T_day_potential if illum_frac > 0.5 else SIMULATION_SETTINGS['TEMP_NIGHT']
+                                    temp_rate_td[i, j, b] = calculate_thermal_desorption_rate(temp_val, SIMULATION_SETTINGS['U_BINS'][b])
+
+                                if in_lon and in_lat:
+                                    temp_rate_sws[i, j, b] = (sw_flux * SWS_PARAMS['YIELD']) / SWS_PARAMS['REF_DENS']
+
+                                rate_total = temp_rate_psd[i, j, b] + temp_rate_td[i, j, b] + temp_rate_sws[i, j, b]
+                                current_dens = surface_density[i, j, b]
+                                gain_dens = accumulated_gained_grid[i, j, b] / cell_areas[j]
+                                total_input_dens = gain_dens + supply_dens_total[b]
+
+                                timescale = 1.0 / rate_total if rate_total > 1e-30 else float('inf')
+                                allow_eq_mode = (step_count > 1)
+
+                                if SIMULATION_SETTINGS['USE_EQUILIBRIUM_MODE'] and allow_eq_mode and (timescale <= dt_accumulated):
+                                    if rate_total > 1e-30:
+                                        dens_eq = (total_input_dens / dt_accumulated) / rate_total
+                                    else:
+                                        dens_eq = current_dens + total_input_dens
+                                    surface_density[i, j, b] = dens_eq
+                                    actual_loss_dens = total_input_dens
+                                else:
+                                    decay_factor = np.exp(-rate_total * dt_accumulated)
+                                    actual_loss_dens = current_dens * (1.0 - decay_factor)
+                                    surface_density[i, j, b] = (current_dens - actual_loss_dens) + total_input_dens
+
+                                if surface_density[i, j, b] < 0: surface_density[i, j, b] = 0
+                                temp_loss_per_sec[i, j, b] = actual_loss_dens * cell_areas[j] / dt_accumulated
+
+                    cached_rate_psd = temp_rate_psd
+                    cached_rate_td = temp_rate_td
+                    cached_rate_sws = temp_rate_sws
+                    cached_loss_rate_grid = temp_loss_per_sec
+                    accumulated_gained_grid.fill(0.0)
+                    time_since_last_update = 0.0
+
+                # ----------------------------------------------------------------------
+                # B. 粒子の生成
+                # ----------------------------------------------------------------------
+                new_particles = []
+
+                mmv_flux = calculate_mmv_flux(AU)
+                n_mmv = mmv_flux * 4 * np.pi * PHYSICAL_CONSTANTS['RM'] ** 2 * DT_MOVE
+                w_mmv = max(1.0, n_mmv / (TARGET_SPS['MMV'] * (DT_MOVE / DT_RATE_UPDATE)))
+                if n_mmv > 0:
+                    num_p = int(n_mmv / w_mmv)
+                    if np.random.random() < (n_mmv / w_mmv - num_p): num_p += 1
+
+                    step_stats['Gen_MMV'] += w_mmv * num_p
+
+                    for _ in range(num_p):
+                        dt_init = DT_MOVE * np.random.random()
+                        lr = np.random.uniform(-np.pi, np.pi)
+                        latr = np.arcsin(np.random.uniform(-1, 1))
+                        pos = lonlat_to_xyz(lr, latr, PHYSICAL_CONSTANTS['RM'])
+                        norm = pos / PHYSICAL_CONSTANTS['RM']
+                        spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], TEMP_MMV)
+                        vel = spd * transform_local_to_world(sample_lambertian_direction_local(), norm)
+                        new_particles.append({'pos': pos, 'vel': vel, 'weight': w_mmv, 'dt_remaining': dt_init})
+
+                total_loss_step = cached_loss_rate_grid * DT_MOVE
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    rate_tot = cached_rate_psd + cached_rate_td + cached_rate_sws
+                    frac_psd = np.where(rate_tot > 0, cached_rate_psd / rate_tot, 0)
+                    frac_td = np.where(rate_tot > 0, cached_rate_td / rate_tot, 0)
+                    frac_sws = np.where(rate_tot > 0, cached_rate_sws / rate_tot, 0)
+
+                scale_factor = DT_MOVE / DT_RATE_UPDATE
+                atoms_psd = np.sum(total_loss_step * frac_psd)
+                atoms_td = np.sum(total_loss_step * frac_td)
+                atoms_sws = np.sum(total_loss_step * frac_sws)
+
+                w_psd = max(1.0, atoms_psd / (TARGET_SPS['PSD'] * scale_factor))
+                w_td = max(1.0, atoms_td / (TARGET_SPS['TD'] * scale_factor))
+                w_sws = max(1.0, atoms_sws / (TARGET_SPS['SWS'] * scale_factor))
+
+                for i in range(N_LON_FIXED):
+                    for j in range(N_LAT):
+                        lon_f = (lon_edges[i] + lon_edges[i + 1]) / 2
+                        lat_f = (lat_edges[j] + lat_edges[j + 1]) / 2
+                        cos_z = np.cos(lat_f) * np.cos(lon_f - sub_lon)
+                        eff_cos = max(0.0, cos_z)
+                        T_day_potential = SIMULATION_SETTINGS['TEMP_BASE'] + \
+                                          SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling
+
+                        illum_frac = 1.0 if cos_z > 0 else 0.0
                         if SIMULATION_SETTINGS['USE_AREA_WEIGHTED_FLUX']:
-                            rate_day = calculate_thermal_desorption_rate(T_day_potential,
-                                                                         SIMULATION_SETTINGS['U_BINS'][b])
-                            rate_night = calculate_thermal_desorption_rate(SIMULATION_SETTINGS['TEMP_NIGHT'],
-                                                                           SIMULATION_SETTINGS['U_BINS'][b])
-                            temp_rate_td[i, j, b] = rate_day * illum_frac + rate_night * (1.0 - illum_frac)
+                            temp_eff_for_vel = T_day_potential if illum_frac > 0 else SIMULATION_SETTINGS['TEMP_NIGHT']
                         else:
-                            temp_val = T_day_potential if illum_frac > 0.5 else SIMULATION_SETTINGS['TEMP_NIGHT']
-                            temp_rate_td[i, j, b] = calculate_thermal_desorption_rate(temp_val,
-                                                                                      SIMULATION_SETTINGS['U_BINS'][b])
+                            temp_eff_for_vel = T_day_potential if illum_frac > 0.5 else SIMULATION_SETTINGS['TEMP_NIGHT']
 
-                        if in_lon and in_lat:
-                            temp_rate_sws[i, j, b] = (sw_flux * SWS_PARAMS['YIELD']) / SWS_PARAMS['REF_DENS']
+                        for b in range(N_BINS_DYNAMIC):
+                            n_lost_bin = total_loss_step[i, j, b]
+                            if n_lost_bin <= 0: continue
 
-                        rate_total = temp_rate_psd[i, j, b] + temp_rate_td[i, j, b] + temp_rate_sws[i, j, b]
-                        current_dens = surface_density[i, j, b]
-                        gain_dens = accumulated_gained_grid[i, j, b] / cell_areas[j]
-                        total_input_dens = gain_dens + supply_dens_total[b]
+                            params = [
+                                ('PSD', n_lost_bin * frac_psd[i, j, b], TEMP_PSD, w_psd),
+                                ('TD', n_lost_bin * frac_td[i, j, b], temp_eff_for_vel, w_td),
+                                ('SWS', n_lost_bin * frac_sws[i, j, b], None, w_sws)
+                            ]
 
-                        timescale = 1.0 / rate_total if rate_total > 1e-30 else float('inf')
-                        allow_eq_mode = (step_count > 1)
+                            for p_type, n_amount, T_or_none, w in params:
+                                if n_amount <= 0: continue
+                                num = int(n_amount / w)
+                                if np.random.random() < (n_amount / w - num): num += 1
 
-                        if SIMULATION_SETTINGS['USE_EQUILIBRIUM_MODE'] and allow_eq_mode and (
-                                timescale <= dt_accumulated):
-                            if rate_total > 1e-30:
-                                dens_eq = (total_input_dens / dt_accumulated) / rate_total
-                            else:
-                                dens_eq = current_dens + total_input_dens
-                            surface_density[i, j, b] = dens_eq
-                            actual_loss_dens = total_input_dens
-                        else:
-                            decay_factor = np.exp(-rate_total * dt_accumulated)
-                            actual_loss_dens = current_dens * (1.0 - decay_factor)
-                            surface_density[i, j, b] = (current_dens - actual_loss_dens) + total_input_dens
+                                if p_type == 'PSD':
+                                    step_stats['Gen_PSD'] += w * num
+                                elif p_type == 'TD':
+                                    step_stats['Gen_TD'] += w * num
+                                elif p_type == 'SWS':
+                                    step_stats['Gen_SWS'] += w * num
 
-                        if surface_density[i, j, b] < 0: surface_density[i, j, b] = 0
-                        temp_loss_per_sec[i, j, b] = actual_loss_dens * cell_areas[j] / dt_accumulated
+                                for _ in range(num):
+                                    dt_init = DT_MOVE * np.random.random()
+                                    if p_type == 'SWS':
+                                        E = sample_thompson_sigmund_energy(SWS_PARAMS['U_eV'])
+                                        spd = np.sqrt(2 * E * PHYSICAL_CONSTANTS['EV_TO_JOULE'] / PHYSICAL_CONSTANTS['MASS_NA'])
+                                    else:
+                                        spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], T_or_none)
 
-            cached_rate_psd = temp_rate_psd
-            cached_rate_td = temp_rate_td
-            cached_rate_sws = temp_rate_sws
-            cached_loss_rate_grid = temp_loss_per_sec
-            accumulated_gained_grid.fill(0.0)
-            time_since_last_update = 0.0
+                                    lon_rot = lon_f - sub_lon
+                                    pos = lonlat_to_xyz(lon_rot, lat_f, PHYSICAL_CONSTANTS['RM'])
+                                    norm = pos / PHYSICAL_CONSTANTS['RM']
+                                    vel = spd * transform_local_to_world(sample_lambertian_direction_local(), norm)
+                                    new_particles.append({'pos': pos, 'vel': vel, 'weight': w, 'dt_remaining': dt_init})
 
-        # ----------------------------------------------------------------------
-        # B. 粒子の生成
-        # ----------------------------------------------------------------------
-        new_particles = []
+                active_particles.extend(new_particles)
 
-        mmv_flux = calculate_mmv_flux(AU)
-        n_mmv = mmv_flux * 4 * np.pi * PHYSICAL_CONSTANTS['RM'] ** 2 * DT_MOVE
-        w_mmv = max(1.0, n_mmv / (TARGET_SPS['MMV'] * (DT_MOVE / DT_RATE_UPDATE)))
-        if n_mmv > 0:
-            num_p = int(n_mmv / w_mmv)
-            if np.random.random() < (n_mmv / w_mmv - num_p): num_p += 1
+                # ----------------------------------------------------------------------
+                # C. 粒子の移動 (並列計算) & 消滅理由の集計
+                # ----------------------------------------------------------------------
+                tasks = []
+                for p in active_particles:
+                    dur = p.pop('dt_remaining', DT_MOVE)
+                    tasks.append({
+                        'settings': SIMULATION_SETTINGS, 'spec': spec_dict, 'particle_state': p,
+                        'orbit': (TAA, AU, V_rad, V_tan, sub_lon),
+                        'duration': dur,
+                        'u_bins': U_BINS_ARRAY,       
+                        'v_weights': V_WEIGHTS_ARRAY
+                    })
 
-            step_stats['Gen_MMV'] += w_mmv * num_p
+                next_particles = []
+                step_gained_grid = np.zeros_like(surface_density)
 
-            for _ in range(num_p):
-                dt_init = DT_MOVE * np.random.random()
-                lr = np.random.uniform(-np.pi, np.pi)
-                latr = np.arcsin(np.random.uniform(-1, 1))
-                pos = lonlat_to_xyz(lr, latr, PHYSICAL_CONSTANTS['RM'])
-                norm = pos / PHYSICAL_CONSTANTS['RM']
-                spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], TEMP_MMV)
-                vel = spd * transform_local_to_world(sample_lambertian_direction_local(), norm)
-                new_particles.append({'pos': pos, 'vel': vel, 'weight': w_mmv, 'dt_remaining': dt_init})
+                if tasks:
+                    # 🌟 chunksize=500 で通信渋滞を回避！
+                    results = pool.map(simulate_particle_for_one_step, tasks, chunksize=500)
 
-        total_loss_step = cached_loss_rate_grid * DT_MOVE
-        with np.errstate(divide='ignore', invalid='ignore'):
-            rate_tot = cached_rate_psd + cached_rate_td + cached_rate_sws
-            frac_psd = np.where(rate_tot > 0, cached_rate_psd / rate_tot, 0)
-            frac_td = np.where(rate_tot > 0, cached_rate_td / rate_tot, 0)
-            frac_sws = np.where(rate_tot > 0, cached_rate_sws / rate_tot, 0)
+                for res in results:
+                    if res['status'] == 'alive':
+                        next_particles.append(res['final_state'])
+                    else:
+                        lost_weight = res.get('weight', 0.0)
 
-        scale_factor = DT_MOVE / DT_RATE_UPDATE
-        atoms_psd = np.sum(total_loss_step * frac_psd)
-        atoms_td = np.sum(total_loss_step * frac_td)
-        atoms_sws = np.sum(total_loss_step * frac_sws)
+                        if res['status'] == 'stuck':
+                            step_stats['Loss_Stuck'] += lost_weight
+                            pos = res['pos_at_impact']
+                            w = res['weight']
+                            b_idx = res['bin_idx']
 
-        w_psd = max(1.0, atoms_psd / (TARGET_SPS['PSD'] * scale_factor))
-        w_td = max(1.0, atoms_td / (TARGET_SPS['TD'] * scale_factor))
-        w_sws = max(1.0, atoms_sws / (TARGET_SPS['SWS'] * scale_factor))
+                            ln = np.arctan2(pos[1], pos[0])
+                            lt = np.arcsin(np.clip(pos[2] / np.linalg.norm(pos), -1, 1))
+                            ln_fix = (ln + sub_lon + np.pi) % (2 * np.pi) - np.pi
+                            ix = np.searchsorted(lon_edges, ln_fix) - 1
+                            iy = np.searchsorted(lat_edges, lt) - 1
+                            if 0 <= ix < N_LON_FIXED and 0 <= iy < N_LAT:
+                                step_gained_grid[ix, iy, b_idx] += w
 
-        for i in range(N_LON_FIXED):
-            for j in range(N_LAT):
-                lon_f = (lon_edges[i] + lon_edges[i + 1]) / 2
-                lat_f = (lat_edges[j] + lat_edges[j + 1]) / 2
-                cos_z = np.cos(lat_f) * np.cos(lon_f - sub_lon)
-                eff_cos = max(0.0, cos_z)
-                T_day_potential = SIMULATION_SETTINGS['TEMP_BASE'] + \
-                                  SIMULATION_SETTINGS['TEMP_AMP'] * (eff_cos ** 0.25) * scaling
+                        elif res['status'] == 'ionized':
+                            step_stats['Loss_Ionized'] += lost_weight
+                        elif res['status'] == 'escaped':
+                            step_stats['Loss_Escaped'] += lost_weight
 
-                illum_frac = 1.0 if cos_z > 0 else 0.0
-                if SIMULATION_SETTINGS['USE_AREA_WEIGHTED_FLUX']:
-                    temp_eff_for_vel = T_day_potential if illum_frac > 0 else SIMULATION_SETTINGS['TEMP_NIGHT']
-                else:
-                    temp_eff_for_vel = T_day_potential if illum_frac > 0.5 else SIMULATION_SETTINGS['TEMP_NIGHT']
+                active_particles = next_particles
+                accumulated_gained_grid += step_gained_grid
 
-                for b in range(N_BINS):
-                    n_lost_bin = total_loss_step[i, j, b]
-                    if n_lost_bin <= 0: continue
+                # ----------------------------------------------------------------------
+                # 統計データの蓄積 (スピンアップ後のみ)
+                # ----------------------------------------------------------------------
+                if is_recording_phase:
+                    tgt = stats_data[current_taa_bin]
+                    for key in step_stats:
+                        if key != 'Step_Count':
+                            tgt[key] += step_stats[key]
+                    tgt['Step_Count'] += 1
 
-                    params = [
-                        ('PSD', n_lost_bin * frac_psd[i, j, b], TEMP_PSD, w_psd),
-                        ('TD', n_lost_bin * frac_td[i, j, b], temp_eff_for_vel, w_td),
-                        ('SWS', n_lost_bin * frac_sws[i, j, b], None, w_sws)
-                    ]
+                # ----------------------------------------------------------------------
+                # D. データ保存
+                # ----------------------------------------------------------------------
+                if prev_taa != -999:
+                    passed = False
+                    for tgt in TARGET_TAA:
+                        if (prev_taa < tgt <= TAA) or (prev_taa > 350 and TAA < 10 and tgt == 0):
+                            passed = True
+                            break
 
-                    for p_type, n_amount, T_or_none, w in params:
-                        if n_amount <= 0: continue
-                        num = int(n_amount / w)
-                        if np.random.random() < (n_amount / w - num): num += 1
+                    if passed and t_curr >= t_start_run:
+                        rel_h = (t_curr - t_start_run) / 3600.0
+                        print(f"[SAVE] TAA={TAA:.1f}, Time={rel_h:.1f}h, Particles={len(active_particles)}")
 
-                        if p_type == 'PSD':
-                            step_stats['Gen_PSD'] += w * num
-                        elif p_type == 'TD':
-                            step_stats['Gen_TD'] += w * num
-                        elif p_type == 'SWS':
-                            step_stats['Gen_SWS'] += w * num
+                        dgrid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
+                        gmin, gmax = -GRID_MAX_RM * PHYSICAL_CONSTANTS['RM'], GRID_MAX_RM * PHYSICAL_CONSTANTS['RM']
+                        cvol = ((gmax - gmin) / GRID_RESOLUTION) ** 3
 
-                        for _ in range(num):
-                            dt_init = DT_MOVE * np.random.random()
-                            if p_type == 'SWS':
-                                E = sample_thompson_sigmund_energy(SWS_PARAMS['U_eV'])
-                                spd = np.sqrt(2 * E * PHYSICAL_CONSTANTS['EV_TO_JOULE'] / PHYSICAL_CONSTANTS['MASS_NA'])
-                            else:
-                                spd = sample_speed_from_flux_distribution(PHYSICAL_CONSTANTS['MASS_NA'], T_or_none)
+                        pos_arr = np.array([p['pos'] for p in active_particles])
+                        weights_arr = np.array([p['weight'] for p in active_particles])
 
-                            lon_rot = lon_f - sub_lon
-                            pos = lonlat_to_xyz(lon_rot, lat_f, PHYSICAL_CONSTANTS['RM'])
-                            norm = pos / PHYSICAL_CONSTANTS['RM']
-                            vel = spd * transform_local_to_world(sample_lambertian_direction_local(), norm)
-                            new_particles.append({'pos': pos, 'vel': vel, 'weight': w, 'dt_remaining': dt_init})
+                        if len(pos_arr) > 0:
+                            H, _ = np.histogramdd(pos_arr, bins=GRID_RESOLUTION, range=[(gmin, gmax)] * 3, weights=weights_arr)
+                            dgrid = H.astype(np.float32) / cvol
 
-        active_particles.extend(new_particles)
+                        fname_d = f"density_grid_t{int(rel_h):05d}_taa{int(round(TAA)):03d}.npy"
+                        np.save(os.path.join(target_output_dir, fname_d), dgrid)
+                        np.save(os.path.join(target_output_dir, f"surface_density_t{int(rel_h):05d}.npy"), surface_density)
 
-        # ----------------------------------------------------------------------
-        # C. 粒子の移動 (並列計算) & 消滅理由の集計
-        # ----------------------------------------------------------------------
-        tasks = []
-        for p in active_particles:
-            dur = p.pop('dt_remaining', DT_MOVE)
-            tasks.append({
-                'settings': SIMULATION_SETTINGS, 'spec': spec_dict, 'particle_state': p,
-                'orbit': (TAA, AU, V_rad, V_tan, sub_lon),
-                'duration': dur
-            })
+                if step_count % 100 == 0:
+                    elapsed = time.time() - start_time
+                    progress_pct = (step_count / total_steps) * 100
+                    print(f"Step {step_count}/{total_steps} ({progress_pct:.1f}%) | TAA={TAA:.2f} | Particles={len(active_particles)} | Elapsed={elapsed:.1f}s")
 
-        next_particles = []
-        step_gained_grid = np.zeros_like(surface_density)
+                prev_taa = TAA
+                t_curr += DT_MOVE
 
-        if tasks:
-            with Pool(cpu_count() - 1) as pool:
-                results = pool.map(simulate_particle_for_one_step, tasks)
-
-            for res in results:
-                if res['status'] == 'alive':
-                    next_particles.append(res['final_state'])
-                else:
-                    lost_weight = res.get('weight', 0.0)
-
-                    if res['status'] == 'stuck':
-                        step_stats['Loss_Stuck'] += lost_weight
-                        pos = res['pos_at_impact']
-                        w = res['weight']
-                        b_idx = res['bin_idx']  # 戻ってきた先のビンインデックス
-
-                        ln = np.arctan2(pos[1], pos[0])
-                        lt = np.arcsin(np.clip(pos[2] / np.linalg.norm(pos), -1, 1))
-                        ln_fix = (ln + sub_lon + np.pi) % (2 * np.pi) - np.pi
-                        ix = np.searchsorted(lon_edges, ln_fix) - 1
-                        iy = np.searchsorted(lat_edges, lt) - 1
-                        if 0 <= ix < N_LON_FIXED and 0 <= iy < N_LAT:
-                            step_gained_grid[ix, iy, b_idx] += w
-
-                    elif res['status'] == 'ionized':
-                        step_stats['Loss_Ionized'] += lost_weight
-                    elif res['status'] == 'escaped':
-                        step_stats['Loss_Escaped'] += lost_weight
-
-        active_particles = next_particles
-        accumulated_gained_grid += step_gained_grid
-
-        # ----------------------------------------------------------------------
-        # 統計データの蓄積 (スピンアップ後のみ)
-        # ----------------------------------------------------------------------
-        if is_recording_phase:
-            tgt = stats_data[current_taa_bin]
-            for key in step_stats:
-                if key != 'Step_Count':
-                    tgt[key] += step_stats[key]
-            tgt['Step_Count'] += 1
-
-        # ----------------------------------------------------------------------
-        # D. データ保存
-        # ----------------------------------------------------------------------
-        if prev_taa != -999:
-            passed = False
-            for tgt in TARGET_TAA:
-                if (prev_taa < tgt <= TAA) or (prev_taa > 350 and TAA < 10 and tgt == 0):
-                    passed = True
-                    break
-
-            if passed and t_curr >= t_start_run:
-                rel_h = (t_curr - t_start_run) / 3600.0
-                print(f"[SAVE] TAA={TAA:.1f}, Time={rel_h:.1f}h, Particles={len(active_particles)}")
-
-                dgrid = np.zeros((GRID_RESOLUTION, GRID_RESOLUTION, GRID_RESOLUTION), dtype=np.float32)
-                gmin, gmax = -GRID_MAX_RM * PHYSICAL_CONSTANTS['RM'], GRID_MAX_RM * PHYSICAL_CONSTANTS['RM']
-                cvol = ((gmax - gmin) / GRID_RESOLUTION) ** 3
-
-                pos_arr = np.array([p['pos'] for p in active_particles])
-                weights_arr = np.array([p['weight'] for p in active_particles])
-
-                if len(pos_arr) > 0:
-                    H, _ = np.histogramdd(pos_arr, bins=GRID_RESOLUTION, range=[(gmin, gmax)] * 3, weights=weights_arr)
-                    dgrid = H.astype(np.float32) / cvol
-
-                fname_d = f"density_grid_t{int(rel_h):05d}_taa{int(round(TAA)):03d}.npy"
-                np.save(os.path.join(target_output_dir, fname_d), dgrid)
-                np.save(os.path.join(target_output_dir, f"surface_density_t{int(rel_h):05d}.npy"), surface_density)
-
-        if step_count % 100 == 0:
-            elapsed = time.time() - start_time
-            progress_pct = (step_count / total_steps) * 100
-            print(
-                f"Step {step_count}/{total_steps} ({progress_pct:.1f}%) | TAA={TAA:.2f} | Particles={len(active_particles)} | Elapsed={elapsed:.1f}s")
-
-        prev_taa = TAA
-        t_curr += DT_MOVE
+    # 🌟 Ctrl+C が押されたらここに来る（whileループと同階層）
+    except KeyboardInterrupt:
+        print("\n[中断] Ctrl+Cが押されました。すべての子プロセスを安全に終了します...")
+        pool.terminate()  # 実行中のプロセスを強制終了
+        pool.join()       # ゾンビ化を防ぐための終了待ち
+        sys.exit(0)       # 完全にプログラムを終了する
 
     # === ループ終了後：CSVへの書き出し ===
     print("Saving TAA-binned statistics...")
@@ -893,7 +1070,6 @@ def main_snapshot_simulation():
 
         for deg in range(360):
             d = stats_data[deg]
-
             gen_total = d['Gen_PSD'] + d['Gen_TD'] + d['Gen_SWS'] + d['Gen_MMV']
             loss_total = d['Loss_Stuck'] + d['Loss_Ionized'] + d['Loss_Escaped']
 
@@ -908,7 +1084,6 @@ def main_snapshot_simulation():
                 f"{safe_pct(d['Gen_TD'], gen_total):.1f}",
                 f"{safe_pct(d['Gen_SWS'], gen_total):.1f}",
                 f"{safe_pct(d['Gen_MMV'], gen_total):.1f}",
-
                 f"{loss_total:.4e}",
                 f"{d['Loss_Stuck']:.4e}", f"{d['Loss_Ionized']:.4e}", f"{d['Loss_Escaped']:.4e}",
                 f"{safe_pct(d['Loss_Stuck'], loss_total):.1f}",
@@ -922,5 +1097,6 @@ def main_snapshot_simulation():
 
 
 if __name__ == '__main__':
+    # Spyder/Jupyter対策の呪文はそのまま残します
     sys.modules['__main__'].__spec__ = None
     main_snapshot_simulation()

@@ -22,11 +22,11 @@ COLOR_VMAX = 1.0e18
 # その他設定
 N_LON, N_LAT = 72, 36
 #BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202512"
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202602"
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202603"
 # RUN_NAME = "ParabolicHop_72x36_EqMode_DT500_PLeblanc_DSuzuki"
 #RUN_NAME = "Parabolichop_72x36_NoEq_DT100_1224_s1"
 #RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0116_0.4Denabled_2.7_LowestQ"
-RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0213_0.4Denabled_2.7_LowestQ_Bounce575K"
+RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0331_Multi_0.4Denabled_U1.4-2.7&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
 #RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0128_0.4Denabled_2.7_LowestQ_test"
 INITIAL_TARGET_TAA = 100
 ORBIT_FILE_PATH = 'orbit2025_spice_unwrapped.txt'
@@ -213,6 +213,11 @@ class SimulationViewer:
 
         try:
             data = np.load(filepath)
+
+            if data.ndim == 3:
+                # パターンA: 0番目の成分だけを使う場合
+                data = data[:, :, 0]
+
         except Exception as e:
             print(f"Error loading {filepath}: {e}")
             return
@@ -371,6 +376,10 @@ class SimulationViewer:
             # データ読み込みと処理（update_plotと同じロジック）
             try:
                 data = np.load(closest_file['path'])
+
+                if data.ndim == 3:
+                    data = data[:, :, 0]
+                    
                 time_h = closest_file['time_h']
 
                 # 太陽方向へのアライメント

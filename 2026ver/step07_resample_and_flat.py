@@ -4,6 +4,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.patches as patches
 from scipy.interpolate import interp1d
 from astropy.io import fits
+from scipy.ndimage import gaussian_filter1d
 from pathlib import Path
 import os
 import pandas as pd
@@ -104,15 +105,13 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         return
     # --- 波長軸の再定義（リニアな等間隔グリッドを作成） ---
     wmp_shifted = wmp + wavshift
+    
 
-    # --- 波長軸の再定義（リニアな等間隔グリッドを作成） ---
-    wmp_shifted = wmp + wavshift
 
     if processing_range:
         print(
             f"  -> Defining new grid based on target range density: {processing_range[0]:.4f} - {processing_range[1]:.4f} nm")
-
-        # --- ここからが新しいロジック ---
+        
         # 1. target_range内に元々ピクセルが何個あるか、全ファイバーで平均を取る
         pixels_in_range = []
         for j in iFibAct:
@@ -179,10 +178,22 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     spSkyWC = np.zeros_like(spDat) if spSky is not None else None
     spSkyImg = np.zeros((nFibY, nFibX)) if spSky is not None else None
 
+    flat_mode = params.get('flat_mode', '2d_standard')
+    flat_sigma = params.get('flat_smoothing_sigma', 50)
+
     print("  -> Processing and resampling each fiber...")
+
+    master_1d_flat = None
+    if apply_wl_flat and spFlt is not None and flat_mode == '1d_smoothed':
+        print(f"    -> Mode '1d_smoothed' selected. Creating master 1D flat (sigma={flat_sigma})...")
+        # 有効な全ファイバーのスペクトルの中央値を取り、ノイズに強い1Dプロファイルを作成
+        raw_1d_flat = np.nanmedian(spFlt[iFibAct, :], axis=0)
+        # ガウシアンフィルターで細かいピクセルムラや吸収線を平滑化
+        master_1d_flat = gaussian_filter1d(raw_1d_flat, sigma=flat_sigma)
+
+
     # 1. ホワイトフラット補正と再サンプリング
     for j in iFibAct:
-        # --- ここから修正 ---
         # このファイバーの波長データが有効かチェック
         wmp_j = wmp_shifted[j, :]
         if np.all(np.isnan(wmp_j)):
@@ -208,25 +219,28 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
 
         # ホワイトフラット補正
         if apply_wl_flat and spFlt is not None:
+            # モードによって使うフラットデータを切り替える
+            if flat_mode == '1d_smoothed':
+                flat_to_use = master_1d_flat
+            else: # '2d_standard'
+                flat_to_use = spFlt[j, :]
 
-            # ゼロ除算を避けるため、フラットの値が小さい部分は補正しないなどの工夫も有効
-            flat_j = spFlt[j, :]
-            valid_flat = flat_j > 1e-6  # 極端に小さい値を除外
-            median_flat = np.median(flat_j[512:1536])
+            # ゼロ除算回避
+            valid_flat = flat_to_use > 1e-6 
+            median_flat = np.nanmedian(flat_to_use[512:1536])
 
             # spDatFlt (プロット用) を計算
-            spDatFlt[j, valid_flat] = (spDat[j, valid_flat] / flat_j[valid_flat]) * median_flat
+            spDatFlt[j, valid_flat] = (spDat[j, valid_flat] / flat_to_use[valid_flat]) * median_flat
             # 補間するデータも更新
             spDat_to_resample = spDatFlt[j, :]
 
             # スカイデータも同様に処理
             if spSky is not None:
-                # spSkyFlt (プロット用) を計算し、補間するデータも更新
                 spSky_to_resample_temp = np.zeros_like(spSky[j, :])
-                spSky_to_resample_temp[valid_flat] = (spSky[j, valid_flat] / flat_j[valid_flat]) * median_flat
+                spSky_to_resample_temp[valid_flat] = (spSky[j, valid_flat] / flat_to_use[valid_flat]) * median_flat
                 spSky_to_resample = spSky_to_resample_temp
         else:
-            # フラット補正をしない場合、プロット用の spDatFlt には元データを入れておく
+            # フラット補正をしない場合
             spDatFlt[j, :] = spDat_to_resample
 
         # 波長軸に沿って再サンプリング
@@ -307,7 +321,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
         hd_out['CTYPE2'] = 'FIBERID'
         hd_out['CRPIX2'] = 1.0
         hd_out['CRVAL2'] = 0.0
-        hd_out['CDELT2'] = 1.0
+        hd_out['CDELT2'] = 1.0 #もし2次元スペクトルを見たい場合はここを視野角に合わせた値に変更する必要がある。
         return hd_out
 
     # .wc.fits (波長校正済み2Dスペクトル)
@@ -329,7 +343,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     hd_dcb['CTYPE3'] = 'FIBER_X'
     hd_dcb['CRPIX3'] = 1.0
     hd_dcb['CRVAL3'] = 0.0
-    hd_dcb['CDELT3'] = 1.0
+    hd_dcb['CDELT3'] = 1.0 #もし2次元スペクトルを見たい場合はここを視野角に合わせた値に変更する必要がある。
 
     fits.HDUList([
         fits.PrimaryHDU(data=spDatDcb.astype(np.float32), header=hd_dcb),
@@ -446,6 +460,10 @@ def run(run_info, config):
     n_fib_x = params_conf.get("n_fib_x", 10)
     n_fib_y = params_conf.get("n_fib_y", 12)
 
+    # '2d_standard' (従来) または '1d_smoothed' (同期間での白色光のデータがないとき)
+    flat_mode = params_conf.get("flat_mode", "2d_standard")
+    flat_sigma = params_conf.get("flat_smoothing_sigma", 50)
+
     force_rerun = config.get("pipeline", {}).get("force_rerun_resample", False)
 
     print(f"\n--- 波長再サンプリング・フラット補正を開始します ---")
@@ -462,7 +480,9 @@ def run(run_info, config):
     process_params = {
         'wavshift': wavshift,
         'interpolation_kind': interp_kind,
-        'header_info': header_info
+        'header_info': header_info,
+        'flat_mode': flat_mode,              
+        'flat_smoothing_sigma': flat_sigma   
     }
 
     try:

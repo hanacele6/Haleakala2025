@@ -162,12 +162,12 @@ def process_excel_with_solar_spectrum(input_excel_path, output_excel_path, solar
 # ==============================================================================
 if __name__ == "__main__":
     # ★ 1. 太陽スペクトルデータのパス
-    solar_spectrum_file = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/SolarSpectrum.txt"
+    solar_spectrum_file = "C:/Users/hanac/univ/Mercury/Haleakala2025/SolarSpectrum.txt"
 
     # ★ 2. 読み込みたいExcelファイルのパス
-    input_file = "C:/Users/hanac/University/Senior/Mercury/DUSK_preview.xlsx"
+    input_file = "C:/Users/hanac/univ/Mercury/DUSK_preview.xlsx"
 
     # ★ 3. 保存先のExcelファイルパス
-    output_file = "C:/Users/hanac/University/Senior/Mercury/Dusk_Brightness.xlsx"
+    output_file = "C:/Users/hanac/univ/Mercury/Dusk_Brightness.xlsx"
 
     process_excel_with_solar_spectrum(input_file, output_file, solar_spectrum_file)

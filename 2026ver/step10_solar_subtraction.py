@@ -317,7 +317,7 @@ def run(run_info, config):
 
     force_rerun = config.get("pipeline", {}).get("force_rerun_solar", False)
 
-    print(f"\n--- 太陽光モデル減算・絶対輝度(MR)変換 (Milillo Mode) を開始します ---")
+    #print(f"\n--- 太陽光モデル減算・絶対輝度(MR)変換 (Milillo Mode) を開始します ---")
 
     if not solar_spec_path.exists():
         print(f"エラー: 太陽スペクトルファイルが見つかりません: {solar_spec_path}")

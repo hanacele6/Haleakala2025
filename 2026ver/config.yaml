@@ -1,0 +1,195 @@
+# ==========================================================
+# 水星観測データ解析 パイプライン統合設定ファイル
+# ==========================================================
+
+# ----------------------------------------------------------
+# [A] パイプライン実行制御 (Trueにすると、そのステップから強制的に再実行します)
+# ----------------------------------------------------------
+
+target_run:
+  #date: "20251021"
+  start_date: "20250701"
+  end_date: "20251231"
+
+directories:
+  data_base_dir: "C:/Users/hanac/univ/Mercury"
+  project_base_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025"
+  #csv_dir_name: "2025ver"         # 入力CSVのフォルダ名 (例: 2025ver, 2026ver)
+  csv_dir_name: "2026ver/csvs"    # CSVをまとめるフォルダ
+  output_dir_name: "output"  # 出力先のフォルダ名 (例: output, test_output)
+
+pipeline:
+  skip_preprocessing: True   # Trueにすると Step 2 を実行しません
+  #ここから下はFalseがデフォルト、Trueにすると強制的に処理を実行。
+  #（各stepにはスキップ機能があるため、一度処理をした後、設定がFalseだとスキップされてしまう。）
+  force_rerun_csv: False        # Step 0: CSV生成
+  force_rerun_spice: False      # Step 1: SPICE計算
+  force_rerun_hotpixel: False   # Step 2: ホットピクセル除去
+  force_rerun_trace: False      # Step 3: ファイバートレース
+  force_rerun_extract: False    # Step 4: スペクトル抽出
+  force_rerun_combine: False    # Step 5: マスター合成
+  force_rerun_wavelength: False # Step 6: 波長較正
+  force_rerun_resample: False   # Step 7: 再サンプリング・フラット
+  force_rerun_subtract: False   # Step 8: 背景光減算
+  force_rerun_hapke: False      # Step 9: Hapkeモデル
+  force_rerun_solar: False      # Step 10: 太陽光モデル減算
+  force_rerun_gfactor: False    # Step 11: g-factor計算
+  force_rerun_density: True   # Step 12: 原子数密度算出
+  force_rerun_summary: True    # Step 13: 1日ごとの結果集計
+
+# ----------------------------------------------------------
+# [B] 各ステップのパラメータ設定
+# ----------------------------------------------------------
+
+# Step 1: SPICE計算
+spice:
+  kernel_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025/kernels"
+  #pck,lskなどのカーネルの保存場所。
+
+# Step 2: ホットピクセル除去
+hotpixel:
+  kernel_size: 3
+  sigma_threshold: 1000.0
+  manual_roi: [] # 例: [[374, 459, 388, 470]]とすると当該箇所が除外される(周りの平均に置き換わる)。
+
+# Step 3: ファイバートレース
+tracing:
+  dark_file: "C:/Users/hanac/univ/Mercury/Haleakala2025/dk01h_20s.sp.fits"
+  target_descriptions: ['LED', 'HLG']
+  make_plots: True
+  params:
+    nFibX: 10
+    nFibY: 12
+    iFibInact: [6, 49, 69, 89, 94, 109, 117] #使用されていないファイバーを除外。
+    yFib0: 195
+    yFib1: 5.95
+    ypixFibWid: 6.0
+    trace_interval_x: 1
+    poly_fit_order: 6
+    #ここら辺の設定は鍵谷先生にソースコードをもらったときから変えてない。
+
+# Step 4: スペクトル抽出
+extraction:
+  hwid: 3
+  debug_threshold: 0
+  max_fit_fev: 10000
+
+# Step 5: マスター合成
+combination:
+  target_types: ['LED', 'SKY', 'HLG']
+  combine_type: 'clippedmean'
+  sigma: 2.0
+  make_plots: True
+  input_suffix: '_tr.fits'
+  output_suffix: '.fits'
+
+# Step 6: 波長較正
+wavelength:
+  solar_spec_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025/psg/"
+  save_fiber_plots: True
+  params:
+    wlinesM: [588.39, 588.995, 589.3, 589.592, 590.560, 591.002, 591.417, 591.620]
+    pxlinesD0_base: [1012, 1192, 1280, 1374, 1670, 1806, 1942, 2003]
+    #この波長とピクセル位置のリストは観測時期によって異なる。例えば2025念は6月以前と7月以降で異なっていた。ここにあるのは7月以降のもの。
+    #もし処理を実行してずれていると感じた場合はfits2dat.pyで確認してみる。0本目のファイバーの値を使えばいい。
+    pixdwavs_val: 0.0
+    wavstep1: 0.00293
+    calwav1: 588.9
+    dltFibY: 12.5       # 偶数fiberに対して、奇数fiberは-12.5ピクセルずれている。なお、違うときもある。
+    fibers_to_skip: [] # 異常が出るファイバーIDを除外
+
+# Step 7: 波長再サンプリング・フラット補正
+resample:
+  target_types: ['MERCURY']
+  master_wl_flat: "master_hlg"
+  master_sky_flat: "master_sky"
+  apply_wl_flat: True
+  save_plots: False
+  params:
+    wavshift: 0.0
+    interpolation_kind: 'quadratic'
+    target_range: [588.4993, 590.4566]
+    bad_fibers: [6, 49, 69, 89, 94, 109, 117]
+    n_fib_x: 10
+    n_fib_y: 12
+    flat_mode: "1d_smoothed"       # 過去データを使う場合はコレ。復旧後は "2d_standard" に戻す
+    flat_smoothing_sigma: 50       # 平滑化の強さ
+
+# Step 8: 背景光減算とクロップ
+subtraction:
+  target_types: ['MERCURY']
+  fiber_defs:
+    NFIBX: 10
+    NFIBY: 12
+    target_rows: [3, 4, 5, 6, 7] # 水星が写っている行
+    background_rows: [0, 1, 2, 8, 9, 10, 11] # 空の行
+    #ここは本来なら日付ごとに変えた方がいい。いまは標準的な奴にしてる。
+  crop:
+    enabled: True
+    center_wl: 589.7558  # 切り出す中心波長(nm)
+    half_width: 200      # 左右に切り出すピクセル数
+
+# Step 9: Hapkeモデル
+hapke:
+  constants:
+    JL: 5.18e+14
+    theta_deg: 16.0
+    w: 0.2
+    h: 0.065
+    B0: 2.4
+    b: 0.20
+    c: 0.18
+    #
+
+# Step 10: 太陽光モデル減算
+solar_subtraction:
+  solar_spec_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/SolarSpectrum.txt"
+  target_types: ['MERCURY']
+  # CSVの Dawn/Dusk に応じて自動適用されるシフト値
+  sft_values:
+    dawn: [0.001, 0.002, 0.003]
+    dusk: [-0.0005, 0.0005, 0.0015]
+    default: [-0.001, 0.000, 0.001] #defaultは使わない。
+  fit_config:
+    exclude_d2_region: True
+    d2_wavelength_nm: 589.7558
+    d2_exclusion_half_width_pix: 20
+    create_debug_plot: False
+
+# Step 11: g-factor計算
+gfactor:
+  solar_spec_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/solarspectrum.txt"
+  target_wavelength: 589.7571833
+  fwhm: 0.005
+
+# Step 12: 原子数密度(Column Density)算出
+column_density:
+  target_wavelength: 589.7558
+  fit_config:
+    subtract_baseline: False
+    fit_half_width_pix: 35
+    noise_wing_width_pix: 60
+    #ベースラインを引くこともできるが、基本的にベースラインは0になる想定なので引かなくてもいいかなって思った。
+  plot_config:
+    create_plots: True
+
+  #視野角のメモ
+  #2026年4月以前： wide: 3.0"/fiber,narrow: 1.0"/fiber,fine:わからん
+  #2026年4月以降： wide: 3.3"/fiber, 33 x 40" FOV,narrow: 1.17"/fiber, 12 x 14" FOV,fine: 0.72"/fiber, 7.2 x 8.6" FOV
+
+  plate_scale: 1.0   # 1ピクセルあたりの秒角
+
+  apply_optical_depth_correction: True
+  sigma_cross_section: 6.0e-12
+
+# Step 13: 1日ごとの最終集計
+summary:
+  Rp: 0.307502  # 近日点距離 (AU)
+  Ra: 0.466697  # 遠日点距離 (AU)
+  error_rejection_factor: 3.0  #誤差が中央値の何倍を超えたら除外するか
+
+# Step 14: 複数日の集計・日々の変動プロット
+aggregation:
+  pa_correction_file: "C:/Users/hanac/univ/Mercury/Haleakala2025/PA_correction2.txt"
+  output_filename_template: "DailyVariation_Summary_{month}.dat"
+  plot_filename_template: "Correction_Factor_vs_TAA_{month}.png"
