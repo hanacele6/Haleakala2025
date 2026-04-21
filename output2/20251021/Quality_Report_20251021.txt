@@ -1,0 +1,6 @@
+Quality Report (20251021)
+Grade: A
+Survival: 27/28
+
+Exclusion Details:
+ - ID 1: High Error Ratio (1.04) (WL=589.8285)

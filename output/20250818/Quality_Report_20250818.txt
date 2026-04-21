@@ -1,0 +1,18 @@
+Quality Report (20250818)
+Grade: D
+Survival: 0/13
+
+Exclusion Details:
+ - ALL REJECTED: Only 1 valid points found (Cluster size=5)
+ - ID 1: Low Contrast (PeakMax/BgMax=1.09 < 1.5) (WL=589.8491)
+ - ID 2: Low Contrast (PeakMax/BgMax=1.30 < 1.5) (In cluster)
+ - ID 3: Low Contrast (PeakMax/BgMax=0.65 < 1.5) (WL=589.7774)
+ - ID 4: Outlier (Not in main cluster) (WL=589.7054)
+ - ID 5: Low Contrast (PeakMax/BgMax=0.37 < 1.5) (In cluster)
+ - ID 6: Low Contrast (PeakMax/BgMax=1.10 < 1.5) (WL=589.8563)
+ - ID 7: Outlier (Not in main cluster) (WL=589.6696)
+ - ID 8: Value <= 0 (WL=589.8456)
+ - ID 10: Low Contrast (PeakMax/BgMax=1.01 < 1.5) (WL=589.8159)
+ - ID 11: Low Contrast (PeakMax/BgMax=1.04 < 1.5) (In cluster)
+ - ID 12: Low Contrast (PeakMax/BgMax=1.13 < 1.5) (WL=589.7801)
+ - ID 13: Low Contrast (PeakMax/BgMax=0.77 < 1.5) (In cluster)

@@ -147,7 +147,6 @@ def create_final_trace_products(data_filepath, dark_filepath, output_dir, config
         AARR[xpix, i, 1] = smooth_y_trace
         fppoly_data[i, :] = np.clip(AARR[xpix, i, 1], 0, num_spatial_pts - 1)
 
-        # --- ▼▼▼ 詳細プロットの描画 (復活部分) ▼▼▼ ---
         if make_plots:
             if plot_idx >= pny * pnx:
                 for k in range(plot_idx, pny * pnx): axes_detail.flat[k].axis('off')
@@ -256,56 +255,77 @@ def run(run_info, config):
 
     trace_conf = config.get("tracing", {})
     dark_file_path = Path(trace_conf.get("dark_file", ""))
-    target_descs = trace_conf.get("target_descriptions", ['LED', 'HLG'])
     make_plots = trace_conf.get("make_plots", True)
     trace_params = trace_conf.get("params", {})
     force_rerun = config.get("pipeline", {}).get("force_rerun_trace", False)
+    
+    base_target_descs = trace_conf.get("target_descriptions", ['LED', 'HLG'])
+    use_sky_for_trace = trace_conf.get("use_sky_for_trace", False)
+
+    # 探索リストの構築
+    targets_to_process = ['SKY'] + base_target_descs if use_sky_for_trace else base_target_descs
+
+    print(f"  > 実行モード: {'[SKY + LED/HLG 二刀流]' if use_sky_for_trace else '[通常 LED/HLG 単一]'}")
+    print(f"  > 探索リスト: {targets_to_process}")
 
     try:
         df = pd.read_csv(csv_file_path)
         fits_col, desc_col = df.columns[0], df.columns[1]
-        target_rows = df[df[desc_col].isin(target_descs)]
 
-        if target_rows.empty:
-            print(f"情報: CSV内にトレース基準ファイル ({target_descs}) が見つかりません。スキップします。")
-            return
+        found_sky = False
+        found_standard = False
+        
+        for desc in targets_to_process:
+            matched_rows = df[df[desc_col] == desc]
+            if matched_rows.empty:
+                continue # CSVに無ければ次を探す
 
-        row = target_rows.iloc[0]
-        original_fits_path = Path(row[fits_col])
-        print(f"  > トレース基準として '{original_fits_path.name}' を使用します。")
+            row = matched_rows.iloc[0]
+            original_fits_path = Path(row[fits_col])
+            clean_stem = original_fits_path.stem.replace("_nhp_py", "")
 
-        clean_stem = original_fits_path.stem.replace("_nhp_py", "")
+            # 入力ファイルのパス確認
+            nhp_fits_name = f"{clean_stem}_nhp_py.fits"
+            input_file = output_dir / nhp_fits_name
+            if not input_file.exists():
+                input_file = output_dir / "1_fits" / nhp_fits_name
 
-        # 入力ファイルが 1_fits/ に移動されている可能性を考慮
-        nhp_fits_name = f"{clean_stem}_nhp_py.fits"
-        input_file = output_dir / nhp_fits_name
-        if not input_file.exists():
-            input_file = output_dir / "1_fits" / nhp_fits_name
+            # ファイルが物理的に存在しないなら次へ
+            if not input_file.exists():
+                print(f"    > 情報: CSVに {desc} はありますが、ファイル {nhp_fits_name} が未生成です。次を探します...")
+                continue 
 
-        # 出力ファイルがすでに 1_fits/ にあるかどうかもチェックする
-        fppoly_name = f"{clean_stem}.fppoly.fits"
-        fppoly_path_direct = output_dir / fppoly_name
-        fppoly_path_organized = output_dir / "1_fits" / fppoly_name
+            # --- トレース実行 ---
+            print(f"  > トレース基準として '{original_fits_path.name}' を処理します。")
+            fppoly_name = f"{clean_stem}.fppoly.fits"
+            fppoly_path_direct = output_dir / fppoly_name
+            fppoly_path_organized = output_dir / "1_fits" / fppoly_name
 
-        # どちらかに存在すれば「処理済み」とする
-        is_processed = fppoly_path_direct.exists() or fppoly_path_organized.exists()
+            if (fppoly_path_direct.exists() or fppoly_path_organized.exists()) and not force_rerun:
+                print(f"    > 処理済みスキップ: {fppoly_name}")
+            else:
+                create_final_trace_products(input_file, dark_file_path, output_dir, trace_params, make_plots)
 
-        if is_processed and not force_rerun:
-            print(f"  > 処理済みスキップ: トレースデータ {fppoly_name}")
-            print("--- トレース処理が完了しました ---")
-            return
+            # --- 終了判定 ---
+            if desc == 'SKY':
+                found_sky = True
+            elif desc in base_target_descs:
+                found_standard = True
 
-        if not input_file.exists():
-            print(f"エラー: トレース対象の前処理済みファイルが見つかりません: {input_file.name}")
-            return
+            # SKY不使用モードなら、1つ目(LEDかHLG)を見つけた時点で完了
+            if not use_sky_for_trace and found_standard:
+                print("  > 1つ目の有効なトレースを作成したため、探索を終了します。")
+                break
+            
+            # SKYモードなら、SKYと標準(LED/HLG)の両方が揃った時点で完了
+            if use_sky_for_trace and found_sky and found_standard:
+                print("  > SKYと標準(LED/HLG)の両方のトレースを作成したため、探索を終了します。")
+                break
 
-        # 処理実行
-        create_final_trace_products(input_file, dark_file_path, output_dir, trace_params, make_plots)
+        if not (found_sky or found_standard):
+            print(f"情報: 有効なトレース基準ファイルが見つかりませんでした。")
 
     except Exception as e:
         print(f"エラー: 処理中に問題が発生しました: {e}")
 
     print("--- トレース処理が完了しました ---")
-
-if __name__ == '__main__':
-    print("This script is a module.")

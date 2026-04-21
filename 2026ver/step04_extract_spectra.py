@@ -23,33 +23,52 @@ def run(run_info, config):
 
     print(f"\n--- スペクトル抽出処理を開始します ---")
 
+    # --- フラグの厳密な読み込み（文字列の 'False' トラップも防止） ---
+    trace_conf = config.get("tracing", {})
+    base_target_descs = trace_conf.get("target_descriptions", ['LED', 'HLG'])
+    raw_flag = trace_conf.get("use_sky_for_trace", False)
+    use_sky_for_trace = str(raw_flag).lower() in ['true', '1', 't', 'y', 'yes']
+
     try:
         df = pd.read_csv(csv_file_path)
         fits_col, desc_col = df.columns[0], df.columns[1]
 
-        trace_descs = config.get("tracing", {}).get("target_descriptions", ['LED', 'HLG'])
-        trace_ref_rows = df[df[desc_col].isin(trace_descs)]
+        # =========================================================
+        # 1. 初期チェック：フラグに合わせてリストを厳格に切り替える
+        # =========================================================
+        if use_sky_for_trace:
+            initial_search_list = ['SKY'] + [t for t in base_target_descs if t != 'SKY']
+        else:
+            initial_search_list = base_target_descs
 
-        if trace_ref_rows.empty:
-            raise FileNotFoundError(f"CSVに {trace_descs} が見つからず、fppolyファイルを特定できません。")
+        target_row = None
+        for desc in initial_search_list:
+            matched_rows = df[df[desc_col] == desc]
+            if not matched_rows.empty:
+                target_row = matched_rows.iloc[0]
+                break
 
-        ref_path_str = trace_ref_rows.iloc[0][fits_col]
+        if target_row is None:
+            raise FileNotFoundError(f"CSVに有効な基準ファイル ({initial_search_list}) が一つも見つかりません。")
+
+        ref_path_str = target_row[fits_col]
         clean_stem = Path(ref_path_str).stem.replace("_nhp_py", "")
         fppoly_filename = f"{clean_stem}.fppoly.fits"
 
-        # ★ 修正: トレースファイルが 1_fits/ にあるか探す
         fppoly_path = output_dir / fppoly_filename
         if not fppoly_path.exists():
             fppoly_path = output_dir / "1_fits" / fppoly_filename
 
+        # ここで物理ファイルを開いて、ファイバー本数を取得
         with fits.open(fppoly_path) as hdul:
-            fibp = hdul[0].data
-        print(f"トレース情報を読み込みました: {fppoly_filename}")
+            fibp_init = hdul[0].data
+            ifibm = fibp_init.shape[0]
+        print(f"  > 初期トレース情報 ({fppoly_filename}) からファイバー数 {ifibm} 本を確認しました。")
 
     except Exception as e:
         print(f"エラー: 抽出に必要なファイルや情報が見つかりません: {e}")
         return
-
+    
     file_list_original = df[fits_col].tolist()
     ifilem = len(file_list_original)
 
@@ -58,10 +77,7 @@ def run(run_info, config):
         return
 
     print(f"'{csv_file_path.name}' から {ifilem} 個のファイルを処理します (hwid={hwid})。")
-
     NX, NY = 2048, 1024
-    ifibm = fibp.shape[0]
-
     poserr_path = output_dir / 'poserr_python.txt'
     total_start_time = time.time()
 
@@ -70,13 +86,45 @@ def run(run_info, config):
             original_path = Path(original_filepath_str)
             description = df.iloc[ifile][desc_col]
 
-            # ★ 修正: 入力ファイルが 1_fits/ にあるか探す
+            # =========================================================
+            # 2. 本番：抽出するファイルに合わせてトレースを安全に選択
+            # =========================================================
+            if use_sky_for_trace:
+                if description in base_target_descs:
+                    search_list = [description] + [t for t in base_target_descs if t != description]
+                else:
+                    search_list = ['SKY'] + base_target_descs
+            else:
+                search_list = base_target_descs
+
+            trace_row = None
+            for desc in search_list:
+                matched_rows = df[df[desc_col] == desc]
+                if not matched_rows.empty:
+                    trace_row = matched_rows.iloc[0]
+                    break
+
+            if trace_row is None:
+                print(f"  > 警告: {description} 用のトレース基準が見つかりません。スキップします。")
+                continue
+
+            ref_path_str = trace_row[fits_col]
+            clean_stem = Path(ref_path_str).stem.replace("_nhp_py", "")
+            fppoly_filename = f"{clean_stem}.fppoly.fits"
+            
+            fppoly_path = output_dir / fppoly_filename
+            if not fppoly_path.exists():
+                fppoly_path = output_dir / "1_fits" / fppoly_filename
+                
+            with fits.open(fppoly_path) as hdul:
+                fibp = hdul[0].data
+            # =========================================================
+
             processed_filename = original_path.stem + "_nhp_py.fits"
             data_file_path = output_dir / processed_filename
             if not data_file_path.exists():
                 data_file_path = output_dir / "1_fits" / processed_filename
 
-            # 出力ファイルがすでに 1_fits/ にあるかチェック
             current_count = sum(df.iloc[:ifile + 1][desc_col] == description)
             output_file_name = f"{description}{current_count}_tr.fits"
             output_path_direct = output_dir / output_file_name
@@ -88,14 +136,13 @@ def run(run_info, config):
                 print(f"[{ifile + 1}/{ifilem}] 処理済みスキップ: {output_file_name}")
                 continue
 
-            print(f"\n[{ifile + 1}/{ifilem}] 抽出中: {processed_filename} -> {output_file_name}")
+            print(f"\n[{ifile + 1}/{ifilem}] 抽出中: {processed_filename} -> {output_file_name} (基準: {fppoly_filename})")
             file_start_time = time.time()
 
             if not data_file_path.exists():
                 print(f"  > 警告: 前処理済みファイルが見つかりません: {processed_filename}")
                 continue
 
-            # (以下、抽出のコア処理は変更なし)
             with fits.open(data_file_path) as hdul:
                 b = hdul[0].data.astype(np.float64)
 
@@ -142,13 +189,8 @@ def run(run_info, config):
                 fibl4 = np.sum(fibl3[hwid - 1:hwid + 2, :], axis=0) - (fibl3[0, :] + fibl3[hwid * 2, :]) / 2.0 * 3.0
                 fiblall2[ifib, :] = fibl4
 
-            # 直下に保存（main.py の最後で自動整理されるため）
             hdu = fits.PrimaryHDU(fiblall2)
             hdu.writeto(output_path_direct, overwrite=True)
             print(f"  > 完了。所要時間: {time.time() - file_start_time:.2f}秒")
 
     print(f"--- 抽出処理完了 (全体所要時間: {time.time() - total_start_time:.2f}秒) ---")
-
-
-if __name__ == '__main__':
-    print("This script is a module.")

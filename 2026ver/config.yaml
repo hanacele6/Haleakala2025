@@ -8,8 +8,8 @@
 
 target_run:
   #date: "20251021"
-  start_date: "20250701"
-  end_date: "20251231"
+  start_date: "20250811"
+  end_date: "20250823"
 
 directories:
   data_base_dir: "C:/Users/hanac/univ/Mercury"
@@ -19,7 +19,7 @@ directories:
   output_dir_name: "output"  # 出力先のフォルダ名 (例: output, test_output)
 
 pipeline:
-  skip_preprocessing: True   # Trueにすると Step 2 を実行しません
+  skip_preprocessing: False   # Trueにすると Step 2 を実行しません
   #ここから下はFalseがデフォルト、Trueにすると強制的に処理を実行。
   #（各stepにはスキップ機能があるため、一度処理をした後、設定がFalseだとスキップされてしまう。）
   force_rerun_csv: False        # Step 0: CSV生成
@@ -36,6 +36,12 @@ pipeline:
   force_rerun_gfactor: False    # Step 11: g-factor計算
   force_rerun_density: True   # Step 12: 原子数密度算出
   force_rerun_summary: True    # Step 13: 1日ごとの結果集計
+
+# ==========================================================
+# [0] テスト用
+# ==========================================================
+observation_status:
+  led_available: True #近くの日からデータを補完するか否か
 
 # ----------------------------------------------------------
 # [B] 各ステップのパラメータ設定
@@ -55,6 +61,7 @@ hotpixel:
 # Step 3: ファイバートレース
 tracing:
   dark_file: "C:/Users/hanac/univ/Mercury/Haleakala2025/dk01h_20s.sp.fits"
+  use_sky_for_trace: False #近い日付の白色光がないときにLEDでうまくいかずSKYでファイバーを見つける設定
   target_descriptions: ['LED', 'HLG']
   make_plots: True
   params:
@@ -104,7 +111,11 @@ resample:
   master_wl_flat: "master_hlg"
   master_sky_flat: "master_sky"
   apply_wl_flat: True
-  save_plots: False
+  use_external_flat: False #別日の白色光を使うかどうか。
+  external_flat_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/output/20250811/1_fits/master_led.fits"
+  external_wavmap_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/output/20250811/1_fits/master_sky.wmp.fits" # 別日の波長マップ
+
+  save_plots: False #ここTrueにするといろいろデバッグ用のplotが大量に出てくるため注意
   params:
     wavshift: 0.0
     interpolation_kind: 'quadratic'
@@ -112,8 +123,8 @@ resample:
     bad_fibers: [6, 49, 69, 89, 94, 109, 117]
     n_fib_x: 10
     n_fib_y: 12
-    flat_mode: "1d_smoothed"       # 過去データを使う場合はコレ。復旧後は "2d_standard" に戻す
-    flat_smoothing_sigma: 50       # 平滑化の強さ
+    flat_mode: "2d_standard"       # 過去データを使う場合は1d_smoothed(中央値)か1d_center(ど真ん中ファイバー)。復旧後は "2d_standard" に戻す
+    flat_smoothing_sigma: 5       # 平滑化の強さ
 
 # Step 8: 背景光減算とクロップ
 subtraction:

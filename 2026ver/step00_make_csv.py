@@ -94,6 +94,9 @@ def run(run_info, config):
 
     force_rerun = config.get("pipeline", {}).get("force_rerun_csv", False)
 
+    obs_conf = config.get("observation_status", {})
+    led_available = obs_conf.get("led_available", True)
+
     if csv_path.exists() and not force_rerun:
         print(f"  > [Step0] 処理済みのためスキップ: {csv_path.name}")
         return True
@@ -158,15 +161,18 @@ def run(run_info, config):
     # ---------------------------------------------------------
     missing_types = []
 
-    # SKYがない場合
+    # SKYがない場合 (SKYは波長校正の命綱なので、設定に関わらず探す)
     if "SKY" not in present_types:
         missing_types.append("SKY")
 
-    # HLGもLEDもない場合 (FLAT用)
+    # HLGもLEDもない場合
     if "HLG" not in present_types and "LED" not in present_types:
-        # HLGを優先して探すが、なければLEDでもいいので、とりあえずHLGを探させる
-        # (search_neighboring_datesを少し改良して両方探す手もあるが、ここではHLG優先)
-        missing_types.append("HLG")
+        if led_available:
+            # 従来通り、数日の欠測なら探しに行く
+            missing_types.append("HLG")
+        else:
+            # ★ 今回のキモ：長期欠測モードなら探しに行かない
+            print("    -> [設定] LED長期欠測モードのため、近隣日程からの白色光(HLG/LED)自動探索をスキップします。")
 
     if missing_types:
         borrowed_map = search_neighboring_dates(data_base_dir, target_date, missing_types)
