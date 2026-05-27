@@ -1,6 +1,0 @@
-Quality Report (20250813)
-Grade: B
-Survival: 7/8
-
-Exclusion Details:
- - ID 7: High Error Ratio (1.93) (WL=589.6713)

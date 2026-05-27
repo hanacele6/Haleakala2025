@@ -8,8 +8,8 @@
 
 target_run:
   #date: "20251021"
-  start_date: "20250811"
-  end_date: "20250823"
+  start_date: "20250813"
+  end_date: "20250813"
 
 directories:
   data_base_dir: "C:/Users/hanac/univ/Mercury"
@@ -115,7 +115,7 @@ resample:
   external_flat_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/output/20250811/1_fits/master_led.fits"
   external_wavmap_path: "C:/Users/hanac/univ/Mercury/Haleakala2025/output/20250811/1_fits/master_sky.wmp.fits" # 別日の波長マップ
 
-  save_plots: False #ここTrueにするといろいろデバッグ用のplotが大量に出てくるため注意
+  save_plots: False #ここTrueにするとデバッグ用のplotが大量に出てくるため注意
   params:
     wavshift: 0.0
     interpolation_kind: 'quadratic'
@@ -133,7 +133,9 @@ subtraction:
     NFIBX: 10
     NFIBY: 12
     target_rows: [3, 4, 5, 6, 7] # 水星が写っている行
+    #target_rows: [1, 2, 3, 4, 5]
     background_rows: [0, 1, 2, 8, 9, 10, 11] # 空の行
+    #background_rows: [0, 6, 7, 8, 9, 10, 11] 
     #ここは本来なら日付ごとに変えた方がいい。いまは標準的な奴にしてる。
   crop:
     enabled: True

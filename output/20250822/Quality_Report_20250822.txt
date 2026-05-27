@@ -1,7 +1,0 @@
-Quality Report (20250822)
-Grade: B
-Survival: 10/12
-
-Exclusion Details:
- - ID 1: Low Contrast (PeakMax/BgMax=1.23 < 1.5) (In cluster)
- - ID 8: Low Contrast (PeakMax/BgMax=1.21 < 1.5) (WL=589.7475)

@@ -11,8 +11,8 @@ from scipy.ndimage import median_filter
 def find_and_correct_hotpixels_auto(image_data, kernel_size=3, sigma_threshold=5.0):
     """
     統計的な手法を用いて、単一の画像フレーム内のホットピクセルを自動で検出し補正する。
-    ただ、ほっとぴくせうをまじめに除去してもしなくてもあんまり結果は変わらない。
-    デフォルトの設定では基本的にそのまま通している。
+    ただ、よほど目立ったホットピクセルでなければ除去してもしなくてもあんまり結果は変わらない。
+    デフォルトの設定では基本的に除去等は行わずにそのまま通している。
     """
     print(f"  > 自動ホットピクセル除去を開始 (kernel_size={kernel_size}, sigma_threshold={sigma_threshold})...")
     corrected_data = image_data.copy()
