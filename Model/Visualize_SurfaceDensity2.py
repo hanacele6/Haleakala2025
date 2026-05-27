@@ -22,12 +22,12 @@ COLOR_VMAX = 1.0e18
 # その他設定
 N_LON, N_LAT = 72, 36
 #BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202512"
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202603"
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202605"
 # RUN_NAME = "ParabolicHop_72x36_EqMode_DT500_PLeblanc_DSuzuki"
 #RUN_NAME = "Parabolichop_72x36_NoEq_DT100_1224_s1"
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0116_0.4Denabled_2.7_LowestQ"
-RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0331_Multi_0.4Denabled_U1.4-2.7&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0128_0.4Denabled_2.7_LowestQ_test"
+#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0331_Multi_0.4Denabled_U1.95&2.7_Q0.27_Bouncetau30s_A3.0_LongLT"
+#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0501_Multi_BD0.4SD0.6,4e3_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT_CHECK"
+RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0502_Multi_BD0.4SD0.6,4e3_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT_CHECK_FixedBins"
 INITIAL_TARGET_TAA = 100
 ORBIT_FILE_PATH = 'orbit2025_spice_unwrapped.txt'
 ALIGN_SUN_TO_CENTER = True

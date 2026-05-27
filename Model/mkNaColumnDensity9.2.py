@@ -90,16 +90,16 @@ SIMULATION_SETTINGS = {
     'USE_CLAMPED_DIFFUSION': False,  # 近日点ピークカット拡散 (現在は基本使用していない)
 
     # 吸着モデルの選択 ('empirical' または 'baule')
-    'STICKING_MODEL': 'empirical',
+    'STICKING_MODEL': 'empirical', #bauleは水星表面に適応できるか微妙なところ。そして理論もまだ不十分であり、改善の余地しかない。
 
     # ==========================================================================
     # マルチビン束縛エネルギー設定 (Multi-Bin Binding Energy)
     # ==========================================================================
-    # 吸着モデルの選択: 'fixed', 'dynamic', 'gaussian_random' のいずれかを指定
-    'U_MODEL_TYPE': 'gaussian_random', 
+    # 束縛エネルギーモデルの選択: 'fixed', 'dynamic', 'gaussian_random' のいずれかを指定
+    'U_MODEL_TYPE': 'fixed', 
 
     # --- [A] 固定値モデル('fixed')用設定 ---
-    'U_BINS_FIXED': np.array([1.95, 2.7]),
+    'U_BINS_FIXED': np.array([1.85, 1.85]),
     'Q_PSD_BINS_FIXED': np.array([2.7e-21 / (100 ** 2), 2.7e-21 / (100 ** 2)]),
 
     # --- [B/C] 共通のビン分割設定 ('dynamic', 'gaussian_random'用) ---
@@ -126,7 +126,7 @@ SIMULATION_SETTINGS = {
 # サイトのインデックス定義
 IDX_SHALLOW = 0
 IDX_DEEP = 1
-N_BINS = len(SIMULATION_SETTINGS['U_BINS'])
+#N_BINS = len(SIMULATION_SETTINGS['U_BINS'])
 
 # 定数計算用
 KB_EV_CONST = 8.617e-5  # ボルツマン定数 [eV/K]
@@ -134,7 +134,7 @@ KB_EV_CONST = 8.617e-5  # ボルツマン定数 [eV/K]
 # ==============================================================================
 # [A] Diffusion Model Parameters
 # ==============================================================================
-DIFF_REF_FLUX = 2.0e7 * (100.0 ** 2)
+DIFF_REF_FLUX = 1.0e6 * (100.0 ** 2)
 DIFF_REF_TEMP = 700.0  # 基準温度 [K]
 DIFF_E_A_EV = 0.4  # 活性化エネルギー [eV]
 Target_Grain_Radius = 100.0e-6  # [m]
@@ -718,8 +718,12 @@ def main_snapshot_simulation():
 
     # メインループで参照されるように設定を上書き
     SIMULATION_SETTINGS['U_BINS'] = U_BINS_ARRAY 
-    if SIMULATION_SETTINGS.get('USE_DYNAMIC_U_MODEL', False):
-        # Q_PSD_BINS もビン数に合わせて拡張 (全て同じ断面積とする)
+    mode = SIMULATION_SETTINGS.get('U_MODEL_TYPE', 'fixed')
+    if mode == 'fixed':
+        # fixedの場合は、設定で定義した Q_PSD_BINS_FIXED をそのまま使う
+        SIMULATION_SETTINGS['Q_PSD_BINS'] = SIMULATION_SETTINGS['Q_PSD_BINS_FIXED']
+    else:
+        # dynamic や gaussian_random の場合はビン数に合わせて一律で拡張
         base_q = 2.7e-21 / (100 ** 2)
         SIMULATION_SETTINGS['Q_PSD_BINS'] = np.full(N_BINS_DYNAMIC, base_q)
 
@@ -729,7 +733,7 @@ def main_snapshot_simulation():
     surface_density[:, :, -1] = INIT_SURF_DENS
 
     # ファイル名 (最新版に_MultiBinを付与)
-    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0410_Multi_0.4Denabled_U1.4-2.7&2.7_Q0.27_Bouncetau30s_A2.0_LongLT"
+    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_0426_Multi_0.4Denabled_U1.85_Q0.27_Bouncetau30s_A0.1_LongLT"
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
     os.makedirs(target_output_dir, exist_ok=True)
     print(f"Simulation Start. Results: {target_output_dir}")
