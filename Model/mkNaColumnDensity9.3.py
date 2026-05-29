@@ -1333,6 +1333,5 @@ def main_snapshot_simulation():
 
 
 if __name__ == '__main__':
-    # Spyder/Jupyter対策の呪文はそのまま残します
     sys.modules['__main__'].__spec__ = None
     main_snapshot_simulation()
