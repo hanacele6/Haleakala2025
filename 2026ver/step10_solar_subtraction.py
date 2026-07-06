@@ -263,7 +263,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
 
         output_exos_path = output_dir / f"{base_filename}.exos.dat"
         exos_data = np.column_stack([wl, Natb * cts2MR])
-        np.savetxt(output_exos_path, exos_data, fmt='%.8e', header="Wavelength Flux(MR)")
+        np.savetxt(output_exos_path, exos_data, fmt='%.8e', header="Wavelength Flux")
         print(f"    -> Saved final 1D spectrum: {output_exos_path.name}")
 
         # ======================================================================

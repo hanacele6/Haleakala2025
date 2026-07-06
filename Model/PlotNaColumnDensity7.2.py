@@ -17,7 +17,7 @@ CM2_PER_M2 = CM_PER_M * CM_PER_M
 # 観測データ処理で使用している正規化面積 [cm^2]
 NORMALIZATION_AREA_CM2 = 3.7408e17
 # 半球 (Dawn全体 / Dusk全体)
-NORMALIZATION_AREA_HALF_CM2 = NORMALIZATION_AREA_CM2 / 2.0
+NORMALIZATION_AREA_HALF_CM2 = NORMALIZATION_AREA_CM2 /2.0
 # 半球の半分 (Dawn外側 / Dusk外側)
 NORMALIZATION_AREA_QUARTER_CM2 = NORMALIZATION_AREA_CM2 / 4.0
 
@@ -38,44 +38,69 @@ GRID_MAX_RM = 5.0
 # 複数のモデルを追加・編集できます
 MODEL_SETTINGS = [
     {
-        "dir": r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0509_Multi_BD0.4_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18",
+        #"dir": r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0517_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18",
 
-        "label": "Model (Mode:1.85 eV)",
-        "color_dawn": "blue",    # ALLモード時のDawnの色
-        "color_dusk": "red",     # ALLモード時のDuskの色
-        "marker_dawn": "^",
-        "marker_dusk": "v",
-        "color_single": "blue",  # ALL以外の単一モード時の色
+        "dir": r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0609_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_1e24",
+
+        "label": "DefaultModel",
+        "color_dawn": "#1a365d",     # 濃いネイビー（ベース）
+        "color_dusk": "#742a2a",     # 濃いバーガンディ
+        "marker_dawn": "o",          # マーカーもシンプルに統一するとスッキリします
+        "marker_dusk": "o",
+        "grid_res": 101,  
+        "max_rm": 5.0,
+        "color_single": "#1a365d",
         "marker_single": "o",
-        "alpha": 0.4,
+        "alpha": 1.0,
         "zorder": 1
     },
     # 比較したい別のモデルがある場合は以下のように追加します
-     {
-         "dir": r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0511_Multi_BD0.4_UG+0.2_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)",
-
-         "label": "Model (Mode:2.00 eV)",
-         "color_dawn": "cyan",
-         "color_dusk": "orange",
-         "marker_dawn": "^",
-         "marker_dusk": "v",
-         "color_single": "cyan",
-         "marker_single": "s",
-         "alpha": 1.0,
-         "zorder": 5
-     },
     {
-        "dir": r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0512_Multi_BD0.4_UG-0.2_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18",
+         "dir": r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT50_0613_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)",
 
-        "label": "Model (Mode:1.65 eV)",
-        "color_dawn": "purple",    # ALLモード時のDawnの色
-        "color_dusk": "brown",     # ALLモード時のDuskの色
+        "label": "DT50Model",
+        "color_dawn": "#2b6cb0",     # スタンダードな青
+        "color_dusk": "#c53030",     # 赤
+        "marker_dawn": "s",
+        "marker_dusk": "s",
+        "grid_res": 101,  
+        "max_rm": 5.0,
+        "color_single": "#2b6cb0",
+        "marker_single": "s",
+        "alpha": 1.0,
+        "zorder": 2
+    },
+    
+    {
+        "dir": r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT10_0614_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)",
+
+        "label": "DT10Model",
+        "color_dawn": "#4299e1",     # 明るい青
+        "color_dusk": "#f56565",     # 明るい赤
         "marker_dawn": "^",
-        "marker_dusk": "v",
-        "color_single": "blue",  # ALL以外の単一モード時の色
+        "marker_dusk": "^",
+        "grid_res": 101,  
+        "max_rm": 5.0,
+        "color_single": "#4299e1",
+        "marker_single": "^",
+        "alpha": 1.0,
+        "zorder": 3
+    },
+
+    {
+        "dir": r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT1_0616_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)",
+
+        "label": "DT1Model",
+        "color_dawn": "#90cdf4",     # 淡い水色（最も細かい）
+        "color_dusk": "#feb2b2",     # 淡いピンク
+        "marker_dawn": "D",
+        "marker_dusk": "D",
+        "grid_res": 101,  
+        "max_rm": 5.0,
+        "color_single": "#90cdf4",
         "marker_single": "D",
-        "alpha": 0.4,
-        "zorder": 1
+        "alpha": 1.0,
+        "zorder": 4
     },
 ]
 
@@ -91,7 +116,7 @@ TARGET_YEAR = 3
 
 # ★★★ プロットモード選択 (シミュレーション側)
 # 選択肢: "ALL", "DAYSIDE_TOTAL", "DAWN", "DUSK", "DAWN_OUTER", "DUSK_OUTER", "CSV_ONLY"
-PLOT_MODE = "DAWN"
+PLOT_MODE = "DAYSIDE_TOTAL"
 
 # ★★★ CSVプロット選択モード (観測データ側)
 # "DAWN" : DawnのCSVのみ表示, "DUSK" : DuskのCSVのみ表示, "BOTH" : 両方表示
@@ -104,7 +129,7 @@ COMMON_Y_LABEL = "Column Density [atoms/cm²]"
 SHOW_LEGEND = True
 
 # ★★★ 比較用CSVファイルの設定
-SHOW_CSV_OVERLAY = True  # CSVを重ねて表示するか
+SHOW_CSV_OVERLAY = False  # CSVを重ねて表示するか
 CSV_USE_SHARED_Y_AXIS = True  # True: 左軸を共有 / False: 右軸を使用(スケール分離)
 
 # ★★★ 複数CSVの設定リスト ("type"キーで判定します)
@@ -139,7 +164,18 @@ idx_dusk_outer_start = (GRID_RESOLUTION - 1) - quarter_index_offset
 
 
 # --- 4. データ処理関数 ---
-def process_simulation_data(target_dir, mode, target_year):
+def process_simulation_data(target_dir, mode, target_year, grid_res, max_rm):
+
+    grid_total_width_m = 2 * max_rm * RM_m
+    cell_size_m = grid_total_width_m / grid_res
+    cell_volume_m3 = cell_size_m ** 3
+    
+    mid_index_x = (grid_res - 1) // 2
+    mid_index_y = (grid_res - 1) // 2
+    quarter_index_offset = mid_index_y // 2
+    idx_dawn_outer_limit = quarter_index_offset
+    idx_dusk_outer_start = (grid_res - 1) - quarter_index_offset
+
     try:
         all_files = [f for f in os.listdir(target_dir) if f.endswith('.npy') and f.startswith('density_grid_')]
         if not all_files:
@@ -252,7 +288,13 @@ if PLOT_MODE != "CSV_ONLY":
     print(f"対象データ: {year_str}")
     
     for mod_set in MODEL_SETTINGS:
-        taa, data = process_simulation_data(mod_set["dir"], PLOT_MODE, TARGET_YEAR)
+   
+        g_res = mod_set.get("grid_res", 101)
+        g_rm = mod_set.get("max_rm", 5.0)
+        
+        # ★ 引数に g_res と g_rm を追加
+        taa, data = process_simulation_data(mod_set["dir"], PLOT_MODE, TARGET_YEAR, g_res, g_rm)
+
         if taa is not None:
             all_models_data.append({
                 "setting": mod_set,
@@ -615,6 +657,56 @@ if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
 
             except Exception as e:
                 print(f"Total Amount Calculation Error for {csv_type}: {e}")
+    
+    # =======================================================
+    # モデル間での定量比較 (Time-weighted Averageによる平均密度の比較)
+    # =======================================================
+    if PLOT_MODE != "CSV_ONLY" and len(all_models_data) > 1:
+        print("\n=== モデル間の定量比較 (Time-weighted Average) ===")
+        MERCURY_ECCENTRICITY = 0.20563593
+
+        # 基準とするモデル (1つ目のモデル: DefaultModel)
+        ref_model = all_models_data[0]
+        ref_label = ref_model["setting"]["label"]
+
+        # PLOT_MODEが "ALL" の場合は辞書型 (DAWN/DUSK) になるため分岐
+        compare_keys = ["DAWN", "DUSK"] if PLOT_MODE == "ALL" else ["Data"]
+
+        for key in compare_keys:
+            if key != "Data":
+                print(f"\n--- 対象領域: {key} ---")
+            
+            # --- 基準モデルの計算 ---
+            ref_taa = ref_model["taa"]
+            ref_data = ref_model["data"][key] if key != "Data" else ref_model["data"]
+            
+            ref_theta_rad = np.radians(ref_taa)
+            ref_weights = 1.0 / (1.0 + MERCURY_ECCENTRICITY * np.cos(ref_theta_rad))**2
+            ref_mean_dens = np.average(ref_data, weights=ref_weights)
+            
+            print(f"[基準モデル] {ref_label}: 平均カラム密度 = {ref_mean_dens:.4e} [atoms/cm²]")
+
+            # --- 他のモデルとの比較 ---
+            for i in range(1, len(all_models_data)):
+                tgt_model = all_models_data[i]
+                tgt_label = tgt_model["setting"]["label"]
+                tgt_taa = tgt_model["taa"]
+                tgt_data = tgt_model["data"][key] if key != "Data" else tgt_model["data"]
+
+                tgt_theta_rad = np.radians(tgt_taa)
+                tgt_weights = 1.0 / (1.0 + MERCURY_ECCENTRICITY * np.cos(tgt_theta_rad))**2
+                tgt_mean_dens = np.average(tgt_data, weights=tgt_weights)
+
+                # 差分と比率の計算
+                diff_dens = tgt_mean_dens - ref_mean_dens
+                diff_percent = (diff_dens / ref_mean_dens) * 100 if ref_mean_dens > 0 else 0
+                ratio = tgt_mean_dens / ref_mean_dens if ref_mean_dens > 0 else 0
+
+                print(f"  [{tgt_label}]")
+                print(f"    平均カラム密度 : {tgt_mean_dens:.4e} [atoms/cm²]")
+                print(f"    基準との差分   : {diff_dens:+.4e} ({diff_percent:+.2f}%)")
+                print(f"    基準との比率   : {ratio:.4f} 倍")
+        print("========================================================\n")
 
     # =======================================================
     # 最終レイアウト調整と表示

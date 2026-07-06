@@ -8,15 +8,15 @@
 
 target_run:
   #date: "20251021"
-  start_date: "20250813"
-  end_date: "20250813"
+  start_date: "20250811"
+  end_date: "20250811"
 
 directories:
   data_base_dir: "C:/Users/hanac/univ/Mercury"
   project_base_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025"
   #csv_dir_name: "2025ver"         # 入力CSVのフォルダ名 (例: 2025ver, 2026ver)
   csv_dir_name: "2026ver/csvs"    # CSVをまとめるフォルダ
-  output_dir_name: "output"  # 出力先のフォルダ名 (例: output, test_output)
+  output_dir_name: "output_orig"  # 出力先のフォルダ名 (例: output, test_output)
 
 pipeline:
   skip_preprocessing: False   # Trueにすると Step 2 を実行しません
@@ -152,6 +152,12 @@ hapke:
     B0: 2.4
     b: 0.20
     c: 0.18
+    #theta_deg: 9.0
+    #w: 0.195
+    #h: 0.075
+    #B0: 2.3
+    #b: 0.21
+    #c: 0.08
     #
 
 # Step 10: 太陽光モデル減算

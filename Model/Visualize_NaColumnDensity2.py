@@ -16,13 +16,13 @@ import copy
 # ==============================================================================
 
 # 1. シミュレーション結果ディレクトリ (最新のMulti-Binモデルの出力先に更新)
-SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0509_Multi_BD0.4_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18"
+SIMULATION_RUN_DIRECTORY = r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0626_Multi_BD0.5_U1.85_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Default"
 
 # 2. 最初に表示したいTAA
 INITIAL_TARGET_TAA = 100
 
 # 3. グリッド設定 (シミュレーション側と一致)
-GRID_RESOLUTION = 101  # グリッド解像度
+GRID_RESOLUTION = 501  # グリッド解像度
 GRID_MAX_RM = 5.0  # グリッド範囲 [RM]
 
 # 4. 物理定数

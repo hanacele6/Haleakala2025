@@ -3,23 +3,18 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 import os
 import sys
+import tkinter as tk
+from tkinter import filedialog
 
 # ==============================================================================
-# 設定項目 (★ここを自分の環境に合わせて変更してください)
+# 設定項目
 # ==============================================================================
 
-# 1. 解析したいFITSファイルのパスを指定
-#    夕方の観測で得られたマスターskyフレームなどを指定します。
-#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20250613/master_sky.fits" # ★要変更
-#fits_filepath = "C:/Users/hanac/University/Senior/PythonProject/merc2025a/fits/20250501/sky01r_sp.wmp.fits"
-fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/test4_output/20260220/1_fits/master_sky.fits"
-#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/test4_output/20251203/1_fits/master_sky.fits"
-#fits_filepath = "C:/Users/hanac/University/Senior/Mercury/Haleakala2025/output/20150223/MERCURY1_tr.wc.fits" # ★要変更
-# 2. どのファイバーのスペクトルを見るか指定
+# 1. どのファイバーのスペクトルを見るか指定
 #    画像の真ん中あたりのファイバー番号が良いでしょう（例：50、100など）
-fiber_to_inspect = 0  # ★お好みで変更
+fiber_to_inspect = 60  # ★お好みで変更
 
-# 3. 出力するdatファイルのパス
+# 2. 出力するdatファイルのパス
 #    指定しない場合は、入力FITSファイルと同じ場所に「(入力ファイル名)_fiber(番号).dat」という名前で保存されます。
 output_dat_filepath = "" # (任意)
 
@@ -27,13 +22,39 @@ output_dat_filepath = "" # (任意)
 # メイン処理
 # ==============================================================================
 if __name__ == "__main__":
+    # --- ファイル選択ダイアログの表示 ---
+    root = tk.Tk()
+    root.withdraw()  # 余分なメインウィンドウを隠す
+    
+    # 確実を期すために最前面に持ってくる処理を複数重ねる
+    root.attributes("-topmost", True)
+    root.lift()
+    root.focus_force()
+
+    print("ダイアログからFITSファイルを選択してください...")
+    
+    # エクスプローラーを開いてファイルパスを取得
+    fits_filepath = filedialog.askopenfilename(
+        title="解析するFITSファイルを選択してください",
+        filetypes=[("FITSファイル", "*.fits"), ("すべてのファイル", "*.*")]
+    )
+    
+    # Tkinterの処理を明示的に終了させる
+    root.destroy()
+
+    # ユーザーが「キャンセル」を押したなどでファイルが選択されなかった場合の処理
+    if not fits_filepath:
+        print("ファイル選択がキャンセルされました。プログラムを終了します。")
+        sys.exit()
+
+    print(f"選択されたファイル: {fits_filepath}")
     # --- 入力ファイルの存在確認 ---
     if not os.path.exists(fits_filepath):
         print(f"エラー: 指定されたFITSファイルが見つかりません。")
         print(f"ファイルパス: {fits_filepath}")
         sys.exit()
 
-    print(f"FITSファイルを読み込んでいます: {fits_filepath}")
+    print("FITSファイルを読み込んでいます...")
 
     # --- FITSファイルからデータを読み込み ---
     try:
@@ -65,7 +86,6 @@ if __name__ == "__main__":
     header_text = f"Spectrum data for fiber {fiber_to_inspect} from {os.path.basename(fits_filepath)}\nPixel_X  Intensity"
     np.savetxt(output_dat_filepath, output_data, fmt='%d  %.4f', header=header_text)
     print(f"スペクトルデータをテキストファイルとして保存しました: {output_dat_filepath}")
-
 
     # --- スペクトルをプロットして表示 ---
     print("スペクトルをプロットします。ウィンドウを拡大・操作してピクセル位置を確認してください。")

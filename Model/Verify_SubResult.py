@@ -2,11 +2,13 @@
 """
 シミュレーション結果 解析・可視化スクリプト (3年分フルタイム対応版)
 - 100%積み上げの生成割合
+- 各ソースの寄与率（%）の対数線グラフ推移（指数表記なし・上限100%）
 - 生成と喪失(Lossの内訳)の絶対量
 - 拡散によるビンごとのインベントリ推移
 - 水星全体でのNa枯渇量（累積収支）の推移
-- 【追加】ビンインベントリ推移の積み上げヒストグラム風表示
-- 【追加】ビンインベントリ推移の2次元ヒートマップ表示
+- ビンインベントリ推移の積み上げヒストグラム風表示
+- ビンインベントリ推移の2次元ヒートマップ表示
+- 【追加】3年目の局所フラックスの最大値・最小値を cm^2 単位でコンソール出力
 """
 
 import numpy as np
@@ -21,10 +23,11 @@ import re
 # ==========================================
 # 1. 設定
 # ==========================================
-RESULT_DIR = r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0517_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18"
+RESULT_DIR = r"./SimulationResult_202607/ParabolicHop_72x36_NoEq_DT100_0702_NonBD_UF1.85_Q2.0_A2.0e+07_LT190k"
 
-#RESULT_DIR = r"./SimulationResult_202604/ParabolicHop_72x36_NoEq_DT100_0427_Multi_0.4Denabled_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT"
-#RESULT_DIR = r"./SimulationResult_202604/ParabolicHop_72x36_NoEq_DT100_0425_Multi_0.4Denabled_U1.85_Q0.27_Bouncetau30s_A1.0_LongLT"
+#RESULT_DIR = r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0627_Multi_BD0.5_U1.85_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_NoDif"
+
+#RESULT_DIR = r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0626_Multi_BD0.5_U1.85_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Fixed"
 
 # 解析対象のデータソース
 # 'TimeSeries': 1年目からの全推移（スピンアップの立ち上がりや質量の増減を確認する場合）
@@ -68,6 +71,65 @@ def get_budget_data(target_dir, data_source, x_axis_mode):
             return df, 'Time_hours', 'Simulation Time [hours]'
 
 # ==========================================
+# 【追加機能】3年目の最大・最小フラックスをプリント（フルマトリクス＋近日点・遠日点版）
+# ==========================================
+def print_final_year_max_min_flux(target_dir):
+    """3年目(最終年)の局所フラックスから、Max/Minそれぞれの1年間を通じた最大・最小、および近日点・遠日点の最大値を出力"""
+    csv_path = os.path.join(target_dir, "budget_statistics_per_taa.csv")
+    if not os.path.exists(csv_path):
+        print(f"[スキップ] 最大/最小フラックス集計用のCSVが見つかりません: {csv_path}")
+        return
+        
+    df = pd.read_csv(csv_path)
+    
+    processes = ['PSD', 'TD', 'SWS', 'MMV']
+    print("\n" + "="*80)
+    print("=== 最終年(3年目) 日照領域局所フラックス 1年間(全TAA)の全集計 [atoms/cm^2/s] ===")
+    print("="*80)
+    
+    for proc in processes:
+        col_max = f"Max_Flux_{proc}"
+        col_min = f"Min_Flux_{proc}"
+        
+        # ヘッダーに "_cm2" が付いている場合のフォールバック
+        if col_max not in df.columns and f"{col_max}_cm2" in df.columns:
+            col_max = f"{col_max}_cm2"
+            col_min = f"{col_min}_cm2"
+            
+        if col_max in df.columns and col_min in df.columns:
+            # 1年間のデータ配列を取得（念のため inf などの無効値を除外）
+            max_series = df[col_max].replace([np.inf, -np.inf], np.nan).dropna()
+            min_series = df[col_min].replace([np.inf, -np.inf], np.nan).dropna()
+            
+            # --- 4つの指標の算出 ---
+            max_of_max = max_series.max() if not max_series.empty else 0.0  # 正真正銘の最大ピーク
+            min_of_max = max_series.min() if not max_series.empty else 0.0  # ピークが一番弱かった時期
+            
+            max_of_min = min_series.max() if not min_series.empty else 0.0  # 日照境界付近が一番強かった時期
+            min_of_min = min_series.min() if not min_series.empty else 0.0  # 正真正銘の日照領域での最小値
+
+            # --- 近日点(TAA=0)と遠日点(TAA=180)の最大フラックスを抽出 ---
+            perihelion_max = df.loc[df['TAA_Bin'] == 0, col_max].values
+            aphelion_max = df.loc[df['TAA_Bin'] == 180, col_max].values
+            
+            val_perihelion = perihelion_max[0] if len(perihelion_max) > 0 else 0.0
+            val_aphelion = aphelion_max[0] if len(aphelion_max) > 0 else 0.0
+            
+            print(f"  [{proc:3s}] ")
+            print(f"        MaxのMax (全期間最高値): {max_of_max:.4e}")
+            print(f"        MaxのMin (最高値の最低): {min_of_max:.4e}")
+            print(f"        MinのMax (最低値の最高): {max_of_min:.4e}")
+            print(f"        MinのMin (全期間最低値): {min_of_min:.4e}")
+            print(f"        近日点の最大値 (TAA=0) : {val_perihelion:.4e}")
+            print(f"        遠日点の最大値 (TAA=180): {val_aphelion:.4e}")
+            print("-" * 80)
+        else:
+            print(f"  [{proc:3s}] データ列がCSVに存在しません (Expected: {col_max})")
+            print("-" * 80)
+            
+    print("="*80 + "\n")
+
+# ==========================================
 # グラフ描画関数
 # ==========================================
 def plot_generation_ratio(target_dir, data_source, x_axis_mode):
@@ -95,6 +157,45 @@ def plot_generation_ratio(target_dir, data_source, x_axis_mode):
     plt.tight_layout()
     plt.show()
 
+def plot_generation_ratio_log_lines(target_dir, data_source, x_axis_mode):
+    """各ソースプロセスの寄与率（%）を対数スケールの線グラフでプロットする"""
+    df, x_col, x_label = get_budget_data(target_dir, data_source, x_axis_mode)
+    plt.figure(figsize=(10, 6))
+    
+    total_gen = df['Gen_PSD'] + df['Gen_TD'] + df['Gen_SWS'] + df['Gen_MMV']
+    total_gen = total_gen.replace(0, 1e-10) # 0割りを防ぐ
+    
+    pct_td = df['Gen_TD'] / total_gen * 100
+    pct_psd = df['Gen_PSD'] / total_gen * 100
+    pct_sws = df['Gen_SWS'] / total_gen * 100
+    pct_mmv = df['Gen_MMV'] / total_gen * 100
+    
+    # 対数プロット時のエラー(0%)を防ぐための微小なベースライン
+    BASELINE_PCT = 1e-3
+    
+    plt.plot(df[x_col], pct_td.replace(0, BASELINE_PCT), label='TD', color='#ff9999', linewidth=2.5, linestyle='-')
+    plt.plot(df[x_col], pct_psd.replace(0, BASELINE_PCT), label='PSD', color='#66b3ff', linewidth=2.5, linestyle='-')
+    plt.plot(df[x_col], pct_sws.replace(0, BASELINE_PCT), label='SWS', color='#99ff99', linewidth=2.5, linestyle='-')
+    plt.plot(df[x_col], pct_mmv.replace(0, BASELINE_PCT), label='MIV', color='#ffcc99', linewidth=2.5, linestyle='-')
+    
+    plt.yscale('log')
+    # ★ 上限を100に設定
+    plt.ylim(bottom=1e-1, top=100) 
+    plt.xlim(df[x_col].min(), df[x_col].max())
+    
+    # ★ 対数軸の 10^2 表記を通常の 100 などの表記に変換する処理
+    from matplotlib.ticker import FuncFormatter
+    ax = plt.gca()
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: '{:g}'.format(y)))
+    
+    plt.xlabel(x_label)
+    plt.ylabel('Source Fraction [%]')
+    plt.title('Generation Ratio of Source Processes (Log Scale)')
+    plt.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
+    plt.grid(True, which="both", ls="--", alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
 def plot_generation_absolute_flux(target_dir, data_source, x_axis_mode):
     """ 各ソースプロセスごとの絶対生成量（全球平均フラックス [atoms/cm^2/s]）の推移図 """
     df, x_col, x_label = get_budget_data(target_dir, data_source, x_axis_mode)
@@ -106,13 +207,17 @@ def plot_generation_absolute_flux(target_dir, data_source, x_axis_mode):
     
     # ★ データソースに応じて「1行あたりの経過時間」を切り替える ★
     if data_source == 'FinalYearAveraged':
-        # 1年間(約760万秒)を360個のTAAビンに分割して累積しているため、
-        # 1つのビンには (1年 / 360) 秒分のデータが詰まっている
-        mercury_year_sec = 87.969 * 86400
-        time_per_row = mercury_year_sec / 360.0
+       # CSVに Step_Count が無いため、ケプラーの法則から各TAA(1度幅)の厳密な滞在時間を計算
+        T_sec = 87.969 * 86400  # 公転周期 [s]
+        e = 0.205630            # 水星の軌道離心率
+        
+        # TAAをラジアンに変換
+        taa_rad = np.deg2rad(df[x_col])
+        
+        # ケプラーの第2法則に基づく、1度あたりの滞在時間 dt の計算式
+        time_per_row = (T_sec / 360.0) * ( (1.0 - e**2)**1.5 / (1.0 + e * np.cos(taa_rad))**2 )
     else:
-        # TimeSeries は1ステップごとの生データ
-        time_per_row = 100.0  # DT_MOVE [s]
+        time_per_row = 100.0  # TimeSeriesの場合は1ステップ100秒固定
 
     conversion_factor = global_area_cm2 * time_per_row
     
@@ -411,7 +516,6 @@ def plot_total_surface_atoms(target_dir, data_source, x_axis_mode):
     plt.tight_layout()
     plt.show()
 
-
 def plot_td_flux_model_comparison(target_dir, data_source, x_axis_mode):
     """
     【追加機能】表面密度の推移を用いて、1次反応と2次反応での
@@ -582,6 +686,80 @@ def export_bin_inventory_gif(target_dir, data_source, x_axis_mode, output_filena
     print(f"✅ GIFの保存が完了しました: {output_path}")
     plt.close(fig)
 
+def plot_dawn_dusk_asymmetry(target_dir, data_source, x_axis_mode):
+    """
+    朝（Dawn）と夕（Dusk）の生成量の非対称性を可視化する関数。
+    上段: 朝夕それぞれの絶対生成量の推移 (TD, PSD, Total)
+    下段: 全生成量に対する明け方(Dawn)側の割合 (%)
+    """
+    df, x_col, x_label = get_budget_data(target_dir, data_source, x_axis_mode)
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+    
+    # --------------------------------------------------
+    # データの準備 (合計値の算出)
+    # --------------------------------------------------
+    dawn_total = df['Gen_PSD_Dawn'] + df['Gen_TD_Dawn'] + df['Gen_SWS_Dawn'] + df['Gen_MMV_Dawn']
+    dusk_total = df['Gen_PSD_Dusk'] + df['Gen_TD_Dusk'] + df['Gen_SWS_Dusk'] + df['Gen_MMV_Dusk']
+    
+    # 対数プロット時のゼロ割・エラー回避用ベースライン
+    BASELINE = 1e20 
+    
+    # --------------------------------------------------
+    # [上段] 絶対量の比較 (Logスケール)
+    # --------------------------------------------------
+    # Total
+    ax1.plot(df[x_col], dawn_total.replace(0, BASELINE), label='Total Dawn', color='blue', linewidth=2.5)
+    ax1.plot(df[x_col], dusk_total.replace(0, BASELINE), label='Total Dusk', color='red', linewidth=2.5)
+    
+    # 個別プロセス (主要な TD と PSD のみをプロットして視認性を確保)
+    ax1.plot(df[x_col], df['Gen_TD_Dawn'].replace(0, BASELINE), label='TD Dawn', color='blue', linestyle='--', alpha=0.6)
+    ax1.plot(df[x_col], df['Gen_TD_Dusk'].replace(0, BASELINE), label='TD Dusk', color='red', linestyle='--', alpha=0.6)
+    
+    ax1.plot(df[x_col], df['Gen_PSD_Dawn'].replace(0, BASELINE), label='PSD Dawn', color='blue', linestyle=':', alpha=0.6)
+    ax1.plot(df[x_col], df['Gen_PSD_Dusk'].replace(0, BASELINE), label='PSD Dusk', color='red', linestyle=':', alpha=0.6)
+    
+    ax1.set_yscale('log')
+    ax1.set_ylabel('Generation Flux [atoms / step]')
+    ax1.set_title('Dawn-Dusk Asymmetry: Absolute Generation')
+    ax1.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
+    ax1.grid(True, which="both", ls="--", alpha=0.5)
+    
+    # --------------------------------------------------
+    # [下段] 明け方(Dawn)側の割合 (%)
+    # --------------------------------------------------
+    # ゼロ割回避のための微小値置換
+    total_all = (dawn_total + dusk_total).replace(0, 1e-10)
+    td_total = (df['Gen_TD_Dawn'] + df['Gen_TD_Dusk']).replace(0, 1e-10)
+    psd_total = (df['Gen_PSD_Dawn'] + df['Gen_PSD_Dusk']).replace(0, 1e-10)
+    
+    dawn_ratio_total = (dawn_total / total_all) * 100
+    dawn_ratio_td = (df['Gen_TD_Dawn'] / td_total) * 100
+    dawn_ratio_psd = (df['Gen_PSD_Dawn'] / psd_total) * 100
+    
+    ax2.plot(df[x_col], dawn_ratio_total, label='Total Dawn Ratio', color='black', linewidth=2.5)
+    ax2.plot(df[x_col], dawn_ratio_td, label='TD Dawn Ratio', color='orange', linestyle='--', linewidth=2)
+    ax2.plot(df[x_col], dawn_ratio_psd, label='PSD Dawn Ratio', color='cyan', linestyle=':', linewidth=2)
+    
+    # 50% (完全対称) の基準線
+    ax2.axhline(50, color='gray', linestyle='-', alpha=0.8, label='Symmetric (50%)')
+    
+    ax2.set_ylim(0, 100)
+    ax2.set_ylabel('Dawn Generation Ratio [%]')
+    ax2.set_xlabel(x_label)
+    ax2.set_title('Dawn Proportion vs TAA')
+    ax2.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
+    ax2.grid(True, ls="--", alpha=0.5)
+    
+    # X軸の範囲を整える
+    plt.xlim(df[x_col].min(), df[x_col].max())
+    from matplotlib.ticker import MultipleLocator
+    if 'TAA' in x_label or 'deg' in x_label:
+        ax2.xaxis.set_major_locator(MultipleLocator(60))
+        
+    plt.tight_layout()
+    plt.show()
+
 if __name__ == "__main__":
     print(f"=== 結果ディレクトリの解析開始: {RESULT_DIR} ===")
     print(f"=== データソース: {DATA_SOURCE} | X軸: {X_AXIS_MODE} ===")
@@ -590,15 +768,23 @@ if __name__ == "__main__":
         print("エラー: 指定されたディレクトリが存在しません。パスを修正してください。")
     else:
         try:
+            # === ここで最大値・最小値を出力 ===
+            if DATA_SOURCE == 'FinalYearAveraged':
+                print_final_year_max_min_flux(RESULT_DIR)
+        
             plot_generation_ratio(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+            plot_generation_ratio_log_lines(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+            
+            #plot_dawn_dusk_asymmetry(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+
             plot_generation_absolute_flux(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)   
             plot_budget_absolute(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             plot_planetary_depletion(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             plot_bin_inventory_evolution(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             plot_total_surface_atoms(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             plot_bin_inventory_interactive_histogram(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
-            plot_td_flux_model_comparison(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
-            export_bin_inventory_gif(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE, output_filename="bin_evolution_animation.gif")
+            #plot_td_flux_model_comparison(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+            #export_bin_inventory_gif(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE, output_filename="bin_evolution_animation.gif")
 
         except Exception as e:
             print(f"エラーが発生しました: {e}")

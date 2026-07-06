@@ -1,0 +1,2 @@
+Date,Observation_Type,TAA_deg,PhaseAngle_deg,Distance_Rms_au,Lat_h,Ecliptic_Lon,Ecliptic_Lat,Total_Atoms_Raw,Disk_Avg_CD_Raw,Disk_Avg_CD_Corrected,Disk_Avg_Error_Corrected,Disk_Avg_Brightness_kR,Disk_Avg_Brightness_kR_Corrected,Correction_Factor
+20250811,Dusk,2.71904e+02,1.33508e+02,3.68244e-01,-3.84555e-02,3.49566e+02,-5.99429e+00,8.61236e+27,2.30277e+10,4.79040e+10,3.79485e+09,2.46892e+01,5.13605e+01,4.80705e-01

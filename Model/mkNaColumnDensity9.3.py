@@ -148,7 +148,7 @@ KB_EV_CONST = 8.617e-5  # ボルツマン定数 [eV/K]
 #DIFF_REF_FLUX = 5.0e6 * (100.0 ** 2)
 DIFF_REF_FLUX = 2.0e7 * (100.0 ** 2)
 DIFF_REF_TEMP = 700.0  # 基準温度 [K]
-DIFF_E_A_EV = 0.9  # 活性化エネルギー [eV]
+DIFF_E_A_EV = 0.5  # 活性化エネルギー [eV]
 Target_Grain_Radius = 100.0e-6  # [m]
 
 # 頻度因子 A (J0) の事前計算
@@ -1271,6 +1271,29 @@ def main_snapshot_simulation():
                     print(f"Step {step_count}/{total_steps} ({progress_pct:.1f}%) | TAA={TAA:.2f} | Particles={len(active_particles)} | Elapsed={elapsed:.1f}s")
 
                 prev_taa = TAA
+
+                # === デバッグ用モニタリング（最初の5ステップのみ出力） ===
+                if step_count <= 5:
+                    print(f"\n--- Step {step_count} Monitoring ---")
+                    
+                    # 1. 表面密度の総量（質量がどこかで消えていないか確認）
+                    # 3D配列に対して、各緯度のセル面積を掛けて総和をとる
+                    total_surface = np.sum(surface_density * cell_areas[None, :, None])
+                    print(f"  [Surface] Total Atoms : {total_surface:.4e}")
+                    
+                    # 2. 空間にいる粒子の数と重み
+                    active_count = len(active_particles) # Python版の場合は len(active_particles)
+                    active_weight = sum(p['weight'] for p in active_particles) # Python版の場合は sum(p['weight'] for p in active_particles)
+                    print(f"  [Active]  Particles   : {active_count}")
+                    print(f"  [Active]  Total Weight: {active_weight:.4e}")
+                    
+                    # 3. このステップでの生成と消滅のバランス
+                    total_gen_step = step_stats['Gen_PSD'] + step_stats['Gen_TD'] + step_stats['Gen_SWS'] + step_stats['Gen_MMV']
+                    total_loss_step = step_stats['Loss_Stuck'] + step_stats['Loss_Ionized'] + step_stats['Loss_Escaped']
+                    print(f"  [Flux]    Generated   : +{total_gen_step:.4e}")
+                    print(f"  [Flux]    Lost        : -{total_loss_step:.4e}")
+                    print(f"  [Flux]    Net Change  : {total_gen_step - total_loss_step:+.4e}")
+
                 t_curr += DT_MOVE
 
     # 🌟 Ctrl+C が押されたらここに来る（whileループと同階層）

@@ -17,18 +17,9 @@ COLOR_VMIN = 1.0e10
 COLOR_VMAX = 1.0e18
 
 N_LON, N_LAT = 72, 36
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202605"
-#BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202604"
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0501_Multi_BD0.4SD0.6,4e3_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT_CHECK"
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0505_Fixed_BD0.4_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT"
-RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0508_Fixed_BD0.4_U1.85_Q2.0_Bouncetau30s_A1.0_LongLT(Fulle)"
-
-#output_dir = r"./SimulationResult_202604/ParabolicHop_72x36_NoEq_DT100_0427_Multi_0.4Denabled_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT"
-#
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0504_Multi_BD0.4SD0.6,4e3_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT_CHECK_定常状態どんなもん"
-#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0427_Multi_0.4Denabled_U1.85_Q0.27_Bouncetau30s_A0.5_LongLT"
-
-
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202606"
+#RUN_NAME = "ParabolicHop_72x36_NoEq_DT1_0616_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)"
+RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0630_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Default3"
 
 INITIAL_TARGET_TAA = 100
 ORBIT_FILE_PATH = 'orbit2025_spice_unwrapped.txt'
@@ -37,6 +28,18 @@ USE_LOG_SCALE = True
 MERCURY_YEAR_SEC = 87.969 * 86400
 SPIN_UP_YEARS = 2.0
 
+# --- 対象天体の半径 (水星: 2439.7 km) ---
+R_BODY_KM = 2439.7
+
+# 以下の定数を SimulationViewer の __init__ 内、
+# もしくはグローバル設定（クラスの外）に追加してください。
+# ※シミュレーション本体の設定と一致させています
+MAX_NA_SURF_DENS_M2 = 7.5e14 * (100 ** 2)  # 7.5e18 [atoms/m²]
+INIT_SURF_DENS_M2 = MAX_NA_SURF_DENS_M2 * 0.0053  # 初期値 (0.53%)
+
+# ビューワー内で PAPER_SCALE (cm⁻²) に変換されているため、分母も揃える
+MAX_NA_SURF_DENS_CM2 = 7.5e14  # 7.5e16 [atoms/cm²]
+INIT_SURF_DENS_CM2 = MAX_NA_SURF_DENS_CM2 * 0.0053
 
 # ==============================================================================
 # 関数群 (計算・IOロジック)
@@ -111,6 +114,26 @@ def get_all_files_grouped_by_year(target_dir):
     return {k: v for k, v in grouped_files.items() if len(v) > 0}
 
 
+def calculate_cell_areas(n_lon, n_lat, r_body_km):
+    """球体モデルに基づき、各グリッドの物理面積(m^2 および cm^2)を計算して返す"""
+    r_body_m = r_body_km * 1e3
+    r_body_cm = r_body_km * 1e5
+    dlon_rad = 2.0 * np.pi / n_lon
+    
+    lat_edges = np.linspace(-np.pi/2, np.pi/2, n_lat + 1)
+    
+    areas_m2 = np.zeros((n_lat, n_lon))
+    areas_cm2 = np.zeros((n_lat, n_lon))
+    
+    for i in range(n_lat):
+        # 該当緯度帯の面積: R^2 * dlon * (sin(lat_upper) - sin(lat_lower))
+        factor = np.sin(lat_edges[i+1]) - np.sin(lat_edges[i])
+        areas_m2[i, :] = (r_body_m ** 2) * dlon_rad * factor
+        areas_cm2[i, :] = (r_body_cm ** 2) * dlon_rad * factor
+        
+    return areas_m2, areas_cm2
+
+
 # ==============================================================================
 # ビューワークラス
 # ==============================================================================
@@ -135,16 +158,21 @@ class SimulationViewer:
         self.current_display_data = None 
         self.show_contours = False
         self.contour_set = None
+        
+        # 面積配列の計算と保持
+        areas_m2, areas_cm2 = calculate_cell_areas(self.n_lon, self.n_lat, R_BODY_KM)
 
         if USE_PAPER_SCALE:
             self.vmin = 10 ** 9.5  
             self.vmax = 10 ** 14.5  
             self.unit_label = '[atoms/cm²]'
+            self.cell_areas = areas_cm2 # 計算用にcm^2を使用
             print(f"Paper Scale ON: Vmin={self.vmin:.2e}, Vmax={self.vmax:.2e} {self.unit_label}")
         else:
             self.vmin = COLOR_VMIN
             self.vmax = COLOR_VMAX
             self.unit_label = '[atoms/m²]'
+            self.cell_areas = areas_m2  # 計算用にm^2を使用
             print(f"Paper Scale OFF: Vmin={self.vmin:.2e}, Vmax={self.vmax:.2e} {self.unit_label}")
 
         self.current_idx = 0
@@ -197,16 +225,21 @@ class SimulationViewer:
         self.btn_next.on_clicked(self.next_frame)
 
         # Plate Button
-        ax_plate = plt.axes([0.55, 0.05, 0.15, 0.04])
+        ax_plate = plt.axes([0.47, 0.05, 0.12, 0.04])
         self.btn_plate = Button(ax_plate, 'Show Plate')
         self.btn_plate.on_clicked(self.generate_plate_view)
 
+        # Total Atoms vs TAA Button (新規追加)
+        ax_total = plt.axes([0.60, 0.05, 0.12, 0.04])
+        self.btn_total = Button(ax_total, 'Plot Total')
+        self.btn_total.on_clicked(self.plot_total_atoms)
+
         # Checkbox (Contours)
-        ax_check = plt.axes([0.82, 0.05, 0.12, 0.1])
+        ax_check = plt.axes([0.75, 0.05, 0.12, 0.1])
         self.check = CheckButtons(ax_check, ['Contours'], [self.show_contours])
         self.check.on_clicked(self.toggle_contours)
         
-        # ★ 新規追加: Year切り替え用ラジオボタン
+        # Year切り替え用ラジオボタン
         ax_radio = plt.axes([0.02, 0.1, 0.15, 0.15], facecolor='lightgrey')
         self.radio = RadioButtons(ax_radio, self.years_available, active=len(self.years_available)-1)
         self.radio.on_clicked(self.change_year)
@@ -248,7 +281,6 @@ class SimulationViewer:
         try:
             data = np.load(filepath)
             if data.ndim == 3:
-                #data = data[:, :, 0]
                 data = np.sum(data, axis=2)
         except Exception as e:
             print(f"Error loading {filepath}: {e}")
@@ -311,7 +343,6 @@ class SimulationViewer:
             except Exception as e:
                 print(f"Contour plot warning: {e}")
 
-        # タイトルに現在表示中の年を追加
         self.ax.set_title(
             f"[{self.current_year_key}] Surface Density {title_mode}\nTAA: {taa} deg (Time: {time_h}h, SunLon: {subsolar_lon_deg:.1f})")
         self.ax.set_xlabel(xlabel)
@@ -329,6 +360,25 @@ class SimulationViewer:
         self.info_text.set_zorder(100)
         self.fig.canvas.draw_idle()
 
+        ref_max = MAX_NA_SURF_DENS_CM2 if USE_PAPER_SCALE else MAX_NA_SURF_DENS_M2
+        ref_init = INIT_SURF_DENS_CM2 if USE_PAPER_SCALE else INIT_SURF_DENS_M2
+
+        max_val = np.max(data_T)
+        min_val = np.min(data_T)
+        mean_val = np.mean(data_T)
+        
+        # --- 総原子数の計算 (密度 × セル面積) ---
+        total_atoms = np.sum(data_T * self.cell_areas)
+        # 初期の総原子数 (全面一様に ref_init が分布していると仮定)
+        init_total_atoms = ref_init * np.sum(self.cell_areas)
+        ratio_to_init_total = total_atoms / init_total_atoms if init_total_atoms > 0 else 0
+
+        print(f"\n--- Statistical Summary for TAA: {taa}° ({self.current_year_key}) ---")
+        print(f"  [Max]   {max_val:.2e} ({self.unit_label}) -> Cap: {(max_val/ref_max)*100:.2f}%, vs Init: {max_val/ref_init:.2f}x")
+        print(f"  [Mean]  {mean_val:.2e} ({self.unit_label}) -> Cap: {(mean_val/ref_max)*100:.2f}%, vs Init: {mean_val/ref_init:.2f}x")
+        print(f"  [Min]   {min_val:.2e} ({self.unit_label}) -> Cap: {(min_val/ref_max)*100:.2f}%, vs Init: {min_val/ref_init:.2f}x")
+        print(f"  [Total] {total_atoms:.4e} atoms -> vs Init Total: {ratio_to_init_total:.2f}x")
+
     def on_mouse_move(self, event):
         if event.inaxes != self.ax:
             self.info_text.set_text('')
@@ -345,7 +395,20 @@ class SimulationViewer:
         lat_idx = np.clip(lat_idx, 0, self.n_lat - 1)
 
         val = self.current_display_data[lat_idx, lon_idx]
-        self.info_text.set_text(f"Lon: {x:.1f}\nLat: {y:.1f}\nVal: {val:.2e}")
+        
+        if USE_PAPER_SCALE:
+            pct_of_max = (val / MAX_NA_SURF_DENS_CM2) * 100.0
+            ratio_to_init = val / INIT_SURF_DENS_CM2 if INIT_SURF_DENS_CM2 > 0 else 0
+        else:
+            pct_of_max = (val / MAX_NA_SURF_DENS_M2) * 100.0
+            ratio_to_init = val / INIT_SURF_DENS_M2 if INIT_SURF_DENS_M2 > 0 else 0
+
+        self.info_text.set_text(
+            f"Lon: {x:.1f}\nLat: {y:.1f}\n"
+            f"Val: {val:.2e}\n"
+            f"Cap: {pct_of_max:.2f}%\n"
+            f"vs Init: {ratio_to_init:.2f}x"
+        )
         self.fig.canvas.draw_idle()
 
     def generate_plate_view(self, event):
@@ -367,7 +430,6 @@ class SimulationViewer:
             try:
                 data = np.load(closest_file['path'])
                 if data.ndim == 3:
-                    #data = data[:, :, 0]
                     data = np.sum(data, axis=2)
 
                 time_h = closest_file['time_h']
@@ -418,6 +480,51 @@ class SimulationViewer:
             cbar.set_label(cbar_label, fontsize=12)
 
         fig_plate.suptitle(f"Mercury Surface Sodium Density ({self.current_year_key})\nRun: {RUN_NAME}", fontsize=14)
+        plt.show()
+
+    # --- 新規追加: TAA vs 総原子数のプロット機能 ---
+    def plot_total_atoms(self, event):
+        print("\n--- Generating Total Atoms vs TAA Plot ---")
+        fig_total, ax_total = plt.subplots(figsize=(8, 6))
+
+        # 全ての年のデータを取得してプロットする
+        for year_key, file_list in self.grouped_files.items():
+            taas = []
+            totals = []
+            for f in file_list:
+                try:
+                    data = np.load(f['path'])
+                    if data.ndim == 3:
+                        data = np.sum(data, axis=2)
+                        
+                    data_T = data.T
+                    data_T = np.nan_to_num(data_T, nan=0.0)
+
+                    if USE_PAPER_SCALE:
+                        data_T = data_T / 10000.0
+
+                    # 面積を乗じて総原子数を算出
+                    total_atoms = np.sum(data_T * self.cell_areas)
+                    
+                    taas.append(f['taa'])
+                    totals.append(total_atoms)
+                except Exception as e:
+                    print(f"Error processing {f['path']} for total plot: {e}")
+
+            # TAA順にソートしてプロット
+            if taas and totals:
+                sorted_indices = np.argsort(taas)
+                taas_sorted = np.array(taas)[sorted_indices]
+                totals_sorted = np.array(totals)[sorted_indices]
+                
+                ax_total.plot(taas_sorted, totals_sorted, marker='o', linestyle='-', markersize=4, label=year_key)
+
+        ax_total.set_xlabel('True Anomaly (TAA) [deg]')
+        ax_total.set_ylabel('Total Number of Atoms')
+        ax_total.set_title(f'Total Surface Atoms vs TAA\nRun: {RUN_NAME}')
+        ax_total.grid(True, linestyle='--', alpha=0.7)
+        ax_total.legend()
+        plt.tight_layout()
         plt.show()
 
     def next_frame(self, event):

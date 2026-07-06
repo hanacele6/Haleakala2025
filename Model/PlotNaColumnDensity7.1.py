@@ -16,17 +16,16 @@ CM2_PER_M2 = CM_PER_M * CM_PER_M
 
 # 観測データ処理で使用している正規化面積 [cm^2]
 NORMALIZATION_AREA_CM2 = 3.7408e17
-# 半球 (Dawn全体 / Dusk全体)
-NORMALIZATION_AREA_HALF_CM2 = NORMALIZATION_AREA_CM2 / 2.0
-# 半球の半分 (Dawn外側 / Dusk外側)
-NORMALIZATION_AREA_QUARTER_CM2 = NORMALIZATION_AREA_CM2 / 4.0
+# (Dawn全体 / Dusk全体)
+NORMALIZATION_AREA_HALF_CM2 = NORMALIZATION_AREA_CM2 /2
+# (Dawn外側 / Dusk外側)
+NORMALIZATION_AREA_QUARTER_CM2 = NORMALIZATION_AREA_CM2 /4
 
 # 水星の1年(公転周期)の時間 [hours]
 MERCURY_YEAR_HOURS = 87.969 * 24 
 
 print(f"正規化面積 (全体): {NORMALIZATION_AREA_CM2:.4e} cm^2")
-print(f"正規化面積 (1/2): {NORMALIZATION_AREA_HALF_CM2:.4e} cm^2")
-print(f"正規化面積 (1/4): {NORMALIZATION_AREA_QUARTER_CM2:.4e} cm^2")
+
 
 # --- 2. ユーザー設定 ---
 
@@ -35,10 +34,12 @@ GRID_RESOLUTION = 101
 GRID_MAX_RM = 5.0
 
 # ★★★ シミュレーション結果のディレクトリ
-output_dir = r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0512_Multi_BD0.4_UG-0.2_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18"
+#output_dir = r"./SimulationResult_202605/ParabolicHop_72x36_NoEq_DT100_0517_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_V18"
+
+output_dir = r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0619_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Test_Seeded"
 
 # ★★★ フィッティング評価設定 ★★★
-EVALUATE_FIT = True  # 最小二乗誤差(RMSE等)を計算するかどうか
+EVALUATE_FIT = False  # 最小二乗誤差(RMSE等)を計算するかどうか
 BIN_SIZE_DEG = 30.0  # TAAのビン幅 [度] (例: 10度ごとに平均化)
 SHOW_ERROR_BARS = True  # グラフに誤差棒を表示するか (True/False)
 # 除外するTAA領域のリスト [(start1, end1), (start2, end2), ...]
@@ -47,7 +48,7 @@ EXCLUDE_TAA_RANGES = []
 # ★★★ プロット対象のシミュレーション年 (スピンアップ対応) ★★★
 # 1: 1年目, 2: 2年目, 3: 3年目(最終定常状態)
 # "ALL" を指定した場合は全データをそのままプロットします（年ごとに色分けされます）
-TARGET_YEAR = "ALL"
+TARGET_YEAR = 3
 
 # ★★★ プロットモード選択 (シミュレーション側)
 # 選択肢: "ALL", "DAYSIDE_TOTAL", "DAWN", "DUSK", "DAWN_OUTER", "DUSK_OUTER", "CSV_ONLY"
