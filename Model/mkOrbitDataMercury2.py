@@ -71,7 +71,7 @@ def generate_precise_orbit_file():
 
     # --- 変更後：5年分 (Earth Years) 確保しておく ---
     # 5年 x 365日 = 1825日
-    DURATION_DAYS = 5 * 365.0
+    DURATION_DAYS = 10 * 365.0
 
     # 時間分解能を維持するためにステップ数も増やす
     # (例: 1日4回 = 6時間ごとのデータなら十分)

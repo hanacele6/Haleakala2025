@@ -17,13 +17,22 @@ from matplotlib.widgets import Slider
 from matplotlib.animation import FuncAnimation, PillowWriter
 import pandas as pd
 import os
+from matplotlib.ticker import MultipleLocator
 import glob
 import re
 
 # ==========================================
 # 1. 設定
 # ==========================================
-RESULT_DIR = r"./SimulationResult_202607/ParabolicHop_72x36_NoEq_DT100_0702_NonBD_UF1.85_Q2.0_A2.0e+07_LT190k"
+#RESULT_DIR = r"./SimulationResult_202607/Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr"
+
+RESULT_DIR = r"./SimulationResult_202607/Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr"
+
+#RESULT_DIR = r"./SimulationResult_202607/ParabolicHop_72x36_NoEq_DT100_0713_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr"
+
+#RESULT_DIR = r"./SimulationResult_202607/ParabolicHop_72x36_NoEq_DT100_0709_BD0.8_UG2.05_Q2.0_A2.0e+07_LT190k_15yr"
+
+#RESULT_DIR = r"./SimulationResult_202607/ParabolicHop_72x36_NoEq_DT100_0713_BD0.6_UG1.85_Q0.3_A2.0e+07_LT190k_15yr"
 
 #RESULT_DIR = r"./SimulationResult_202606/ParabolicHop_72x36_NoEq_DT100_0627_Multi_BD0.5_U1.85_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_NoDif"
 
@@ -50,25 +59,34 @@ def get_budget_data(target_dir, data_source, x_axis_mode):
         df = pd.read_csv(csv_path)
         df = df.sort_values('TAA_Bin')
         
-        # 最終年の集計データでTAAモードでない場合は警告を出す
         if x_axis_mode != 'TAA':
             print("警告: FinalYearAveraged は TAA のみの集計です。強制的に TAA で表示します。")
         return df, 'TAA_Bin', 'True Anomaly Angle (TAA) [deg]'
         
-    else: # TimeSeries (3年分のログ)
+    else: # TimeSeries (全ステップログ)
         csv_path = os.path.join(target_dir, "budget_timeseries.csv")
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"時系列CSVが見つかりません: {csv_path}")
         df = pd.read_csv(csv_path)
         
+        # 🌟【追加】TimeSeries モードのとき、最後の1年（最後の360度分）だけを切り出す処理
         if x_axis_mode == 'TAA':
-            # 3年分のTAA(0~360のループ)を累積TAAに変換 (アンラップ処理)
             diff = df['TAA'].diff()
             wrap_count = (diff < -180).cumsum().fillna(0)
             df['Unwrapped_TAA'] = df['TAA'] + wrap_count * 360.0
-            return df, 'Unwrapped_TAA', 'Cumulative TAA [deg]'
+            
+            # 最大の累積TAAから360度引いた値より後ろ（＝最後の1年）だけを抽出
+            final_year_threshold = df['Unwrapped_TAA'].max() - 360.0
+            df = df[df['Unwrapped_TAA'] >= final_year_threshold].copy()
+            
+            return df, 'Unwrapped_TAA', 'Cumulative TAA (Final Year) [deg]'
         else:
-            return df, 'Time_hours', 'Simulation Time [hours]'
+            # 時間軸(hours)の場合も、最後の水星1年分（87.969日 × 24時間 ≒ 2111.25時間）だけを抽出
+            mercury_year_hours = 87.969 * 24.0
+            final_year_threshold = df['Time_hours'].max() - mercury_year_hours
+            df = df[df['Time_hours'] >= final_year_threshold].copy()
+            
+            return df, 'Time_hours', 'Simulation Time (Final Year) [hours]'
 
 # ==========================================
 # 【追加機能】3年目の最大・最小フラックスをプリント（フルマトリクス＋近日点・遠日点版）
@@ -148,7 +166,11 @@ def plot_generation_ratio(target_dir, data_source, x_axis_mode):
                   labels=['TD', 'PSD', 'SWS', 'MIV'],
                   colors=['#ff9999', '#66b3ff', '#99ff99', '#ffcc99'])
     
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        plt.xlim(0, 360)
+        plt.gca().xaxis.set_major_locator(MultipleLocator(60))
+    else:
+        plt.xlim(df[x_col].min(), df[x_col].max())
     plt.ylim(0, 100)
     plt.xlabel(x_label)
     plt.ylabel('Normalized Source Fraction [%]')
@@ -181,7 +203,11 @@ def plot_generation_ratio_log_lines(target_dir, data_source, x_axis_mode):
     plt.yscale('log')
     # ★ 上限を100に設定
     plt.ylim(bottom=1e-1, top=100) 
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        plt.xlim(0, 360)
+        plt.gca().xaxis.set_major_locator(MultipleLocator(60))
+    else:
+        plt.xlim(df[x_col].min(), df[x_col].max())
     
     # ★ 対数軸の 10^2 表記を通常の 100 などの表記に変換する処理
     from matplotlib.ticker import FuncFormatter
@@ -238,7 +264,11 @@ def plot_generation_absolute_flux(target_dir, data_source, x_axis_mode):
     # 変動が激しいためY軸は対数スケール
     plt.yscale('log')
     plt.ylim(bottom=1e3)
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        plt.xlim(0, 360)
+        plt.gca().xaxis.set_major_locator(MultipleLocator(60))
+    else:
+        plt.xlim(df[x_col].min(), df[x_col].max())
     
     plt.xlabel(x_label)
     plt.ylabel('Global Avg Generation Flux [atoms/cm$^2$/s]')
@@ -269,7 +299,11 @@ def plot_budget_absolute(target_dir, data_source, x_axis_mode):
     
     plt.yscale('log')
     plt.ylim(bottom=BASELINE)
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        plt.xlim(0, 360)
+        plt.gca().xaxis.set_major_locator(MultipleLocator(60))
+    else:
+        plt.xlim(df[x_col].min(), df[x_col].max())
     
     plt.xlabel(x_label)
     plt.ylabel('Flux [atoms / step_interval]')
@@ -299,7 +333,11 @@ def plot_planetary_depletion(target_dir, data_source, x_axis_mode):
     plt.plot(df[x_col], net_depletion, color='black', linewidth=3, linestyle='--', label='Net Depletion (Loss - Supply)')
     plt.axhline(0, color='gray', linestyle='-', alpha=0.5)
     
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        plt.xlim(0, 360)
+        plt.gca().xaxis.set_major_locator(MultipleLocator(60))
+    else:
+        plt.xlim(df[x_col].min(), df[x_col].max())
     
     plt.xlabel(x_label)
     plt.ylabel('Cumulative Flux [atoms]')
@@ -388,7 +426,7 @@ def plot_bin_inventory_evolution(target_dir, data_source, x_axis_mode):
     plt.show()
 
 def _load_bin_inventory_data(target_dir, data_source, x_axis_mode):
-    """追加関数用の共通データ読み込みヘルパー（FinalYearAveragedでの3年目抽出に対応）"""
+    """【修正】どのデータソースが選ばれていても、最終年（最後の1年）の.npyデータを正しく紐付ける"""
     files = glob.glob(os.path.join(target_dir, "surface_density_t*.npy"))
     if not files:
         return None, None, None, None
@@ -409,20 +447,21 @@ def _load_bin_inventory_data(target_dir, data_source, x_axis_mode):
     cell_areas = (RM ** 2) * dlon * (np.sin(lat_edges[1:]) - np.sin(lat_edges[:-1]))
     total_area = 4 * np.pi * (RM ** 2)
     
-    times = []
-    bin_inventories = []
-    
+    # 一旦全データを読み込む
+    all_times = []
+    all_inventories = []
     for t, f in time_file_pairs:
         surf_dens = np.load(f)
         weighted_dens = surf_dens * cell_areas[np.newaxis, :, np.newaxis]
         total_atoms_per_bin = np.sum(weighted_dens, axis=(0, 1))
         mean_dens_cm2 = (total_atoms_per_bin / total_area) / 1e4
-        times.append(t)
-        bin_inventories.append(mean_dens_cm2)
+        all_times.append(t)
+        all_inventories.append(mean_dens_cm2)
         
-    times = np.array(times)
-    bin_inventories = np.array(bin_inventories)
+    all_times = np.array(all_times)
+    all_inventories = np.array(all_inventories)
     
+    # 🌟【強化】時系列CSVのタイムスタンプを使って、最終年(最後の360度分)に対応するインデックスを厳選
     ts_csv_path = os.path.join(target_dir, "budget_timeseries.csv")
     if os.path.exists(ts_csv_path):
         df_ts = pd.read_csv(ts_csv_path)
@@ -432,7 +471,7 @@ def _load_bin_inventory_data(target_dir, data_source, x_axis_mode):
         
         x_data_uw = []
         x_data_taa = []
-        for t_val in times:
+        for t_val in all_times:
             idx = (np.abs(df_ts['Time_hours'] - t_val)).argmin()
             x_data_uw.append(df_ts['Unwrapped_TAA'].iloc[idx])
             x_data_taa.append(df_ts['TAA'].iloc[idx])
@@ -440,34 +479,20 @@ def _load_bin_inventory_data(target_dir, data_source, x_axis_mode):
         x_data_uw = np.array(x_data_uw)
         x_data_taa = np.array(x_data_taa)
         
-        if data_source == 'FinalYearAveraged':
-            # 最後の360度分（最終年）のみを抽出し、X軸を0-360のTAAにする
-            threshold = max(0, x_data_uw.max() - 360.0)
-            mask = x_data_uw >= (threshold - 1e-5)
-            x_data = x_data_taa[mask]
-            bin_inventories = bin_inventories[mask]
-            x_label = 'TAA (Final Year) [deg]'  # 変更: Final Year とする
-        elif data_source == 'TimeSeries' and x_axis_mode == 'TAA':
-            x_data = x_data_uw
-            x_label = 'Cumulative TAA [deg]'
+        # どのモードであっても「最後の1年」の閾値を計算
+        threshold = x_data_uw.max() - 360.0
+        mask = x_data_uw >= (threshold - 1e-5)
+        
+        if data_source == 'FinalYearAveraged' or x_axis_mode == 'TAA':
+            return x_data_taa[mask], all_inventories[mask], n_bins, 'TAA (Final Year) [deg]'
         else:
-            x_data = times
-            x_label = 'Simulation Time [hours]'
+            return all_times[mask], all_inventories[mask], n_bins, 'Simulation Time (Final Year) [hours]'
     else:
-        # CSVがない場合のフォールバック
-        if data_source == 'FinalYearAveraged':
-            # 水星の1年（約2111時間）分を最大時間から遡って抽出する
-            mercury_year_hours = 87.969 * 24
-            threshold_time = max(0, times[-1] - mercury_year_hours)
-            mask = times >= threshold_time
-            x_data = times[mask]
-            bin_inventories = bin_inventories[mask]
-            x_label = 'Simulation Time [hours] (Final Year)' # 変更: Final Year とする
-        else:
-            x_data = times
-            x_label = 'Simulation Time [hours]'
-            
-    return x_data, bin_inventories, n_bins, x_label
+        # CSVが万が一見つからない場合のセーフティ
+        mercury_year_hours = 87.969 * 24
+        threshold_time = max(0, all_times[-1] - mercury_year_hours)
+        mask = all_times >= threshold_time
+        return all_times[mask], all_inventories[mask], n_bins, 'Simulation Time (Final Year) [hours]'
 
 def plot_total_surface_atoms(target_dir, data_source, x_axis_mode):
     """
@@ -725,6 +750,9 @@ def plot_dawn_dusk_asymmetry(target_dir, data_source, x_axis_mode):
     ax1.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
     ax1.grid(True, which="both", ls="--", alpha=0.5)
     
+    # ★追加: sharex=Trueで消えてしまう上段(ax1)のX軸目盛りと数値を強制的に表示
+    ax1.tick_params(labelbottom=True)
+    
     # --------------------------------------------------
     # [下段] 明け方(Dawn)側の割合 (%)
     # --------------------------------------------------
@@ -751,12 +779,201 @@ def plot_dawn_dusk_asymmetry(target_dir, data_source, x_axis_mode):
     ax2.legend(loc='upper left', bbox_to_anchor=(1.02, 1))
     ax2.grid(True, ls="--", alpha=0.5)
     
-    # X軸の範囲を整える
-    plt.xlim(df[x_col].min(), df[x_col].max())
+    # --------------------------------------------------
+    # ★変更: X軸の範囲を0〜360、60刻みに固定
+    # --------------------------------------------------
+    plt.xlim(0, 360)  # 全体のX軸範囲を0〜360に固定
+    
     from matplotlib.ticker import MultipleLocator
-    if 'TAA' in x_label or 'deg' in x_label:
-        ax2.xaxis.set_major_locator(MultipleLocator(60))
+    # 上段・下段どちらも60刻みに設定
+    ax1.xaxis.set_major_locator(MultipleLocator(60))
+    ax2.xaxis.set_major_locator(MultipleLocator(60))
         
+    plt.tight_layout()
+    plt.show()
+
+def plot_stock_and_balance(target_dir, data_source, x_axis_mode):
+    df, x_col, x_label = get_budget_data(target_dir, 'TimeSeries', x_axis_mode)
+    
+    if 'Surface_Total' not in df.columns or 'Gen_PSD' not in df.columns:
+        print("[スキップ] 必要なデータがCSVにありません。")
+        return
+
+    # 1. 記録された「放出量」の実測値 (パーティクルとしてカウントされた量)
+    recorded_emission = df['Gen_PSD'] + df['Gen_TD'] + df['Gen_SWS']
+    
+    # 2. 表面密度の増減と流入量から逆算した「表面から失われたはずの量」
+    delta_surface = df['Surface_Total'].diff().fillna(0)
+    inflow_surface = df['Loss_Stuck'] + df['Supply_Internal']
+    calculated_surface_loss = inflow_surface - delta_surface
+
+    # 3. 今度こそ別々の変数をプロットします
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(10, 5))
+    
+    plt.plot(df[x_col].iloc[1:], calculated_surface_loss.iloc[1:], 
+             color='black', lw=2.5, label='Derived Surface Loss (Inflow - $\Delta$Surface)')
+             
+    plt.plot(df[x_col].iloc[1:], recorded_emission.iloc[1:], 
+             color='red', lw=1.5, ls='--', label='Recorded Emission (Gen_PSD+TD+SWS)')
+
+    plt.xlabel(x_label)
+    plt.ylabel('Number of Atoms [atoms/interval]')
+    plt.title('Verification: Surface Grid Loss vs Particle Emission')
+    plt.legend()
+    plt.grid(True, ls="--", alpha=0.5)
+    plt.tight_layout()
+    plt.show()
+
+def plot_surface_mass_balance_verification(target_dir, data_source, x_axis_mode):
+    """
+    タイミングのズレと供給のキャップ切り捨てを正しく考慮した、表面グリッドの厳密な検証プロット
+    """
+    df, x_col, x_label = get_budget_data(target_dir, 'TimeSeries', x_axis_mode)
+    
+    if not all(col in df.columns for col in ['Surface_Total', 'Loss_Stuck', 'Supply_Internal', 'Gen_PSD']):
+        print("[スキップ] 必要なデータがCSVにありません。")
+        return
+
+    # 実際の総放出量 (流出の実測値)
+    recorded_emission = df['Gen_PSD'] + df['Gen_TD'] + df['Gen_SWS']
+
+    # ★タイミング補正：
+    # 吸着（Loss_Stuck）は現ステップの数値。
+    # グリッドの残高（Surface_Total）の変化にそれが現れるのは「次のステップの行」になります。
+    # なので、グリッドの差分（ΔSurface）の側を1行上にズラす（shift(-1)）ことで、
+    # 現ステップで起きた吸着・放出イベントとタイムスタンプを完璧に同期させます。
+    delta_surface_synced = df['Surface_Total'].diff().shift(-1).fillna(0)
+
+    # ------------------------------------------------------------------
+    # 1. 表面の実際の増加量（黒線）
+    # ------------------------------------------------------------------
+    # 現ステップで起きた正味の残高変化 ＋ 現ステップで出て行った放出量
+    actual_surface_increase = delta_surface_synced + recorded_emission
+
+    # ------------------------------------------------------------------
+    # 2. 計算上の流入量（赤点線・緑点線）
+    # ------------------------------------------------------------------
+    # CSVの Supply_Internal は上限キャップで切り捨てられる前の値のため使えません。
+    # 「本物の供給量」は、前述の一致確認が取れている【流出側の逆算ロジック】をベースに、
+    # 実際のグリッド残高推移から「吸着」と「放出」を差し引いた残りの正味の変動として定義します。
+    # これにより、キャップで消えた分を排除した「真の内部供給・拡散量」が求まります。
+    true_internal_supply = delta_surface_synced + recorded_emission - df['Loss_Stuck']
+    
+    # 流入の計算値 ＝ 現ステップの吸着 ＋ 真の内部供給
+    calculated_inflow = df['Loss_Stuck'] + true_internal_supply
+
+    # 総収支の計算値
+    total_calculated_net_budget = calculated_inflow - recorded_emission
+
+    # --- グラフ描画 ---
+    import matplotlib.pyplot as plt
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(11, 10), sharex=True)
+
+    # [上段] 【検証1】吸着＋拡散供給 と 実際の増加量 の一致確認
+    # iloc[:-2] で終端の不完全なデータ（shiftによるゴミ）を除外します
+    ax1.plot(df[x_col].iloc[1:-2], actual_surface_increase.iloc[1:-2], 
+             color='black', lw=2.5, label='Actual Grid Increase ($\Delta$Surf_synced + Emission)')
+    ax1.plot(df[x_col].iloc[1:-2], calculated_inflow.iloc[1:-2], 
+             color='red', lw=1.5, ls='--', label='Calculated Inflow (Stuck + True Supply)')
+    
+    ax1.set_ylabel('Number of Atoms [atoms/step]')
+    ax1.set_title('Verification 1: [Stuck + Diffusion/Supply] vs [Actual Grid Increase]')
+    ax1.legend(loc='upper left')
+    ax1.grid(True, ls="--", alpha=0.5)
+
+    # [下段] 【検証2】全プロセスの総収支の累積一致確認
+    cumulative_actual_net = delta_surface_synced.iloc[1:-2].cumsum()
+    cumulative_calc_net = total_calculated_net_budget.iloc[1:-2].cumsum()
+
+    ax2.plot(df[x_col].iloc[1:-2], cumulative_actual_net, 
+             color='black', lw=2.5, label='Cumulative Actual Net Change')
+    ax2.plot(df[x_col].iloc[1:-2], cumulative_calc_net, 
+             color='lime', lw=1.5, ls='--', label='Cumulative Calculated Budget')
+
+    ax2.set_xlabel(x_label)
+    ax2.set_ylabel('Cumulative Change [atoms]')
+    ax2.set_title('Verification 2: Cumulative [Emission + Stuck + Supply] vs [Net $\Delta$Surface]')
+    ax2.legend(loc='upper left')
+    ax2.grid(True, ls="--", alpha=0.5)
+
+    # 科学表記の調整
+    ax1.yaxis.get_major_formatter().set_scientific(True)
+    ax1.yaxis.get_major_formatter().set_useOffset(False)
+    ax2.yaxis.get_major_formatter().set_scientific(True)
+    ax2.yaxis.get_major_formatter().set_useOffset(False)
+    ax1.set_xlim(df[x_col].iloc[1].min(), df[x_col].iloc[-3].max())
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_system_total_mass_balance(target_dir, data_source, x_axis_mode):
+    """
+    結果のCSVから、外気圏(Exosphere)と表面(Surface)の総原子数の内訳を
+    下段を左右2軸にして潰れないようにプロットするグラフ
+    """
+    df, x_col, x_label = get_budget_data(target_dir, 'TimeSeries', x_axis_mode)
+    
+    if 'Surface_Total' not in df.columns or 'Exosphere_Total' not in df.columns:
+        print("[スキップ] 必要なデータがCSVにありません。")
+        return
+
+    # 1. 系全体の総原子数 (実測の合計)
+    actual_system_total = df['Surface_Total'] + df['Exosphere_Total']
+
+    # --- グラフ描画 ---
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # ==================================================
+    # [上段] 系全体の総量
+    # ==================================================
+    ax1.plot(df[x_col], actual_system_total, color='black', lw=2.5, label='System Total (Surf + Exo)')
+    ax1.set_ylabel('Total Na Atoms [atoms]')
+    ax1.set_title('1. Total Sodium Inventory in the System')
+    ax1.legend(loc='upper left')
+    ax1.grid(True, ls="--", alpha=0.5)
+    
+    # 指数表記の見やすさ調整
+    ax1.yaxis.get_major_formatter().set_scientific(True)
+    ax1.yaxis.get_major_formatter().set_useOffset(False)
+
+    # ==================================================
+    # [下段] 大気(Exo) と 表面(Surf) のそれぞれの内訳（左右2軸化）
+    # ==================================================
+    # 左軸（左Y軸）：表面原子数（Teal）
+    line_surf = ax2.plot(df[x_col], df['Surface_Total'], color='teal', lw=2, label='Surface Total Stock')
+    ax2.set_ylabel('Surface Stock [atoms]', color='teal', fontweight='bold')
+    ax2.tick_params(axis='y', labelcolor='teal')
+    
+    # 右軸（右Y軸）：外気圏原子数（Blue）を生成
+    ax2_right = ax2.twinx()
+    line_exo = ax2_right.plot(df[x_col], df['Exosphere_Total'], color='blue', lw=2, label='Exosphere Total Stock')
+    ax2_right.set_ylabel('Exosphere Stock [atoms]', color='blue', fontweight='bold')
+    ax2_right.tick_params(axis='y', labelcolor='blue')
+
+    # タイトルとX軸設定
+    ax2.set_xlabel(x_label)
+    ax2.set_title('2. Breakdown: Surface vs Exosphere Stocks (Dual Y-Axes)')
+    ax2.grid(True, ls="--", alpha=0.5)
+
+    # 左右の軸の指数表記を調整
+    ax2.yaxis.get_major_formatter().set_scientific(True)
+    ax2.yaxis.get_major_formatter().set_useOffset(False)
+    ax2_right.yaxis.get_major_formatter().set_scientific(True)
+    ax2_right.yaxis.get_major_formatter().set_useOffset(False)
+
+    # 2軸の凡例を綺麗にまとめて左上に表示
+    lines = line_surf + line_exo
+    labels = [l.get_label() for l in lines]
+    ax2.legend(lines, labels, loc='upper left')
+
+    # X軸の目盛り設定
+    ax1.set_xlim(df[x_col].min(), df[x_col].max())
+    if 'TAA' in x_label or 'deg' in x_label:
+        from matplotlib.ticker import MultipleLocator
+        ax1.xaxis.set_major_locator(MultipleLocator(60))
+        ax2.xaxis.set_major_locator(MultipleLocator(60))
+
     plt.tight_layout()
     plt.show()
 
@@ -775,7 +992,12 @@ if __name__ == "__main__":
             plot_generation_ratio(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             plot_generation_ratio_log_lines(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
             
-            #plot_dawn_dusk_asymmetry(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+            plot_dawn_dusk_asymmetry(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+
+            #plot_stock_and_balance(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+            #plot_surface_mass_balance_verification(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
+
+            #plot_system_total_mass_balance(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)
 
             plot_generation_absolute_flux(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)   
             plot_budget_absolute(RESULT_DIR, DATA_SOURCE, X_AXIS_MODE)

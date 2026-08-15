@@ -1,0 +1,20 @@
+# hop_transport_hist.npy の説明
+# shape = (TAAビン, 放出過程, 放出時角ビン, 着地時角ビン)
+# HOP_N_TAA_BINS = 36   (TAA刻み 10.0 deg)
+# HOP_N_PROC     = 4   順に ['PSD', 'TD', 'SWS', 'MMV']
+# HOP_N_LON_BINS = 72   (時角刻み 5.0 deg)
+# 時角 h[deg] = -180 + (bin + 0.5) * 360/HOP_N_LON_BINS
+#   h = 0   : 太陽直下点
+#   h = -90 : 明け方ターミネーター
+#   h = +90 : 夕方ターミネーター
+# 値の単位: atoms (重み付き)
+# 記録対象: 地表に吸着(stuck)した粒子のみ。電離・脱出したものは含まない。
+# 放出から吸着までに複数回バウンドした場合、正味の移動として記録される。
+#
+# 年ごとのファイル: hop_transport_hist_yrNN.npy (NN は近日点通過ごとの通し番号, 1始まり)
+#   全 2 期分
+# SPIN_UP_YEARS = 14.0, TOTAL_SIM_YEARS = 1.0
+# save_phase = final
+# HOP_TAU_RATIO = 0.0
+#   0.0 なら即時マルチバウンドなし = 1ホップの変位
+# 数値実験: srp=on, td=off, psd=on

@@ -192,9 +192,9 @@ KB_EV_CONST = 8.617e-5  # ボルツマン定数 [eV/K]
 # [A] Diffusion Model Parameters
 # ==============================================================================
 #DIFF_REF_FLUX = 5.0e6 * (100.0 ** 2)
-DIFF_REF_FLUX = 2.0e7 * (100.0 ** 2)
+DIFF_REF_FLUX = 1.0e7 * (100.0 ** 2)
 DIFF_REF_TEMP = 700.0  # 基準温度 [K]
-DIFF_E_A_EV = 0.5  # 活性化エネルギー [eV]
+DIFF_E_A_EV = 0.9  # 活性化エネルギー [eV]
 Target_Grain_Radius = 100.0e-6  # [m]
 
 # 頻度因子 A (J0) の事前計算

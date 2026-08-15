@@ -16,7 +16,7 @@ directories:
   project_base_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025"
   #csv_dir_name: "2025ver"         # 入力CSVのフォルダ名 (例: 2025ver, 2026ver)
   csv_dir_name: "2026ver/csvs"    # CSVをまとめるフォルダ
-  output_dir_name: "output_orig"  # 出力先のフォルダ名 (例: output, test_output)
+  output_dir_name: "output_150test"  # 出力先のフォルダ名 (例: output, test_output)
 
 pipeline:
   skip_preprocessing: False   # Trueにすると Step 2 を実行しません
@@ -140,7 +140,7 @@ subtraction:
   crop:
     enabled: True
     center_wl: 589.7558  # 切り出す中心波長(nm)
-    half_width: 200      # 左右に切り出すピクセル数
+    half_width: 150      # 左右に切り出すピクセル数
 
 # Step 9: Hapkeモデル
 hapke:

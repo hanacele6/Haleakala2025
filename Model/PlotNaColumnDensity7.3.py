@@ -53,7 +53,51 @@ TARGET_MODELS = {
     #"ParabolicHop_72x36_NoEq_DT100_0622_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Test_old3",
     #"ParabolicHop_72x36_NoEq_DT100_0626_Multi_BD0.5_U1.85_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Default":"Default",
     #"ParabolicHop_72x36_NoEq_DT100_0629_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_TrueG": "Bestfit" ,
-    "ParabolicHop_72x36_NoEq_DT100_0703_BD0.5_UF1.85_Q2.0_A2.0e+07_LT190k_15yr":"StrongDiffusion",
+    #"ParabolicHop_72x36_NoEq_DT100_0703_BD0.5_UF1.85_Q2.0_A1.0e+07_LT190k_15yr":"WeakDiffusion",
+    #"ParabolicHop_72x36_NoEq_DT100_0706_BD0.9_UG1.85_Q2.0_A1.0e+07_LT190k_10yr":"StandardParams",
+    #"ParabolicHop_72x36_NoEq_DT100_0709_BD0.8_UG1.65_Q2.0_A2.0e+07_LT190k_15yr":"TD1.65eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0707_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"StandardParams",
+    #"ParabolicHop_72x36_NoEq_DT100_0709_BD0.8_UG1.95_Q2.0_A2.0e+07_LT190k_15yr":"TD1.95eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0709_BD0.8_UG2.05_Q2.0_A2.0e+07_LT190k_15yr":"TD2.05eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0709_BD0.7_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"ED0.7eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD1.0_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"ED1.0eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD0.6_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"ED0.6eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD0.5_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"ED0.5eVModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD0.8_UG1.85_Q3.0_A2.0e+07_LT190k_15yr":"Q3.0e-20Model",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD0.8_UG1.85_Q1.0_A2.0e+07_LT190k_15yr":"Q1.0e-20Model",
+    #"ParabolicHop_72x36_NoEq_DT100_0710_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"Q0.27e-20Model",
+    #"ParabolicHop_72x36_NoEq_DT100_0713_BD0.6_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"0.27,0.6",
+    #"ParabolicHop_72x36_NoEq_DT100_0713_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"StandardModel",
+    #"ParabolicHop_72x36_NoEq_DT100_0714_BD0.8_UG1.85_Q0.1_A2.0e+07_LT190k_15yr":"Q0.14e-20Model",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.8_UG1.65_Q0.3_A2.0e+07_LT190k_15yr":"0.27,1.65",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.8_UG2.05_Q0.3_A2.0e+07_LT190k_15yr":"0.27,2.05",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.8_UG1.95_Q0.3_A2.0e+07_LT190k_15yr":"0.27,1.95",
+    #"ParabolicHop_72x36_NoEq_DT100_0721_BD0.8_UG1.75_Q0.3_A2.0e+07_LT190k_15yr":"0.27,1.75",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD1.0_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"0.27,1.0",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.9_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"0.27,1.65",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.7_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"0.27,0.7",
+    #"ParabolicHop_72x36_NoEq_DT100_0720_BD0.5_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"0.27,0.5",
+    #"ParabolicHop_72x36_NoEq_DT100_0721_BD0.8_UG1.85_Q0.0_A2.0e+07_LT190k_15yr":"nonPSD",
+    #"ParabolicHop_72x36_NoEq_DT100_0724_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_ModB0.0T1.0P1.0_15yr_nonSPRtest":"test",
+    #"ParabolicHop_72x36_NoEq_DT100_0725_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_ModB0.0T1.0P1.0_15yr_nonSRPtest":"test",
+    #"ParabolicHop_72x36_NoEq_DT100_0723_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_25yr":"test25",
+    #"ParabolicHop_144x72_NoEq_DT100_0728_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"144*72",
+    #"Def_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"DefQ2",
+    #"Def_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"DefQ0.3",
+    #"Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"Q2.0e-20Model",
+    #"Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"Q0.27e-20Model",
+    "New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noSRP":"0.3noSRP",
+    "New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noSRP":"2.0noSRP",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noPSDFin":"0.3noPSDfin",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noPSDFin":"2.0noPSDfin",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noTDFin":"0.3noTDfin",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noTDFin":"2.0noTDfin",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noPSD":"0.3noPSD",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noPSD":"2.0noPSD",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noTD":"0.3noTD",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noTD":"2.0noTD",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0804_BD0.8_UG1.85_Q5.0_A2.0e+07_LT190k_15yr":"Q5.0e-20Model",
+
 }
 
 # カラーパレットとマーカーの自動割り当てセット
@@ -68,17 +112,18 @@ MARKERS = ["o", "s", "^", "D", "v", "x"]
 
 
 # ★★★ フィッティング評価設定 ★★★
-EVALUATE_FIT = False  
+EVALUATE_FIT = False 
 BIN_SIZE_DEG = 1.0  
 SHOW_ERROR_BARS = True  
 EXCLUDE_TAA_RANGES = []
 
 # ★★★ プロット対象のシミュレーション年 ★★★
-TARGET_YEAR = 3
+TARGET_YEAR = 15
+TARGET_YEARS = [15, 25]
 
 # ★★★ 年間比較・統計量の確認設定 ★★★
 # Trueにすると、指定した年の平均値と「普通の標準偏差」、および年間の差分を出力します
-CALCULATE_YEAR_DIFF = True  
+CALCULATE_YEAR_DIFF = False 
 DIFF_TARGET_YEARS = [10, 11, 12, 13, 14, 15]  # 順番に隣り合う年を比較します (例: 3と4、4と5)
 
 # ★★★ プロットモード選択 (シミュレーション側)
@@ -297,21 +342,32 @@ all_models_data = []
 
 if PLOT_MODE != "CSV_ONLY":
     print(f"処理モード: {PLOT_MODE} (データ元: {'Count Grid' if USE_COUNT_GRID else 'Density Grid'})")
-    year_str = f"Year {TARGET_YEAR}" if TARGET_YEAR != "ALL" else "All Years"
+    year_str = f"Years {TARGET_YEARS}" if "ALL" not in TARGET_YEARS else "All Years"
     print(f"対象データ: {year_str}")
     
     for mod_set in MODEL_SETTINGS:
         g_res = mod_set["grid_res"]
         g_rm = mod_set.get("max_rm", 5.0)
         
-        taa, data = process_simulation_data(mod_set["dir"], PLOT_MODE, TARGET_YEAR, g_res, g_rm, USE_COUNT_GRID)
+        # 指定した複数の年をループ処理
+        for idx, yr in enumerate(TARGET_YEARS):
+            taa, data = process_simulation_data(mod_set["dir"], PLOT_MODE, yr, g_res, g_rm, USE_COUNT_GRID)
 
-        if taa is not None:
-            all_models_data.append({
-                "setting": mod_set,
-                "taa": taa,
-                "data": data
-            })
+            if taa is not None:
+                # 年ごとに設定をコピーして独立したプロットデータとして扱う
+                mod_set_yr = mod_set.copy()
+                mod_set_yr["label"] = f"{mod_set['label']} (Yr{yr})"
+                
+                # 2つ目以降の年（例：25年目）は少し透明度を下げて視覚的に区別する
+                if idx > 0:
+                    mod_set_yr["alpha"] = 0.5 
+                
+                all_models_data.append({
+                    "setting": mod_set_yr,
+                    "taa": taa,
+                    "data": data,
+                    "year": yr
+                })
 
 if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
     fig, ax1 = plt.subplots(figsize=(10, 7))
@@ -344,6 +400,8 @@ if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
     y2_max_data = 0
     has_csv_plot = False
     fig_binned, ax_binned = None, None
+    obs_data_by_type = {}
+
 
     if SHOW_CSV_OVERLAY or PLOT_MODE == "CSV_ONLY":
         target_ax = ax1 if (PLOT_MODE == "CSV_ONLY" or CSV_USE_SHARED_Y_AXIS) else ax1.twinx()
@@ -368,6 +426,17 @@ if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
                         csv_taa = df.iloc[:, 2].values
                         csv_density = df.iloc[:, 3].values * 1e11
                         csv_error = df.iloc[:, 4].values * 1e10 if df.shape[1] >= 5 else None
+                        # ★★★ 追加：後で時間重み平均比較に使うため保存（NaN除去）
+                        valid_mask = np.isfinite(csv_taa) & np.isfinite(csv_density)
+                        if not np.all(valid_mask):
+                            n_dropped = np.sum(~valid_mask)
+                            print(f"  [警告] {csv_label} : NaN/Infのため {n_dropped} 点を除外しました")
+                        
+                        clean_taa = csv_taa[valid_mask]
+                        clean_density = csv_density[valid_mask]
+                        
+                        sort_idx_obs = np.argsort(clean_taa)
+                        obs_data_by_type[csv_type] = (clean_taa[sort_idx_obs], clean_density[sort_idx_obs])
 
                         if SHOW_ERROR_BARS and csv_error is not None:
                             target_ax.errorbar(csv_taa, csv_density, yerr=csv_error, label=csv_label, color=csv_color, ecolor='black', fmt=csv_marker, markersize=6, capsize=2, elinewidth=1.0, alpha=1.0, zorder=2, linestyle='None')
@@ -433,8 +502,12 @@ if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
     # =======================================================
     if PLOT_MODE != "CSV_ONLY" and len(all_models_data) > 0:
         print("\n=== Unbinned Time-Weighted Average Comparison (Baseline: 1st Model) ===")
-        
-        base_mod_info = all_models_data[0]
+        BASE_MODEL_LABEL = "StandardParams"  # ここで明示指定
+
+        base_mod_info = next(
+            (m for m in all_models_data if m["setting"]["label"].startswith(BASE_MODEL_LABEL)),
+            all_models_data[0]  # 見つからない場合は従来通り先頭
+        )
         base_st = base_mod_info["setting"]
         base_taa = base_mod_info["taa"]
         base_data = base_mod_info["data"]
@@ -479,9 +552,69 @@ if len(all_models_data) > 0 or PLOT_MODE == "CSV_ONLY":
                 print(f"    Avg Column Density : {avg_dens_mod:.4e} [atoms/cm²] (Ratio vs Base: {ratio:.3f})")
                 print(f"    Total Atoms        : {total_atoms_mod:.4e} [atoms] (Ratio vs Base: {ratio:.3f})")
 
+
     # =======================================================
-    # 🌟 新機能：指定した年の「普通の標準偏差」および年間の差分を評価
+    # 🌟 観測データ (CSV) との時間重み平均密度の比較（実データ範囲のみ）
     # =======================================================
+    if PLOT_MODE == "ALL" and len(all_models_data) > 0 and len(obs_data_by_type) > 0:
+        print("\n=== Time-Weighted Average Comparison (vs Observation, real coverage only) ===")
+
+        bin_edges = np.arange(0, 360 + BIN_SIZE_DEG, BIN_SIZE_DEG)
+        bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2.0
+        bin_weights_all = 1.0 / (1.0 + MERCURY_ECCENTRICITY * np.cos(np.radians(bin_centers)))**2
+
+        for t_type in ["DAWN", "DUSK"]:
+            if t_type not in obs_data_by_type:
+                continue
+
+            print(f"\n[Target Region: {t_type}]")
+            obs_taa, obs_dens = obs_data_by_type[t_type]
+
+            # 実際に観測データが存在するビンだけ抽出
+            valid_bins_mask = np.array([
+                np.any((obs_taa >= bin_edges[i]) & (obs_taa < bin_edges[i+1]))
+                for i in range(len(bin_centers))
+            ])
+            n_valid = np.sum(valid_bins_mask)
+            n_total = len(bin_centers)
+            coverage_pct = n_valid / n_total * 100.0
+            print(f"  観測データのTAAカバレッジ: {n_valid}/{n_total} ビン ({coverage_pct:.1f}%)")
+
+            if n_valid == 0:
+                print("  → 有効なビンがありません。スキップします。")
+                continue
+
+            # ビンごとの観測平均値
+            binned_obs = np.array([
+                np.mean(obs_dens[(obs_taa >= bin_edges[i]) & (obs_taa < bin_edges[i+1])])
+                if valid_bins_mask[i] else np.nan
+                for i in range(len(bin_centers))
+            ])
+
+            valid_weights = bin_weights_all[valid_bins_mask]
+            avg_dens_obs = np.average(binned_obs[valid_bins_mask], weights=valid_weights)
+
+            print(f"  OBSERVATION ({t_type})")
+            print(f"    Obs Avg Column Density (実データ範囲のみ) : {avg_dens_obs:.4e} [atoms/cm²]")
+            print("-" * 75)
+
+            for mod_info in all_models_data:
+                st = mod_info["setting"]
+                sim_taa = mod_info["taa"]
+                sim_data = mod_info["data"]
+                mod_dens_full = sim_data[t_type] if isinstance(sim_data, dict) else sim_data
+
+                # モデル側も同じ「観測が存在するビン」だけで平均する（フェアな比較のため）
+                interp_mod_bins = np.interp(bin_centers, sim_taa, mod_dens_full, period=360.0)
+                avg_dens_mod = np.average(interp_mod_bins[valid_bins_mask], weights=valid_weights)
+
+                ratio = avg_dens_mod / avg_dens_obs if avg_dens_obs > 0 else 0.0
+
+                print(f"  Model: {st['label']}")
+                print(f"    Avg Column Density (同一TAA範囲) : {avg_dens_mod:.4e} [atoms/cm²] (Ratio vs Obs: {ratio:.3f})")
+
+
+
     if CALCULATE_YEAR_DIFF and PLOT_MODE != "CSV_ONLY" and len(MODEL_SETTINGS) > 0:
         print("\n=== Yearly Statistical Analysis (Steady-State & Variation Check) ===")
         common_taa = np.linspace(0, 360, 361)

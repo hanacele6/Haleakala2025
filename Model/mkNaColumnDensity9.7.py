@@ -99,7 +99,7 @@ SIMULATION_SETTINGS = {
 
     'HOP_TAU_RATIO': 0.3,
 
-    'SAVE_SPINUP_PHASE': True,# Trueにするとスピンアップ期間中(1〜2年目)のデータも保存する
+    'SAVE_SPINUP_PHASE': False,# Trueにするとスピンアップ期間中(1〜2年目)のデータも保存する
 
     # --- 温度モデル設定 (Leblanc et al.) ---
     'TEMP_BASE': 100.0,
@@ -192,7 +192,7 @@ KB_EV_CONST = 8.617e-5  # ボルツマン定数 [eV/K]
 #DIFF_REF_FLUX = 5.0e6 * (100.0 ** 2)
 DIFF_REF_FLUX = 2.0e7 * (100.0 ** 2)
 DIFF_REF_TEMP = 700.0  # 基準温度 [K]
-DIFF_E_A_EV = 0.9  # 活性化エネルギー [eV]
+DIFF_E_A_EV = 0.8  # 活性化エネルギー [eV]
 Target_Grain_Radius = 100.0e-6  # [m]
 
 # 頻度因子 A (J0) の事前計算
@@ -1132,7 +1132,7 @@ def main_snapshot_simulation():
     # 実行パラメータ
     MAX_NA_SURF_DENS = 7.5e14 * (100 ** 2)  # 真の1MLキャパシティ [atoms/m^2] (約 7.5e18)
     INIT_SURF_DENS = MAX_NA_SURF_DENS * 0.0053  # 初期値はキャパシティの0.53% (スカスカの状態)
-    SPIN_UP_YEARS = 2.0
+    SPIN_UP_YEARS = 14.0
     TOTAL_SIM_YEARS = 1.0
     TARGET_TAA = np.arange(0, 360, 1)
 
@@ -1168,7 +1168,7 @@ def main_snapshot_simulation():
         SIMULATION_SETTINGS['Q_PSD_BINS'] = SIMULATION_SETTINGS['Q_PSD_BINS_FIXED']
     else:
         # dynamic や gaussian_random の場合はビン数に合わせて一律で拡張
-        base_q = 2.0e-20 / (100 ** 2)
+        base_q = 1.0e-20 / (100 ** 2)
         #base_q = 2.7e-21 / (100 ** 2)
         SIMULATION_SETTINGS['Q_PSD_BINS'] = np.full(N_BINS_DYNAMIC, base_q)
 
@@ -1221,7 +1221,7 @@ def main_snapshot_simulation():
     else:
         # gaussian_random または dynamic の場合はベース値 (2.0e-20等)
         # ※ main内のロジックで base_q = 2.0e-20 / (100**2) と定義されているものに準拠
-        q_base = 2.0e-20 # 必要に応じてメインロジック側の変数と同期してください
+        q_base = 1.0e-20 # 必要に応じてメインロジック側の変数と同期してください
     
     # e-20 スケールを意識した表記 (例: 2.0e-20 -> Q2.0)
     q_str = f"Q{q_base / 1.0e-20:.1f}"
@@ -1239,7 +1239,7 @@ def main_snapshot_simulation():
     
     # すべてを結合して run_name を構築
     # (Bouncetauはご要望通り削除。LongLT表記も電離寿命自体を入れたので整理)
-    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_{date_str}_{bd_str}_{u_str}_{q_str}_{a_str}_{lt_str}"
+    run_name = f"ParabolicHop_{N_LON_FIXED}x{N_LAT}_{mode_str}_DT{int(DT_MOVE)}_{date_str}_{bd_str}_{u_str}_{q_str}_{a_str}_{lt_str}_15yr"
     # ==========================================================================
 
     target_output_dir = os.path.join(OUTPUT_DIRECTORY, run_name)
@@ -1419,7 +1419,7 @@ def main_snapshot_simulation():
                     frac_sws = np.where(rate_tot > 0, cached_rate_sws / rate_tot, 0)
 
                 # 🌟 W_GLOBAL: パーティクルの重み統一
-                W_GLOBAL = 1.0e24
+                W_GLOBAL = 1.0e25
 
                 # 🌟 毎ステップ1回だけ空き箱を取得
                 empty_idx = np.where(~status_mask)[0]

@@ -17,16 +17,18 @@ COLOR_VMIN = 1.0e10
 COLOR_VMAX = 1.0e18
 
 N_LON, N_LAT = 72, 36
-BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202606"
+BASE_OUTPUT_DIRECTORY = r"./SimulationResult_202607"
 #RUN_NAME = "ParabolicHop_72x36_NoEq_DT1_0616_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)"
-RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0630_Multi_BD0.5_UG_Q2.0_Bouncetau30s_A2.0_LongLT(Fulle)_Default3"
+#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0707_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr"
+#RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0710_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr"
+RUN_NAME = "ParabolicHop_72x36_NoEq_DT100_0713_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr"
 
 INITIAL_TARGET_TAA = 100
 ORBIT_FILE_PATH = 'orbit2025_spice_unwrapped.txt'
 ALIGN_SUN_TO_CENTER = True
 USE_LOG_SCALE = True
 MERCURY_YEAR_SEC = 87.969 * 86400
-SPIN_UP_YEARS = 2.0
+SPIN_UP_YEARS = 14.0
 
 # --- 対象天体の半径 (水星: 2439.7 km) ---
 R_BODY_KM = 2439.7
