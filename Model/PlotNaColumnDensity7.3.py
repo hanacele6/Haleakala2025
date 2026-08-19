@@ -86,8 +86,8 @@ TARGET_MODELS = {
     #"Def_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"DefQ0.3",
     #"Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr":"Q2.0e-20Model",
     #"Def2_ParabolicHop_72x36_NoEq_DT100_0729_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr":"Q0.27e-20Model",
-    "New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noSRP":"0.3noSRP",
-    "New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noSRP":"2.0noSRP",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noSRP":"0.3noSRP",
+    #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noSRP":"2.0noSRP",
     #"New_ParabolicHop_72x36_NoEq_DT100_0802_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noPSDFin":"0.3noPSDfin",
     #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q2.0_A2.0e+07_LT190k_15yr_noPSDFin":"2.0noPSDfin",
     #"New_ParabolicHop_72x36_NoEq_DT100_0803_BD0.8_UG1.85_Q0.3_A2.0e+07_LT190k_15yr_noTDFin":"0.3noTDfin",
@@ -128,7 +128,7 @@ DIFF_TARGET_YEARS = [10, 11, 12, 13, 14, 15]  # 順番に隣り合う年を比�
 
 # ★★★ プロットモード選択 (シミュレーション側)
 # 選択肢: "ALL", "DAYSIDE_TOTAL", "DAWN", "DUSK", "DAWN_OUTER", "DUSK_OUTER", "CSV_ONLY"
-PLOT_MODE = "ALL"
+PLOT_MODE = "DAYSIDE_TOTAL"
 
 # ★★★ CSVプロット選択モード (観測データ側)
 # "DAWN" : DawnのCSVのみ表示, "DUSK" : DuskのCSVのみ表示, "BOTH" : 両方表示

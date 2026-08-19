@@ -82,7 +82,7 @@ def subtract_background(input_wc_path, fiber_definitions, output_dir,
         output_dat_path = output_dir / f"{base_filename}.totfib_orig.dat"
 
     data_to_save = np.vstack((wavelengths_to_save, spectrum_to_save)).T
-    np.savetxt(output_dat_path, data_to_save, fmt='%.8e', header="Wavelength(nm) Intensity", comments='')
+    np.savetxt(output_dat_path, data_to_save, fmt='%.17g', header="Wavelength(nm) Intensity", comments='')
     print(f"    -> Saved final spectrum to: {output_dat_path.name}")
 
 

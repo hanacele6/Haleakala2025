@@ -30,7 +30,7 @@ def generate_solar_subtracted_map(wc_fits_path, solar_model_norm, wl_model, fit_
             wl_2d = crval1 + (np.arange(nx) - (crpix1 - 1)) * cdelt1
 
         n_fibers = data_2d.shape[0]
-        data_sub = np.zeros((n_fibers, len(wl_model)), dtype=np.float32)
+        data_sub = np.zeros((n_fibers, len(wl_model)), dtype=np.float64)
 
         # モデルのフィッティング用行列 (A matrix for Ax = b)
         # [Model, Constant]
@@ -248,7 +248,7 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
     # --- 1Dファイルの保存 ---
     output_test_path = output_dir / f"{base_filename}.test.dat"
     output_data1 = np.column_stack([wl, Nat, best_params['surf2s'] * best_params['ratiof_full']])
-    np.savetxt(output_test_path, output_data1, fmt='%.8e', header="Wavelength Obs Model")
+    np.savetxt(output_test_path, output_data1, fmt='%.17g', header="Wavelength Obs Model")
 
     try:
         hap = fits.getdata(hapke_path)
@@ -259,11 +259,11 @@ def process_spectrum_original_logic(input_dat_path, solar_spec_path, hapke_path,
         if not calib_info_path.exists():
             with open(calib_info_path, "w") as f: f.write("filename,cts2MR\n")
         with open(calib_info_path, "a") as f:
-            f.write(f"{base_filename},{cts2MR:.8e}\n")
+            f.write(f"{base_filename},{cts2MR!r}\n")
 
         output_exos_path = output_dir / f"{base_filename}.exos.dat"
         exos_data = np.column_stack([wl, Natb * cts2MR])
-        np.savetxt(output_exos_path, exos_data, fmt='%.8e', header="Wavelength Flux")
+        np.savetxt(output_exos_path, exos_data, fmt='%.17g', header="Wavelength Flux")
         print(f"    -> Saved final 1D spectrum: {output_exos_path.name}")
 
         # ======================================================================

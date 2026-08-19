@@ -8,21 +8,21 @@
 
 target_run:
   #date: "20251021"
-  start_date: "20250811"
-  end_date: "20250811"
+  start_date: "20250812"
+  end_date: "20250812"
 
 directories:
   data_base_dir: "C:/Users/hanac/univ/Mercury"
   project_base_dir: "C:/Users/hanac/univ/Mercury/Haleakala2025"
   #csv_dir_name: "2025ver"         # 入力CSVのフォルダ名 (例: 2025ver, 2026ver)
   csv_dir_name: "2026ver/csvs"    # CSVをまとめるフォルダ
-  output_dir_name: "output_150test"  # 出力先のフォルダ名 (例: output, test_output)
+  output_dir_name: "output2"  # 出力先のフォルダ名 (例: output, test_output)
 
 pipeline:
   skip_preprocessing: False   # Trueにすると Step 2 を実行しません
   #ここから下はFalseがデフォルト、Trueにすると強制的に処理を実行。
   #（各stepにはスキップ機能があるため、一度処理をした後、設定がFalseだとスキップされてしまう。）
-  force_rerun_csv: False        # Step 0: CSV生成
+  force_rerun_csv: True        # Step 0: CSV生成
   force_rerun_spice: False      # Step 1: SPICE計算
   force_rerun_hotpixel: False   # Step 2: ホットピクセル除去
   force_rerun_trace: False      # Step 3: ファイバートレース
@@ -34,8 +34,8 @@ pipeline:
   force_rerun_hapke: False      # Step 9: Hapkeモデル
   force_rerun_solar: False      # Step 10: 太陽光モデル減算
   force_rerun_gfactor: False    # Step 11: g-factor計算
-  force_rerun_density: True   # Step 12: 原子数密度算出
-  force_rerun_summary: True    # Step 13: 1日ごとの結果集計
+  force_rerun_density: False   # Step 12: 原子数密度算出
+  force_rerun_summary: False   # Step 13: 1日ごとの結果集計
 
 # ==========================================================
 # [0] テスト用
@@ -46,6 +46,17 @@ observation_status:
 # ----------------------------------------------------------
 # [B] 各ステップのパラメータ設定
 # ----------------------------------------------------------
+
+file_selection:
+  sort_by: name          # name(ファイル名の自然順) | mtime(更新時刻順)
+  max_files:
+    MERCURY: 20          # 先頭20個だけ使う。0 / null / 未記載 = 制限なし
+    SKY: 5
+    HLG: 3
+    LED: 3
+  skip_files:
+    MERCURY: 2           # 先頭2個を捨ててから max_files を数える（任意）
+  apply_to_borrowed: True  # 近隣日から借用したファイルにも同じ制限をかける
 
 # Step 1: SPICE計算
 spice:
@@ -203,9 +214,17 @@ column_density:
 
 # Step 13: 1日ごとの最終集計
 summary:
-  Rp: 0.307502  # 近日点距離 (AU)
-  Ra: 0.466697  # 遠日点距離 (AU)
-  error_rejection_factor: 3.0  #誤差が中央値の何倍を超えたら除外するか
+  qc_mode: physical         # physical(既定) | legacy | off
+  manual_selection:
+    enabled: True
+  physical_params:          # 上書きしたいものだけ書けばOK              
+    width_tolerance_factor: 2.0   # 装置幅の 1/2 〜 2倍を許容
+    width_mode: fixed
+    instrumental_fwhm_pix: 10.0   # step10 が出す FWHM と同じピクセル単位
+    # または instrumental_fwhm_nm: 0.0293
+    width_tolerance_factor_low: 0
+  Rp: 0.307502
+  Ra: 0.466697
 
 # Step 14: 複数日の集計・日々の変動プロット
 aggregation:

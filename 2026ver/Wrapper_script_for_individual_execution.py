@@ -7,9 +7,10 @@ import step01_update_spice
 import step02_remove_hotpixels
 
 # --- テストしたいモジュールをインポート ---
-import step03_fiber_trace
+# import step03_fiber_trace
 # import step04_extract_spectra
 # import step06_wavelength_calibration
+import step14_aggregate_daily
 
 
 def run_single_step():

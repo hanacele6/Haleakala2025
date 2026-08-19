@@ -78,7 +78,7 @@ def combine_fits_files(file_list, save_path, combine_type='clippedmean', sigma=2
                                                             "Mean CCD Temperature")
 
     # FITSファイルとして保存（ここでは常に直下に保存し、main.pyの最後で整理させる）
-    fits.writeto(save_path, combined_data.astype(np.float32), header=base_header, overwrite=True)
+    fits.writeto(save_path, combined_data.astype(np.float64), header=base_header, overwrite=True)
     print(f"  > 合成ファイルを保存しました: {save_path.name}")
 
     # パイプラインを止めないように画像を保存して閉じる

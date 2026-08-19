@@ -27,6 +27,66 @@ def get_obj_type(filename):
     return "UNKNOWN"
 
 
+def natural_key(path):
+    """ファイル名を自然順で並べるためのキー (me2 < me10 になるようにする)"""
+    name = Path(path).name
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', name)]
+
+
+def sort_files(files, sort_by="name"):
+    """ファイルリストを決定論的に並べる"""
+    if sort_by == "mtime":
+        return sorted(files, key=lambda f: (Path(f).stat().st_mtime, natural_key(f)))
+    return sorted(files, key=natural_key)
+
+
+def apply_file_selection(files_by_type, sel_conf, label=""):
+    """
+    タイプごとに「先頭から何個を飛ばして、何個まで使うか」を適用する。
+
+    config.yaml:
+        file_selection:
+          sort_by: name        # name(ファイル名の自然順) | mtime(更新時刻順)
+          max_files:
+            MERCURY: 20        # 先頭20個だけ使う。0/null/未指定 = 制限なし
+            SKY: 5
+          skip_files:
+            MERCURY: 2         # 先頭2個を捨ててから max_files を数える
+    """
+    sort_by = sel_conf.get("sort_by", "name")
+    max_conf = sel_conf.get("max_files", {}) or {}
+    skip_conf = sel_conf.get("skip_files", {}) or {}
+
+    selected = {}
+    for t, files in files_by_type.items():
+        ordered = sort_files(files, sort_by)
+        n_all = len(ordered)
+
+        skip = int(skip_conf.get(t, 0) or 0)
+        limit = max_conf.get(t, None)
+        limit = int(limit) if limit else None  # 0 / None / 未指定 は「制限なし」
+
+        picked = ordered[skip:]
+        if limit is not None:
+            picked = picked[:limit]
+        selected[t] = picked
+
+        if ordered and not picked:
+            print(f"    > [警告] {t}: {n_all} 件ありましたが、選別({label or '当日'})の結果0件になりました。"
+                  f" skip={skip}, max={limit}")
+
+        if skip or (limit is not None and n_all > len(picked)):
+            detail = f"skip {skip}, " if skip else ""
+            print(f"    -> [選別{label}] {t}: {n_all} 件中 {len(picked)} 件を使用 "
+                  f"({detail}sort={sort_by})")
+            for f in picked:
+                print(f"         + {Path(f).name}")
+        elif n_all:
+            print(f"    -> [選別{label}] {t}: {n_all} 件すべて使用")
+
+    return selected
+
+
 def search_neighboring_dates(data_base_dir, target_date, missing_types):
     """
     指定されたタイプ(missing_types)を含むファイルを、近隣の日付フォルダから探す。
@@ -138,8 +198,8 @@ def run(run_info, config):
     # ---------------------------------------------------------
     # 1. 当日のファイルを処理
     # ---------------------------------------------------------
-    present_types = set()
     unknown_count = 0
+    files_by_type = {}
 
     for f in fits_files:
         obj_type = get_obj_type(f.name)
@@ -148,13 +208,23 @@ def run(run_info, config):
             unknown_count += 1
             continue
 
-        present_types.add(obj_type)
+        files_by_type.setdefault(obj_type, []).append(f)
 
-        abs_path = str(f.resolve()).replace('\\', '/')
-        row_data = {col: np.nan for col in columns}
-        row_data["fits"] = abs_path
-        row_data["Type"] = obj_type
-        data_list.append(row_data)
+    # ★ タイプごとの使用ファイル数の制限 (config: file_selection)
+    sel_conf = config.get("file_selection", {}) or {}
+    files_by_type = apply_file_selection(files_by_type, sel_conf)
+
+    # 選別後に1件も残らなかったタイプは「無い」ものとして扱う
+    present_types = {t for t, v in files_by_type.items() if v}
+
+    # CSVの行順 = MERCURY番号の順。タイプ名でも並べて実行ごとに順序が変わらないようにする
+    for obj_type in sorted(files_by_type.keys()):
+        for f in files_by_type[obj_type]:
+            abs_path = str(f.resolve()).replace('\\', '/')
+            row_data = {col: np.nan for col in columns}
+            row_data["fits"] = abs_path
+            row_data["Type"] = obj_type
+            data_list.append(row_data)
 
     # ---------------------------------------------------------
     # 2. 不足データの確認と補完 (Borrowing Logic)
@@ -183,8 +253,13 @@ def run(run_info, config):
             borrowed_led = search_neighboring_dates(data_base_dir, target_date, ["LED"])
             borrowed_map.update(borrowed_led)
 
+        # 借りてきたファイルにも同じ制限を適用する
+        if sel_conf.get("apply_to_borrowed", True):
+            borrowed_map = apply_file_selection(borrowed_map, sel_conf, label="/借用")
+
         # 借りてきたファイルをリストに追加
-        for b_type, path_list in borrowed_map.items():
+        for b_type in sorted(borrowed_map.keys()):
+            path_list = borrowed_map[b_type]
             for p in path_list:
                 abs_path = str(p.resolve()).replace('\\', '/')
                 row_data = {col: np.nan for col in columns}

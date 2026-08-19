@@ -141,7 +141,8 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
             combined_df = new_df
 
         combined_df.sort_values(by='Date', inplace=True)
-        combined_df.to_csv(csv_filename, index=False, float_format="%.5e")
+        # float_format を指定すると有効数字が落ちるため指定しない（往復可能な最短表記で保存）
+        combined_df.to_csv(csv_filename, index=False)
         print(f"\n  > 【更新完了】 {year}年の統合CSV: {csv_filename.name}")
 
         plot_name = agg_conf.get("plot_filename_template", f"Correction_Factor_vs_TAA_1D_{year}.png").replace("{month}",

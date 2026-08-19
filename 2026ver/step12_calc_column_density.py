@@ -195,5 +195,5 @@ def run(run_info, config):
 
     if res_final:
         np.savetxt(output_dir / 'Na_atoms_final.dat', np.array(res_final),
-                   fmt="%d %.4e %.4e %.6f %.6f", header="Index Total_Atoms Error Peak_Diff_nm Center_WL_nm")
+                   fmt="%d %.17g %.17g %.17g %.17g", header="Index Total_Atoms Error Peak_Diff_nm Center_WL_nm")
         print("  > Saved: Na_atoms_final.dat")

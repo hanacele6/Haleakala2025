@@ -161,7 +161,8 @@ def run(run_info, config):
     final_column_order = user_cols + script_cols
     df_final = df[final_column_order]
 
-    df_final.to_csv(csv_path, index=False, float_format='%.6f')
+    # 有効数字を落とさないよう float_format は指定しない（pandas既定=往復可能な最短表記）
+    df_final.to_csv(csv_path, index=False)
     print(f"  > SPICEデータの追記完了。CSVを更新しました: {csv_path.name}")
 
     spice.kclear()

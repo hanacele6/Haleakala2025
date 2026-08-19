@@ -242,7 +242,7 @@ def mkWavMap4b_final(input_fsp_path, solar_spec_dir, params, save_fiber_plots=Tr
 
     hd_out = hd.copy()
     hd_out['HISTORY'] = 'Wavelength calibrated (Center-Out Tracking & Even/Odd Split)'
-    fits.HDUList([fits.PrimaryHDU(data=wmp.astype(np.float32), header=hd_out)]).writeto(fileWMP, overwrite=True)
+    fits.HDUList([fits.PrimaryHDU(data=wmp.astype(np.float64), header=hd_out)]).writeto(fileWMP, overwrite=True)
     print(f"  > 波長マップ保存完了: {fileWMP.name}")
 
     # =====================================================================

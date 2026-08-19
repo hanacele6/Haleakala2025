@@ -138,8 +138,9 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
             rwmin, rwmax_orig = wav_max_start, wav_min_end
 
         rwstep = np.abs((rwmax_orig - rwmin) / (nx - 1))
-        rwmin_f = float(f"{rwmin:.8g}")
-        rwstep_f = float(f"{rwstep:.4g}")
+        # 以前はここで .8g / .4g に丸めていたが、波長軸の精度が落ちるため丸めない
+        rwmin_f = float(rwmin)
+        rwstep_f = float(rwstep)
         wavs = rwmin_f + rwstep_f * np.arange(nx, dtype=np.float64)
 
     rwmax_f = wavs[-1]
@@ -302,7 +303,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     # .wc.fits
     hd_wc = create_header(hd)
     fits.HDUList([
-        fits.PrimaryHDU(data=spDatWC.astype(np.float32), header=hd_wc),
+        fits.PrimaryHDU(data=spDatWC.astype(np.float64), header=hd_wc),
         fits.ImageHDU(data=iFib, name='FIBERS'),
         fits.ImageHDU(data=iFibAct, name='IFIBERS')
     ]).writeto(file_wc, overwrite=True)
@@ -320,7 +321,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     hd_dcb['CDELT3'] = 1.0
 
     fits.HDUList([
-        fits.PrimaryHDU(data=spDatDcb.astype(np.float32), header=hd_dcb),
+        fits.PrimaryHDU(data=spDatDcb.astype(np.float64), header=hd_dcb),
         fits.ImageHDU(data=iFib, name='FIBERS'),
         fits.ImageHDU(data=iFibAct, name='IFIBERS')
     ]).writeto(file_dcb, overwrite=True)
@@ -329,7 +330,7 @@ def mkWcalSpec_final(input_fsp_path, wavmap_path, wl_flat_path,
     # .img.fits
     hd_img = create_header(hd)
     fits.HDUList([
-        fits.PrimaryHDU(data=spDatImg.astype(np.float32), header=hd_img),
+        fits.PrimaryHDU(data=spDatImg.astype(np.float64), header=hd_img),
         fits.ImageHDU(data=iFib, name='FIBERS'),
         fits.ImageHDU(data=iFibAct, name='IFIBERS')
     ]).writeto(file_img, overwrite=True)
