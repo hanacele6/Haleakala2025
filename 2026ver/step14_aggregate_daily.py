@@ -129,7 +129,11 @@ def run(base_dir, out_base, csv_dir, processed_dates, config):
 
         if csv_filename.exists() and csv_filename.stat().st_size > 0:
             try:
-                old_df = pd.read_csv(csv_filename)
+                # float_precision='round_trip' は必須。
+                # 既定のパーサーは高速だが往復精度を保証しないため、
+                # 「既存CSVを読む -> 書き戻す」を繰り返すと、今回処理していない
+                # 他の日付の値まで実行のたびに最下位桁が変化していく。
+                old_df = pd.read_csv(csv_filename, float_precision='round_trip')
                 old_df['Date'] = old_df['Date'].astype(str)
                 new_df['Date'] = new_df['Date'].astype(str)
                 combined_df = pd.concat([old_df, new_df], ignore_index=True)

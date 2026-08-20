@@ -32,6 +32,7 @@ PHYS_PARAMS = {
     #  ただし見積もったオフセットが大きい場合は警告を出す。
     'center_offset_correction': 'median',
     'center_offset_warn_pm': 5.0,  # 日ごとのゼロ点ずれがこれを超えたら警告 [pm]
+    'center_offset_min_points': 2,  # ゼロ点を見積もるのに最低限必要な有意検出数
     'center_tolerance_floor_nm': 0.003,  # 上記が小さすぎる場合の下限 [nm]
     'apply_sft_offset': True,  # step10 の sft (太陽光モデルのずらし量) を予測波長に反映する
 
@@ -47,7 +48,12 @@ PHYS_PARAMS = {
     'width_mode': 'auto',  # auto = その日の実測値から装置幅を推定 / fixed = 下の値を使う
     'instrumental_fwhm_nm': None,  # fixed のときの装置FWHM [nm]
     'instrumental_fwhm_pix': None, # 同上をピクセルで指定する場合 (step10 の FWHM 出力と同じ単位)
-    'width_tolerance_factor': 2.0,  # 広い側の許容倍率 (装置幅の何倍まで許すか)
+    'width_tolerance_factor': 1.5,  # 広い側の許容倍率 (装置幅の何倍まで許すか)
+    #  装置プロファイル幅は分光器固有の性質であり、日によって変わるものではない。
+    #  auto (その日の中央値) がこの範囲を外れた場合、それは装置幅ではなく
+    #  「その日の全データが一様に劣化している」ことを意味するので、
+    #  範囲の端に丸めた上で警告する。既定値は step10 の PSF 探索範囲に合わせてある。
+    'instrumental_fwhm_pix_range': [3.0, 10.0],
     'width_tolerance_factor_low': 3.0,  # 狭い側の許容倍率 (装置幅の何分の1まで許すか)
     #   狭い側を広い側より緩くしてあるのは、連続光の引き方やブレンドの影響で
     #   フィットの sigma は小さく出やすい一方、「装置幅より細い輝線」は
@@ -180,6 +186,14 @@ def measure_line(file_path, target_wl=589.7558, window_nm=0.3):
         amp, center, sigma = popt[0], popt[1], abs(popt[2])
         perr = np.sqrt(np.diag(pcov))
 
+        # フィット窓の端に張り付いた解は、輝線ではなくノイズや窓外の構造を掴んでいる
+        edge_margin = 3.0 * wav_step if np.isfinite(wav_step) else 0.0
+        if (center - w_cut[0]) < edge_margin or (w_cut[-1] - center) < edge_margin:
+            result['msg'] = "Fit railed at window edge"
+            result['center'], result['sigma'] = center, sigma
+            result['wav_step'] = wav_step
+            return result
+
         # 連続光部分からノイズを推定 (MAD -> sigma 換算)
         peak_mask = (w_cut > center - 3 * sigma) & (w_cut < center + 3 * sigma)
         cont = f_cut[~peak_mask]
@@ -246,6 +260,25 @@ def estimate_instrumental_sigma(pp, points, wav_step):
 
     if not np.isfinite(measured):
         return np.nan, 'unavailable'
+
+    # auto の場合、実測中央値が装置幅としてありえない値なら丸める
+    rng = pp.get('instrumental_fwhm_pix_range', None)
+    if rng and np.isfinite(wav_step) and wav_step > 0:
+        lo = float(rng[0]) * wav_step / 2.3548
+        hi = float(rng[1]) * wav_step / 2.3548
+        if measured > hi:
+            print(f"  > [!] 実測の輝線幅 (sigma={measured * 1000:.2f} pm = "
+                  f"FWHM {2.3548 * measured / wav_step:.1f} pix) が "
+                  f"装置幅としてありえない太さです。")
+            print(f"        step10 の太陽光減算が破綻している可能性があります "
+                  f"(PSF探索範囲は {rng[0]:.0f}-{rng[1]:.0f} pix)。")
+            print(f"        装置幅は上限 {rng[1]:.0f} pix 相当に丸めて判定します。")
+            return hi, 'auto(clamped to max)'
+        if measured < lo:
+            print(f"  > [!] 実測の輝線幅 (sigma={measured * 1000:.2f} pm) が "
+                  f"装置幅としてありえない細さです。")
+            return lo, 'auto(clamped to min)'
+
     return measured, 'auto(median)'
 
 
@@ -586,9 +619,25 @@ def run(run_info, config):
     # --- その日に共通の波長ゼロ点ずれ ---
     center_offset = 0.0
     if str(pp.get('center_offset_correction', 'median')).lower() == 'median':
-        dls = [p['d_lambda'] for p in points if np.isfinite(p['d_lambda'])]
-        if dls:
+        # 非検出やフィット失敗の中心波長は無意味なので、オフセットの見積もりから除く。
+        # (これらを混ぜると中央値が引きずられ、正常なデータが弾かれてしまう)
+        usable = [p for p in points
+                  if np.isfinite(p['d_lambda']) and p['meas']['ok']
+                  and np.isfinite(p['err']) and p['err'] > 0
+                  and (p['val'] / p['err']) >= pp['min_detection_sigma']]
+        dls = [p['d_lambda'] for p in usable]
+        n_min = int(pp.get('center_offset_min_points', 2))
+
+        if len(dls) < n_min:
+            print(f"  > 有意な検出が {len(dls)} 点しかないため、ゼロ点補正は行いません。")
+        else:
             center_offset = float(np.median(dls))
+            scatter = float(np.median(np.abs(np.array(dls) - center_offset))) * 1.4826
+            print(f"  > Zero-point from {len(dls)}/{len(points)} detections: "
+                  f"{center_offset * 1000:+.1f} pm (scatter {scatter * 1000:.1f} pm)")
+            if scatter * 1000 > pp.get('center_offset_warn_pm', 5.0) * 2:
+                print("  > [!] 有意検出の中でも中心波長がばらついています。"
+                      "波長較正か太陽光減算を確認してください。")
             if abs(center_offset) * 1000 > pp.get('center_offset_warn_pm', 5.0):
                 print(f"  > [!] この日の波長ゼロ点が {center_offset * 1000:+.1f} pm "
                       f"({center_offset / target_wl * C_KM_S:+.1f} km/s) ずれています。")

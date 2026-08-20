@@ -8,8 +8,8 @@
 
 target_run:
   #date: "20251021"
-  start_date: "20250812"
-  end_date: "20250812"
+  start_date: "20251020"
+  end_date: "20251020"
 
 directories:
   data_base_dir: "C:/Users/hanac/univ/Mercury"
